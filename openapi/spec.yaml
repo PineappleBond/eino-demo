@@ -1,0 +1,98 @@
+openapi: "3.0.3"
+info:
+  title: Eino Demo API
+  version: "1.0.0"
+  description: Shared API types for Go and TypeScript code generation.
+    This spec defines both HTTP endpoint types and WebSocket envelope types.
+
+paths: {}
+
+components:
+  schemas:
+    # ── WebSocket Envelope ──
+    # All WS frames share { "type": string, "payload": object }
+
+    WSClientFrame:
+      type: object
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          enum: [ping]
+          description: Client→Server frames. Only heartbeat.
+        payload:
+          $ref: "#/components/schemas/PingPayload"
+
+    WSServerFrame:
+      type: object
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          enum: [updates, connected]
+          description: Server→Client frame types.
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/ConnectedPayload"
+            - type: array
+              items:
+                $ref: "#/components/schemas/Update"
+
+    # ── Heartbeat ──
+
+    PingPayload:
+      type: object
+      description: Client heartbeat. Sent every 30 seconds.
+      properties: {}
+
+    # ── Connection ──
+
+    ConnectedPayload:
+      type: object
+      required: [user_id, server_time, max_seq]
+      properties:
+        user_id:
+          type: string
+        server_time:
+          type: string
+          format: date-time
+        max_seq:
+          type: integer
+          description: Server's current highest seq for this user.
+
+    # ── Update (unified event type) ──
+
+    Update:
+      type: object
+      required: [seq, type, payload]
+      properties:
+        seq:
+          type: integer
+          description: "> 0 = persisted and replayable. 0 = ephemeral (streaming)."
+        type:
+          type: string
+          enum:
+            # Message-level events
+            - message.new
+            - message.delta
+            - message.done
+            - message.tool_call
+            - message.thinking
+            - message.error
+            - message.stop
+            # Conversation-level events
+            - conversation.created
+            - conversation.deleted
+            - conversation.compacting
+            - conversation.compacted
+            - conversation.archived
+            # Project-level events
+            - project.created
+            - project.deleted
+            # Settings-level events
+            - settings.changed
+            # Technical events
+            - empty
+        payload:
+          type: object
+          description: Type-specific entity. Frontend extracts conversation_id from payload to derive topic.
