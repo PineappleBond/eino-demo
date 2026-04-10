@@ -1,0 +1,199 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: eino-demo-postgres
+    env_file:
+      - .env
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.10
+    ports:
+      - "5432:5432"
+    volumes:
+      - eino-demo-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eino-demo -d eino_demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: eino-demo-etcd
+    environment:
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_DATA_DIR: /etcd-data
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.12
+    ports:
+      - "2379:2379"
+    volumes:
+      - eino-demo-etcd:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: eino-demo-redis
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.16
+    ports:
+      - "6379:6379"
+    volumes:
+      - eino-demo-redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # docker exec eino-demo-ollama ollama pull mxbai-embed-large
+  #curl http://localhost:11434/api/embeddings \
+  #-H "Content-Type: application/json" \
+  #-d '{"model": "mxbai-embed-large", "prompt": "这是一个测试文本"}'
+  ollama:
+    image: ollama/ollama:latest
+    container_name: eino-demo-ollama
+    env_file:
+      - .env
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.11
+    ports:
+      - "11434:11434"
+    volumes:
+      - eino-demo-ollama:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: eino-demo-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_OTLP_GRPC_HOST_PORT=4317
+      - COLLECTOR_OTLP_HTTP_HOST_PORT=4318
+      - QUERY_BASE_PATH=/jaeger
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.13
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: eino-demo-prometheus
+    user: "65534:65534"
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.14
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - eino-demo-prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.external-url=http://localhost:10090/prometheus/'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: eino-demo-grafana
+    environment:
+      # 禁用内置登录
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+
+      # 启用 Auth Proxy
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: "X-WEBAUTH-USER"
+      GF_AUTH_PROXY_HEADER_PROPERTY: "username"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_DEFAULT_ORG: "1"
+      GF_AUTH_PROXY_DEFAULT_ORG_ROLE: "Admin"
+
+      # 自动创建用户的默认角色
+      GF_AUTH_PROXY_SYNC_TTL: "60"  # 60秒同步一次
+      GF_AUTH_PROXY_WHITELIST: ""   # 空=信任所有来源（内网安全）
+
+      #GF_SECURITY_ADMIN_USER: "admin"
+      #GF_SECURITY_ADMIN_PASSWORD: "admin123"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+      GF_SERVER_ROOT_URL: "http://localhost:10090/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    env_file:
+      - .env
+    networks:
+      eino-demo-network:
+        ipv4_address: 192.168.107.15
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - eino-demo-grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  eino-demo-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.107.0/24
+          gateway: 192.168.107.1
+
+volumes:
+  eino-demo-postgres:
+  eino-demo-etcd:
+  eino-demo-ollama:
+  eino-demo-prometheus:
+  eino-demo-grafana:
+  eino-demo-redis:

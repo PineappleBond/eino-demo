@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eino Demo — Layout Prototype v2</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0e0e10;
+      --bg-secondary: #161618;
+      --bg-tertiary: #1e1e21;
+      --bg-elevated: #262629;
+      --bg-hover: #2a2a2e;
+      --bg-active: #323237;
+      --border-subtle: rgba(255,255,255,0.06);
+      --border-default: rgba(255,255,255,0.10);
+      --text-primary: #e8e8ed;
+      --text-secondary: #9898a0;
+      --text-tertiary: #5c5c66;
+      --accent: #6c5ce7;
+      --accent-hover: #7c6cf7;
+      --accent-soft: rgba(108,92,231,0.12);
+      --green: #4ade80;
+      --green-soft: rgba(74,222,128,0.12);
+      --amber: #fbbf24;
+      --amber-soft: rgba(251,191,36,0.12);
+      --red: #f87171;
+      --red-soft: rgba(248,113,113,0.12);
+      --blue: #60a5fa;
+      --blue-soft: rgba(96,165,250,0.12);
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    #root { height: 100vh; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes typing {
+      0% { opacity: 0.3; }
+      50% { opacity: 1; }
+      100% { opacity: 0.3; }
+    }
+
+    .fade-in { animation: fadeIn 0.15s ease; }
+    .slide-up { animation: slideUp 0.3s ease; }
+
+    /* ═══ TopBar ═══ */
+    .topbar {
+      height: 52px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      z-index: 100;
+    }
+
+    .topbar-project {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      min-width: 200px;
+    }
+    .topbar-project:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-default);
+    }
+    .topbar-project-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+    }
+    .topbar-project-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .topbar-project-chevron {
+      color: var(--text-tertiary);
+      font-size: 10px;
+    }
+
+    .topbar-spacer { flex: 1; }
+
+    .topbar-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: var(--text-secondary);
+      font-size: 16px;
+      border: none;
+      background: transparent;
+    }
+    .topbar-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    /* ═══ Sider ═══ */
+    .sider {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .sider-header {
+      padding: 12px 12px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sider-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+    .sider-action {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 14px;
+      transition: all 0.15s ease;
+    }
+    .sider-action:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+
+    .sider-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px;
+    }
+
+    .sider-item {
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.12s ease;
+      margin-bottom: 2px;
+      position: relative;
+    }
+    .sider-item:hover {
+      background: var(--bg-hover);
+    }
+    .sider-item.active {
+      background: var(--accent-soft);
+    }
+    .sider-item.active .sider-item-name {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .sider-item-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .sider-item-name {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .sider-item-badge {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sider-section-label {
+      padding: 12px 10px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-tertiary);
+    }
+
+    .sider-footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sider-footer-item {
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      transition: all 0.12s ease;
+    }
+    .sider-footer-item:hover {
+      background: var(--bg-hover);
+    }
+
+    /* ═══ Main area ═══ */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-primary);
+      min-width: 0;
+    }
+
+    /* ═══ Tabs ═══ */
+    .tabs-bar {
+      height: 40px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 8px;
+      gap: 2px;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .tabs-bar::-webkit-scrollbar { height: 0; }
+
+    .tab-item {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: all 0.12s ease;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      border-bottom: none;
+      position: relative;
+    }
+    .tab-item:hover {
+      background: var(--bg-hover);
+    }
+    .tab-item.active {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border-color: var(--border-subtle);
+    }
+    .tab-item.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--bg-primary);
+    }
+    .tab-close {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      font-size: 10px;
+      opacity: 0;
+      transition: all 0.1s ease;
+    }
+    .tab-item:hover .tab-close { opacity: 0.5; }
+    .tab-close:hover { opacity: 1 !important; background: var(--bg-active); }
+    .tab-add {
+      padding: 8px;
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 14px;
+      border-radius: var(--radius-sm);
+      transition: all 0.12s ease;
+      display: flex;
+      align-items: center;
+    }
+    .tab-add:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+
+    /* ═══ Chat container ═══ */
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+    }
+
+    .chat-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 24px;
+      width: 100%;
+    }
+
+    .message-group {
+      margin-bottom: 24px;
+      animation: slideUp 0.3s ease;
+    }
+
+    .message-sender {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .message-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .message-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .message-time {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .message-content {
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-primary);
+      padding-left: 32px;
+    }
+
+    .message-content code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .message-content pre {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin: 8px 0;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+
+    /* ═══ Branch card ═══ */
+    .branch-card {
+      margin: 16px 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .branch-card:hover {
+      border-color: var(--border-default);
+      background: var(--bg-tertiary);
+    }
+    .branch-card-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .branch-card-icon { font-size: 16px; }
+    .branch-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .branch-card-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      display: flex;
+      gap: 12px;
+    }
+    .branch-card-body {
+      padding: 0 14px 12px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .branch-card-footer {
+      padding: 8px 14px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ═══ Tool call card ═══ */
+    .tool-call {
+      margin: 12px 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--bg-secondary);
+    }
+    .tool-call-header {
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .tool-call-status { font-size: 12px; }
+    .tool-call-name {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .tool-call-duration {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tool-call-body {
+      padding: 0 14px 12px;
+    }
+    .tool-call-body code {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-primary);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* ═══ Chat input ═══ */
+    .chat-input-area {
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+      padding: 12px 24px 16px;
+      flex-shrink: 0;
+    }
+    .chat-input-inner {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .chat-input-mentions {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      min-height: 24px;
+    }
+    .mention-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(108,92,231,0.2);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .mention-tag-remove {
+      cursor: pointer;
+      font-size: 12px;
+      opacity: 0.6;
+    }
+    .mention-tag-remove:hover { opacity: 1; }
+    .chat-input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: 8px 12px;
+      transition: border-color 0.15s ease;
+    }
+    .chat-input-box:focus-within {
+      border-color: var(--accent);
+    }
+    .chat-input-textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: none;
+      min-height: 24px;
+      max-height: 120px;
+    }
+    .chat-input-textarea::placeholder {
+      color: var(--text-tertiary);
+    }
+    .chat-input-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chat-input-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 14px;
+      transition: all 0.12s ease;
+      border: none;
+      background: transparent;
+    }
+    .chat-input-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+    .chat-input-btn.send {
+      background: var(--accent);
+      color: white;
+    }
+    .chat-input-btn.send:hover {
+      background: var(--accent-hover);
+    }
+    .chat-input-hint {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .chat-input-hint kbd {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 1px 5px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 3px;
+    }
+
+    /* ═══ Right panel (conversation info) ═══ */
+    .right-panel {
+      width: 300px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: slideInRight 0.25s ease;
+      flex-shrink: 0;
+    }
+    .right-panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .right-panel-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .panel-close {
+      cursor: pointer;
+      color: var(--text-tertiary);
+      font-size: 14px;
+      padding: 4px;
+      border-radius: 4px;
+      transition: all 0.12s ease;
+    }
+    .panel-close:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .right-panel-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .right-panel-section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 10px;
+    }
+    .right-panel-member {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      cursor: context-menu;
+    }
+    .right-panel-member:hover {
+      opacity: 0.8;
+    }
+    .right-panel-member-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .right-panel-member-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .right-panel-member-role {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+    .right-panel-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+    }
+    .right-panel-stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .right-panel-stat-value {
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    /* ═══ Overlay Drawer (Project Info) ═══ */
+    .overlay-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 200;
+      animation: fadeIn 0.2s ease;
+    }
+    .overlay-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 420px;
+      max-width: 90vw;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-subtle);
+      z-index: 201;
+      display: flex;
+      flex-direction: column;
+      animation: slideInRight 0.25s ease;
+      box-shadow: var(--shadow-lg);
+    }
+    .overlay-drawer-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .overlay-drawer-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .overlay-drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .overlay-drawer-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 6px;
+      display: block;
+    }
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .form-input:focus {
+      border-color: var(--accent);
+    }
+    .form-textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.15s ease;
+    }
+    .form-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.12s ease;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-default);
+    }
+    .btn-ghost:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .btn-danger {
+      background: var(--red-soft);
+      color: var(--red);
+      border: 1px solid rgba(248,113,113,0.2);
+    }
+    .btn-danger:hover {
+      background: var(--red);
+      color: white;
+    }
+
+    .agent-tree-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
+    }
+    .agent-tree-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .agent-tree-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+    }
+    .agent-tree-tools {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ═══ Context menu ═══ */
+    .context-menu {
+      position: fixed;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      padding: 4px;
+      min-width: 180px;
+      z-index: 1000;
+      animation: fadeIn 0.1s ease;
+    }
+    .context-menu-item {
+      padding: 7px 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.1s ease;
+    }
+    .context-menu-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .context-menu-divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 4px 0;
+    }
+    .context-menu-item.danger {
+      color: var(--red);
+    }
+    .context-menu-item.danger:hover {
+      background: var(--red-soft);
+    }
+
+    /* ═══ Template grid ═══ */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .template-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .template-card:hover {
+      border-color: var(--border-default);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+    .template-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--blue));
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .template-card:hover::before { opacity: 1; }
+    .template-number {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .template-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .template-desc {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .template-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .template-tag {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 2px 8px;
+      background: var(--bg-elevated);
+      border-radius: 10px;
+      color: var(--text-tertiary);
+    }
+
+    /* ═══ Typing indicator ═══ */
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 8px 0;
+    }
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+      animation: typing 1.4s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    /* ═══ Project dropdown ═══ */
+    .project-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      padding: 4px;
+      min-width: 240px;
+      z-index: 1000;
+      animation: fadeIn 0.1s ease;
+    }
+    .project-dropdown-title {
+      padding: 8px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+    .project-dropdown-item {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all 0.1s ease;
+    }
+    .project-dropdown-item:hover {
+      background: var(--bg-hover);
+    }
+    .project-dropdown-item-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: white;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .project-dropdown-item-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .project-dropdown-item-template {
+      font-size: 10px;
+      color: var(--text-tertiary);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    // ── Mock Data ──
+    const projects = [
+      { id: 'p1', name: 'Basic Agent Demo', template: '01', color: '#6c5ce7' },
+      { id: 'p2', name: 'Supervisor Pattern', template: '09', color: '#00b894' },
+      { id: 'p3', name: 'RAG Pipeline', template: '05', color: '#e17055' },
+    ];
+
+    const conversations = [
+      { id: 'c1', name: 'Initial code review', status: 'active', hasUnread: false },
+      { id: 'c2', name: 'Refactor suggestions', status: 'active', hasUnread: true },
+      { id: 'c3', name: 'Architecture discussion', status: 'active', hasUnread: false },
+      { id: 'c4', name: 'Bug investigation', status: 'archived', hasUnread: false },
+    ];
+
+    const members = [
+      { id: 'u1', name: 'You', type: 'user', color: '#6c5ce7', role: 'Owner' },
+      { id: 'a1', name: 'Supervisor', type: 'agent', color: '#00b894', role: 'Agent' },
+      { id: 'a2', name: 'Coder', type: 'agent', color: '#e17055', role: 'Agent' },
+      { id: 'a3', name: 'Reviewer', type: 'agent', color: '#0984e3', role: 'Agent' },
+    ];
+
+    const agents = [
+      { name: 'Supervisor', color: '#00b894', tools: 2, desc: 'Routes tasks, delegates to sub-agents' },
+      { name: 'Coder', color: '#e17055', tools: 3, desc: 'Code analysis and generation' },
+      { name: 'Reviewer', color: '#0984e3', tools: 1, desc: 'Code review and quality checks' },
+    ];
+
+    const templates = [
+      { id: '01', name: 'Basic Agent', desc: 'ChatModelAgent, Tools, ReAct loop. The simplest entry point to Eino.', tags: ['ChatModelAgent', 'Tools', 'ReAct'] },
+      { id: '02', name: 'Chain Workflow', desc: 'Prompt → Model → Parse composition. Linear data flow with field mapping.', tags: ['Chain', 'Lambda', 'Compose'] },
+      { id: '03', name: 'Graph Branches', desc: 'Conditional routing and parallel nodes. Fork-join pattern.', tags: ['Graph', 'Branch', 'Parallel'] },
+      { id: '04', name: 'Workflow Composition', desc: 'Field mappings, declarative dependencies. Complex pipelines.', tags: ['Workflow', 'Declarative'] },
+      { id: '05', name: 'RAG Pipeline', desc: 'Loader → Embedding → Indexer → Retriever → QA. Full RAG stack.', tags: ['RAG', 'pgvector', 'Embedding'] },
+      { id: '06', name: 'Tool Workshop', desc: 'MCP, Web Search, HTTP, custom InferTool. How to build tools.', tags: ['MCP', 'InferTool', 'HTTP'] },
+      { id: '07', name: 'Deep Agent', desc: 'Sub-agent delegation with automatic routing.', tags: ['Sub-agent', 'Delegation'] },
+      { id: '08', name: 'Plan & Execute', desc: 'Plan-then-execute pattern with reflection loop.', tags: ['Planning', 'Reflection'] },
+      { id: '09', name: 'Supervisor', desc: 'Multi-agent supervision with task delegation.', tags: ['Supervisor', 'Multi-agent'] },
+      { id: '10', name: 'Interrupt & Resume', desc: 'Human-in-the-loop with checkpoint save/restore.', tags: ['Checkpoint', 'HITL'] },
+      { id: '11', name: 'Callbacks & Tracing', desc: 'Langfuse / LangSmith integration for observability.', tags: ['Callbacks', 'Tracing'] },
+      { id: '12', name: 'Full App', desc: 'All features integrated. Production-ready reference.', tags: ['Full-stack', 'Production'] },
+    ];
+
+    const mockMessages = [
+      {
+        id: 'm1', sender: 'u1', role: 'user',
+        content: '帮我分析一下这段 Go 代码的性能瓶颈，重点看并发部分：',
+        time: '14:30',
+        code: `func ProcessItems(items []Item) []Result {
+    var results []Result
+    var wg sync.WaitGroup
+    for _, item := range items {
+        wg.Add(1)
+        go func(i Item) {
+            defer wg.Done()
+            r := heavyComputation(i)
+            results = append(results, r) // race!
+        }(item)
+    }
+    wg.Wait()
+    return results
+}`
+      },
+      {
+        id: 'm2', sender: 'a1', role: 'assistant',
+        name: 'Supervisor',
+        content: '我发现了几个问题。最严重的是 <code>results = append(results, r)</code> 这一行存在 data race —— 多个 goroutine 并发写入同一个 slice。我来安排 Coder 做详细分析。',
+        time: '14:30',
+      },
+      {
+        id: 'branch1', type: 'branch',
+        agentName: 'Coder',
+        agentColor: '#e17055',
+        msgCount: 6,
+        toolCalls: 3,
+        summary: 'Coder 分析了 data race、goroutine 泄漏和内存分配问题，并提供了修复方案。',
+      },
+      {
+        id: 'm3', sender: 'a1', role: 'assistant',
+        name: 'Supervisor',
+        content: 'Coder 的分析如上。总结三个核心问题：\n\n1. **Data race** — 并发 append 到共享 slice，需要 channel 或 sync.Mutex\n2. **未预分配容量** — results 应该用 make 预分配\n3. **错误处理缺失** — heavyComputation 可能 panic\n\n需要我让 Coder 生成修复后的代码吗？',
+        time: '14:31',
+      },
+    ];
+
+    // ── Context Menu ──
+    function ContextMenu({ x, y, items, onClose }) {
+      useEffect(() => {
+        const handler = () => onClose();
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+      }, []);
+      return (
+        <div className="context-menu fade-in" style={{ left: x, top: y }} onClick={e => e.stopPropagation()}>
+          {items.map((item, i) =>
+            item.divider ?
+              <div key={i} className="context-menu-divider" /> :
+              <div key={i} className={`context-menu-item ${item.danger ? 'danger' : ''}`}
+                   onClick={() => { item.action?.(); onClose(); }}>
+                {item.icon && <span>{item.icon}</span>}
+                {item.label}
+              </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Message Bubble ──
+    function MessageBubble({ msg, onContextMenu }) {
+      return (
+        <div className="message-group" onContextMenu={e => { e.preventDefault(); onContextMenu(e, msg); }}>
+          <div className="message-sender">
+            <div className="message-avatar" style={{ background: members.find(m => m.id === msg.sender)?.color || '#666' }}>
+              {msg.sender === 'u1' ? 'Y' : msg.name?.[0]}
+            </div>
+            <span className="message-name">{msg.sender === 'u1' ? 'You' : msg.name}</span>
+            <span className="message-time">{msg.time}</span>
+          </div>
+          <div className="message-content">
+            <div dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+            {msg.code && <pre>{msg.code}</pre>}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Branch Card ──
+    function BranchCard({ branch }) {
+      return (
+        <div className="branch-card">
+          <div className="branch-card-header">
+            <span className="branch-card-icon">📦</span>
+            <span className="branch-card-title">{branch.agentName} 的分支对话</span>
+            <span className="branch-card-meta">
+              <span>{branch.msgCount} messages</span>
+              <span>{branch.toolCalls} tool calls</span>
+            </span>
+          </div>
+          <div className="branch-card-body">{branch.summary}</div>
+          <div className="branch-card-footer">
+            <span>点击跳转到分支对话</span>
+            <span style={{ flex: 1 }} />
+            <span>→</span>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Tool Call Card ──
+    function ToolCallCard({ name, status, duration, input }) {
+      return (
+        <div className="tool-call">
+          <div className="tool-call-header">
+            <span className="tool-call-status">{status === 'success' ? '✓' : status === 'running' ? '⟳' : '✗'}</span>
+            <span className="tool-call-name">{name}</span>
+            <span className="tool-call-duration">{duration}</span>
+          </div>
+          {input && <div className="tool-call-body"><code>{input}</code></div>}
+        </div>
+      );
+    }
+
+    // ── Project Info Drawer (from TopBar ⚙) ──
+    function ProjectDrawer({ project, onClose, members }) {
+      const [name, setName] = useState(project.name);
+      const [editing, setEditing] = useState(false);
+
+      return (
+        <>
+          <div className="overlay-backdrop" onClick={onClose} />
+          <div className="overlay-drawer">
+            <div className="overlay-drawer-header">
+              <span className="overlay-drawer-title">Project Info</span>
+              <span className="panel-close" onClick={onClose}>✕</span>
+            </div>
+            <div className="overlay-drawer-body">
+              {/* Basic info */}
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                {editing ? (
+                  <input className="form-input" value={name} onChange={e => setName(e.target.value)} autoFocus />
+                ) : (
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', padding: '8px 0' }}>{name}</div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Template</label>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Template #{project.template} — {templates.find(t => t.id === project.template)?.name || project.template}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <textarea className="form-textarea" defaultValue="Multi-agent supervision pattern with task delegation. Demonstrates how a supervisor agent can route requests to specialized sub-agents." />
+              </div>
+
+              {/* Agents */}
+              <div style={{ marginTop: 24 }}>
+                <div className="form-label" style={{ marginBottom: 10 }}>Agents ({agents.length})</div>
+                {agents.map((a, i) => (
+                  <div key={a.name} className="agent-tree-item">
+                    <div className="agent-tree-dot" style={{ background: a.color }} />
+                    <span className="agent-tree-name">{a.name}</span>
+                    <span className="agent-tree-tools">{a.tools} tools</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Stats */}
+              <div style={{ marginTop: 24 }}>
+                <div className="form-label" style={{ marginBottom: 10 }}>Statistics</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>Conversations</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>4</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>Messages</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>47</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>Tool Calls</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>12</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>Tokens</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>8.2k</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="overlay-drawer-footer">
+              <button className="btn btn-ghost" onClick={() => setEditing(!editing)}>
+                {editing ? 'Cancel' : 'Edit'}
+              </button>
+              {editing && (
+                <button className="btn btn-primary" onClick={() => { setEditing(false); }}>Save</button>
+              )}
+              <span style={{ flex: 1 }} />
+              <button className="btn btn-danger" onClick={() => { if (confirm('Delete this project?')) onClose(); }}>
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // ── Conversation Info Panel (chat area toggle) ──
+    function ConvInfoPanel({ members, onClose, onMemberContextMenu }) {
+      return (
+        <div className="right-panel">
+          <div className="right-panel-header">
+            <span className="right-panel-title">Conversation Info</span>
+            <span className="panel-close" onClick={onClose}>✕</span>
+          </div>
+
+          <div className="right-panel-section">
+            <div className="right-panel-section-title">Statistics</div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Messages</span>
+              <span className="right-panel-stat-value">12</span>
+            </div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Tokens (prompt)</span>
+              <span className="right-panel-stat-value">2,847</span>
+            </div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Tokens (completion)</span>
+              <span className="right-panel-stat-value">1,203</span>
+            </div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Tool calls</span>
+              <span className="right-panel-stat-value">3</span>
+            </div>
+          </div>
+
+          <div className="right-panel-section">
+            <div className="right-panel-section-title">Members</div>
+            {members.map(m => (
+              <div key={m.id} className="right-panel-member"
+                   onContextMenu={e => onMemberContextMenu(e, m)}>
+                <div className="right-panel-member-avatar" style={{ background: m.color }}>
+                  {m.type === 'user' ? 'Y' : m.name[0]}
+                </div>
+                <span className="right-panel-member-name">{m.name}</span>
+                <span className="right-panel-member-role">{m.role}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="right-panel-section">
+            <div className="right-panel-section-title">Model</div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Active model</span>
+              <span className="right-panel-stat-value" style={{ color: 'var(--accent)' }}>Sonnet</span>
+            </div>
+            <div className="right-panel-stat">
+              <span className="right-panel-stat-label">Template</span>
+              <span className="right-panel-stat-value">09 · Supervisor</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Chat Area ──
+    function ChatArea({ showConvInfo, setShowConvInfo, onToggleConvInfo, onMemberContextMenu }) {
+      const [mentions, setMentions] = useState([]);
+      const [input, setInput] = useState('');
+      const [contextMenu, setContextMenu] = useState(null);
+
+      const handleMessageContextMenu = (e, msg) => {
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          items: [
+            { icon: '📋', label: 'Copy', action: () => navigator.clipboard?.writeText(msg.content) },
+            { icon: '↩', label: 'Reply', action: () => {} },
+            { divider: true },
+            { icon: '🌿', label: 'Create Branch Conversation', action: () => {} },
+          ]
+        });
+      };
+
+      const removeMention = (id) => setMentions(mentions.filter(m => m.id !== id));
+
+      return (
+        <div className="chat-container">
+          {/* Toggle button for conv info */}
+          <button
+            className="chat-input-btn"
+            style={{ position: 'absolute', right: 12, top: 12, zIndex: 10, opacity: 0.5 }}
+            title={showConvInfo ? 'Hide conversation info' : 'Show conversation info'}
+            onClick={onToggleConvInfo}
+          >
+            ℹ
+          </button>
+
+          <div className="chat-messages">
+            <div className="chat-inner">
+              {mockMessages.map(msg => {
+                if (msg.type === 'branch') return <BranchCard key={msg.id} branch={msg} />;
+                return <MessageBubble key={msg.id} msg={msg} onContextMenu={handleMessageContextMenu} />;
+              })}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 32, color: 'var(--text-tertiary)', fontSize: 13 }}>
+                <div className="typing-indicator" style={{ padding: 0 }}>
+                  <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+                </div>
+                Supervisor is thinking...
+              </div>
+            </div>
+          </div>
+
+          <div className="chat-input-area">
+            <div className="chat-input-inner">
+              {mentions.length > 0 && (
+                <div className="chat-input-mentions">
+                  {mentions.map(m => (
+                    <span key={m.id} className="mention-tag">
+                      @{m.name}
+                      <span className="mention-tag-remove" onClick={() => removeMention(m.id)}>×</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="chat-input-box">
+                <textarea
+                  className="chat-input-textarea"
+                  rows={1}
+                  placeholder="Message Eino..."
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                />
+                <div className="chat-input-actions">
+                  <button className="chat-input-btn" title="Attach">📎</button>
+                  <button className="chat-input-btn send" title="Send">▶</button>
+                </div>
+              </div>
+              <div className="chat-input-hint">
+                <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line · right-click message for options
+              </div>
+            </div>
+          </div>
+          {contextMenu && <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />}
+        </div>
+      );
+    }
+
+    // ── Template Grid ──
+    function TemplateGrid() {
+      return (
+        <div className="template-grid">
+          {templates.map(t => (
+            <div key={t.id} className="template-card">
+              <div className="template-number">TEMPLATE {t.id}</div>
+              <div className="template-name">{t.name}</div>
+              <div className="template-desc">{t.desc}</div>
+              <div className="template-tags">
+                {t.tags.map(tag => <span key={tag} className="template-tag">{tag}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── App ──
+    function App() {
+      const [activePage, setActivePage] = useState('chat');
+      const [activeConv, setActiveConv] = useState('c1');
+      const [openTabs, setOpenTabs] = useState(['c1', 'c2']);
+      const [showConvInfo, setShowConvInfo] = useState(true);
+      const [showProjectDrawer, setShowProjectDrawer] = useState(false);
+      const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+      const [mentions, setMentions] = useState([]);
+      const [contextMenu, setContextMenu] = useState(null);
+
+      const currentProject = projects[1]; // Supervisor Pattern
+
+      const handleMemberContextMenu = (e, member) => {
+        e.preventDefault();
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          items: [
+            { icon: '@', label: `@${member.name}`, action: () => {
+              if (!mentions.find(m => m.id === member.id)) {
+                setMentions([...mentions, member]);
+              }
+            }},
+          ]
+        });
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+          {/* ═══ TopBar ═══ */}
+          <div className="topbar">
+            <div className="topbar-project" onClick={() => setProjectMenuOpen(!projectMenuOpen)} style={{ position: 'relative' }}>
+              <div className="topbar-project-icon" style={{ background: currentProject.color }}>S</div>
+              <span className="topbar-project-name">Supervisor Pattern</span>
+              <span className="topbar-project-chevron">▾</span>
+
+              {projectMenuOpen && (
+                <div className="project-dropdown" onClick={e => e.stopPropagation()}>
+                  <div className="project-dropdown-title">Projects</div>
+                  {projects.map(p => (
+                    <div key={p.id} className="project-dropdown-item" onClick={() => setProjectMenuOpen(false)}>
+                      <div className="project-dropdown-item-icon" style={{ background: p.color }}>{p.name[0]}</div>
+                      <span className="project-dropdown-item-name">{p.name}</span>
+                      <span className="project-dropdown-item-template">#{p.template}</span>
+                    </div>
+                  ))}
+                  <div className="context-menu-divider" />
+                  <div className="context-menu-item" onClick={() => setProjectMenuOpen(false)}>
+                    <span>＋</span> New Project from Template
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="topbar-spacer" />
+            <button className="topbar-btn" title="Templates" onClick={() => setActivePage(activePage === 'home' ? 'chat' : 'home')}>📋</button>
+            <button className="topbar-btn" title="Project Info" onClick={() => setShowProjectDrawer(true)}>⚙</button>
+            <button className="topbar-btn" title="Theme">🌙</button>
+            <button className="topbar-btn" title="Language">🌐</button>
+          </div>
+
+          {/* ═══ Body ═══ */}
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            {/* Left Sider */}
+            <div className="sider">
+              <div className="sider-header">
+                <span className="sider-title">Conversations</span>
+                <span className="sider-action" title="New conversation">＋</span>
+              </div>
+              <div className="sider-list">
+                <div className="sider-section-label">Active</div>
+                {conversations.filter(c => c.status === 'active').map(c => (
+                  <div key={c.id}
+                       className={`sider-item ${activeConv === c.id ? 'active' : ''}`}
+                       onClick={() => setActiveConv(c.id)}>
+                    <span className="sider-item-icon">💬</span>
+                    <span className="sider-item-name">{c.name}</span>
+                    {c.hasUnread && <span className="sider-item-badge" />}
+                  </div>
+                ))}
+                <div className="sider-section-label" style={{ marginTop: 8 }}>Archived</div>
+                {conversations.filter(c => c.status === 'archived').map(c => (
+                  <div key={c.id} className="sider-item" style={{ opacity: 0.5 }}>
+                    <span className="sider-item-icon">📁</span>
+                    <span className="sider-item-name">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="sider-footer">
+                <div className="sider-footer-item" onClick={() => setActivePage('home')}>📋 Templates</div>
+                <div className="sider-footer-item">⚙ Settings</div>
+              </div>
+            </div>
+
+            {/* Main */}
+            <div className="main-area">
+              {activePage === 'home' ? (
+                <TemplateGrid />
+              ) : (
+                <>
+                  {/* Tabs */}
+                  <div className="tabs-bar">
+                    {openTabs.map(tabId => {
+                      const conv = conversations.find(c => c.id === tabId);
+                      return (
+                        <div key={tabId}
+                             className={`tab-item ${activeConv === tabId ? 'active' : ''}`}
+                             onClick={() => setActiveConv(tabId)}>
+                          <span>💬</span>
+                          <span>{conv?.name}</span>
+                          <span className="tab-close" onClick={e => { e.stopPropagation(); setOpenTabs(openTabs.filter(t => t !== tabId)); }}>×</span>
+                        </div>
+                      );
+                    })}
+                    <div className="tab-add" title="New conversation">＋</div>
+                  </div>
+
+                  {/* Chat + Conv Info */}
+                  <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                    <ChatArea
+                      showConvInfo={showConvInfo}
+                      setShowConvInfo={setShowConvInfo}
+                      onToggleConvInfo={() => setShowConvInfo(!showConvInfo)}
+                      onMemberContextMenu={handleMemberContextMenu}
+                    />
+                    {showConvInfo && (
+                      <ConvInfoPanel
+                        members={members}
+                        onClose={() => setShowConvInfo(false)}
+                        onMemberContextMenu={handleMemberContextMenu}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ Project Drawer (overlay) ═══ */}
+          {showProjectDrawer && (
+            <ProjectDrawer
+              project={currentProject}
+              onClose={() => setShowProjectDrawer(false)}
+              members={members}
+            />
+          )}
+
+          {contextMenu && <ContextMenu {...contextMenu} onClose={() => setContextMenu(null)} />}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
