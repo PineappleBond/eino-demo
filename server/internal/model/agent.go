@@ -7,7 +7,7 @@ import (
 // Agent is an AI agent definition within a project.
 type Agent struct {
 	BaseModel
-	ProjectID    uuid.UUID      `gorm:"type:uuid;not null;index"`
+	ProjectID    uuid.UUID      `gorm:"type:uuid;not null;index;constraint:OnDelete:CASCADE"`
 	AgentKey     string         `gorm:"type:varchar(64);not null"`
 	AgentName    string         `gorm:"type:varchar(255);not null"`
 	Description  string         `gorm:"type:text;not null;default:''"`
@@ -22,7 +22,7 @@ func (Agent) TableName() string { return "agents" }
 // AgentRelationship defines parent-child links between agents.
 type AgentRelationship struct {
 	BaseModel
-	ProjectID    uuid.UUID `gorm:"type:uuid;not null;index"`
+	ProjectID    uuid.UUID `gorm:"type:uuid;not null;index;constraint:OnDelete:CASCADE"`
 	ParentID     uuid.UUID `gorm:"type:uuid;not null;index"`
 	ChildID      uuid.UUID `gorm:"type:uuid;not null;index"`
 	Relationship string    `gorm:"type:varchar(64);not null;default:'delegates'"`

@@ -34,6 +34,7 @@ func ProvideDB(databaseURL string, log *zap.Logger) *gorm.DB {
 		&model.Message{},
 		&model.UserUpdate{},
 		&model.Settings{},
+		&model.Checkpoint{},
 	); err != nil {
 		log.Fatal("db: AutoMigrate failed", zap.Error(err))
 	}
