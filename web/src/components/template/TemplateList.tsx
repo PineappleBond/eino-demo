@@ -8,11 +8,12 @@ import { api, TemplateInfo } from '@/lib/api';
 export function TemplateList({ locale }: { locale: string }) {
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
     api.get<TemplateInfo[]>('/templates')
       .then(setTemplates)
-      .catch((err) => message.error(err.message))
+      .catch((err) => messageApi.error(err.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -21,12 +22,15 @@ export function TemplateList({ locale }: { locale: string }) {
   }
 
   return (
-    <Row gutter={[24, 24]}>
+    <>
+      {contextHolder}
+      <Row gutter={[24, 24]}>
       {templates.map((tpl) => (
         <Col xs={24} sm={12} lg={8} key={tpl.id}>
           <TemplateCard {...tpl} locale={locale} />
         </Col>
       ))}
     </Row>
+    </>
   );
 }

@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Menu, Typography, Spin, Button } from 'antd';
+import { Menu, Typography, Spin, Button, message } from 'antd';
 import {
   MessageOutlined,
   PlusOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
 import { api, Conversation } from '@/lib/api';
-import { message } from 'antd';
 import { useTranslations } from 'next-intl';
 
 const { Title } = Typography;
@@ -24,13 +23,14 @@ export function ChatSider({
   const params = useParams();
   const projectId = params.id as string;
   const t = useTranslations('chat');
+  const [messageApi, contextHolder] = message.useMessage();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.get<Conversation[]>(`/projects/${projectId}/conversations`)
       .then(setConversations)
-      .catch((err) => message.error(err.message))
+      .catch((err) => messageApi.error(err.message))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -40,7 +40,7 @@ export function ChatSider({
       setConversations((prev) => [...prev, { id: res.id, title: 'New Conversation', status: 'active' } as Conversation]);
       onSelect(res.id);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to create conversation');
+      messageApi.error(err instanceof Error ? err.message : 'Failed to create conversation');
     }
   };
 
@@ -48,9 +48,9 @@ export function ChatSider({
     try {
       await api.delete(`/conversations/${convId}`);
       setConversations((prev) => prev.filter((c) => c.id !== convId));
-      message.success('Conversation deleted');
+      messageApi.success('Conversation deleted');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to delete');
+      messageApi.error(err instanceof Error ? err.message : 'Failed to delete');
     }
   };
 
@@ -59,7 +59,9 @@ export function ChatSider({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
+    <>
+      {contextHolder}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
       <div style={{ padding: '16px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={5} style={{ margin: 0 }}>{t('title')}</Title>
         <Button type="text" icon={<PlusOutlined />} onClick={handleNew} />
@@ -84,5 +86,6 @@ export function ChatSider({
         ]}
       />
     </div>
+    </>
   );
 }

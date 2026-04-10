@@ -20,6 +20,7 @@ export default function ConvChatPage() {
   const [sending, setSending] = useState(false);
   const t = useTranslations('chat');
   const streamingMsgIdRef = useRef<string | null>(null);
+  const [messageApi, contextHolder] = message.useMessage();
 
   const handleStreamingUpdate = useCallback((update: Update) => {
     switch (update.type) {
@@ -73,23 +74,23 @@ export default function ConvChatPage() {
       }
       case 'message.error': {
         const payload = update.payload as Record<string, unknown>;
-        message.error((payload.error as string) || 'Stream error');
+        messageApi.error((payload.error as string) || 'Stream error');
         setIsStreaming(false);
         streamingMsgIdRef.current = null;
         setSending(false);
         break;
       }
     }
-  }, [convId]);
+  }, [convId, messageApi]);
 
   useSubscribe(`conv:${convId}`, handleStreamingUpdate);
 
   useEffect(() => {
     api.get<MessageType[]>(`/conversations/${convId}/messages`)
       .then(setMessages)
-      .catch((err) => message.error(err.message))
+      .catch((err) => messageApi.error(err.message))
       .finally(() => setLoading(false));
-  }, [convId]);
+  }, [convId, messageApi]);
 
   const handleSend = useCallback(async (content: string) => {
     setSending(true);
@@ -114,22 +115,22 @@ export default function ConvChatPage() {
     try {
       await api.post(`/conversations/${convId}/messages`, { content });
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to send');
+      messageApi.error(err instanceof Error ? err.message : 'Failed to send');
       setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       setSending(false);
     }
-  }, [convId]);
+  }, [convId, messageApi]);
 
   const handleStop = useCallback(async () => {
     try {
       await api.post(`/conversations/${convId}/stop`);
-      message.info('Stopped');
+      messageApi.info('Stopped');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to stop');
+      messageApi.error(err instanceof Error ? err.message : 'Failed to stop');
     } finally {
       setSending(false);
     }
-  }, [convId]);
+  }, [convId, messageApi]);
 
   if (loading) {
     return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
@@ -144,20 +145,23 @@ export default function ConvChatPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {displayMessages.length === 0 && !isStreaming ? (
-        <Result
-          subTitle={t('noMessages')}
-          style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+    <>
+      {contextHolder}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {displayMessages.length === 0 && !isStreaming ? (
+          <Result
+            subTitle={t('noMessages')}
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          />
+        ) : (
+          <MessageList messages={displayMessages} isStreaming={isStreaming} />
+        )}
+        <ChatInput
+          onSend={handleSend}
+          onStop={handleStop}
+          isLoading={sending || isStreaming}
         />
-      ) : (
-        <MessageList messages={displayMessages} isStreaming={isStreaming} />
-      )}
-      <ChatInput
-        onSend={handleSend}
-        onStop={handleStop}
-        isLoading={sending || isStreaming}
-      />
-    </div>
+      </div>
+    </>
   );
 }

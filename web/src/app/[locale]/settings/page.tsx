@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [form] = Form.useForm();
+  const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
     api.get<SettingsType>('/settings')
@@ -20,7 +21,7 @@ export default function SettingsPage() {
         setSettings(data);
         form.setFieldsValue(data);
       })
-      .catch((err) => message.error(err.message))
+      .catch((err) => messageApi.error(err.message))
       .finally(() => setLoading(false));
   }, [form]);
 
@@ -33,9 +34,9 @@ export default function SettingsPage() {
       if (field === 'theme') {
         setTheme(value as 'light' | 'dark');
       }
-      message.success(t('saved'));
+      messageApi.success(t('saved'));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to save');
+      messageApi.error(err instanceof Error ? err.message : 'Failed to save');
       if (settings) form.setFieldsValue(settings);
     } finally {
       setSaving(false);
@@ -47,7 +48,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 520, margin: '0 auto', width: '100%' }}>
+    <>
+      {contextHolder}
+      <div style={{ padding: 24, maxWidth: 520, margin: '0 auto', width: '100%' }}>
       <Card title={t('title')} loading={saving}>
         <Form form={form} layout="vertical" disabled={saving}>
           <Form.Item label={t('model')} name="model_tier">
@@ -81,5 +84,6 @@ export default function SettingsPage() {
         </Form>
       </Card>
     </div>
+    </>
   );
 }
