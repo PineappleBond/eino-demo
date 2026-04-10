@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Row, Col, Spin, message } from 'antd';
+import { message } from 'antd';
 import { TemplateCard } from './TemplateCard';
 import { api, TemplateInfo } from '@/lib/api';
 
@@ -25,19 +25,23 @@ export function TemplateList({ locale }: { locale: string }) {
   }, [errorMsg, messageApi]);
 
   if (loading) {
-    return <Spin size="large" style={{ display: 'block', textAlign: 'center', padding: '48px 0' }} />;
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 0' }}>
+        <div className="typing-indicator" style={{ justifyContent: 'center' }}>
+          <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
       {contextHolder}
-      <Row gutter={[24, 24]}>
+      <div className="template-grid">
         {templates.map((tpl) => (
-          <Col xs={24} sm={12} lg={8} key={tpl.id}>
-            <TemplateCard {...tpl} locale={locale} />
-          </Col>
+          <TemplateCard key={tpl.id} {...tpl} locale={locale} />
         ))}
-      </Row>
+      </div>
     </>
   );
 }

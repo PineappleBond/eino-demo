@@ -6,6 +6,7 @@ import { Spin, Result, App } from 'antd';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
+import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
 import type { Update } from '@/lib/updateDispatcher';
@@ -21,6 +22,10 @@ export default function ConvChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [showConvInfo, setShowConvInfo] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; msg: MessageType;
+  } | null>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
 
   // Handle streaming updates from WebSocket
@@ -131,6 +136,26 @@ export default function ConvChatPage() {
     }
   }, [convId, message]);
 
+  const handleMessageContextMenu = useCallback((e: React.MouseEvent, msg: MessageType) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, msg });
+  }, []);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  useEffect(() => {
+    if (contextMenu) {
+      const handler = () => closeContextMenu();
+      document.addEventListener('click', handler);
+      return () => document.removeEventListener('click', handler);
+    }
+  }, [contextMenu, closeContextMenu]);
+
+  const handleCopyMessage = useCallback((msg: MessageType) => {
+    navigator.clipboard?.writeText(msg.content);
+    closeContextMenu();
+  }, [closeContextMenu]);
+
   if (loading) {
     return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
   }
@@ -144,27 +169,89 @@ export default function ConvChatPage() {
     }
   }
 
+  // Stats for ConvInfoPanel
+  const stats = messages.reduce((acc, m) => ({
+    messages: acc.messages + 1,
+    tokenPrompt: acc.tokenPrompt + (m.token_prompt || 0),
+    tokenCompletion: acc.tokenCompletion + (m.token_completion || 0),
+    toolCalls: acc.toolCalls + ((m.metadata?.tool_calls as Array<unknown> | undefined)?.length || 0),
+  }), { messages: 0, tokenPrompt: 0, tokenCompletion: 0, toolCalls: 0 });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {displayMessages.length === 0 && !isStreaming ? (
-        <Result
-          subTitle={t('noMessages')}
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+      {/* Main chat area */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, position: 'relative' }}>
+        {/* Info toggle button */}
+        <button
+          className="btn"
           style={{
-            flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            color: 'var(--text-secondary)',
+            position: 'absolute',
+            right: 12,
+            top: 12,
+            zIndex: 10,
+            padding: '4px 8px',
+            fontSize: 14,
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-subtle)',
+            color: 'var(--text-tertiary)',
+            opacity: 0.5,
           }}
+          title={showConvInfo ? 'Hide conversation info' : 'Show conversation info'}
+          onClick={() => setShowConvInfo(!showConvInfo)}
+        >
+          ℹ
+        </button>
+
+        {displayMessages.length === 0 && !isStreaming ? (
+          <Result
+            subTitle={t('noMessages')}
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          />
+        ) : (
+          <MessageList messages={displayMessages} isStreaming={isStreaming} onMessageContextMenu={handleMessageContextMenu} />
+        )}
+        <ChatInput
+          onSend={handleSend}
+          onStop={handleStop}
+          isLoading={isStreaming || sending}
         />
-      ) : (
-        <MessageList messages={displayMessages} isStreaming={isStreaming} />
+
+        {/* Message Context Menu */}
+        {contextMenu && (
+          <div
+            className="context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="context-menu-item" onClick={() => handleCopyMessage(contextMenu.msg)}>
+              📋 Copy
+            </div>
+            <div className="context-menu-divider" />
+            <div className="context-menu-item" onClick={() => {
+              // TODO: Reply
+              closeContextMenu();
+            }}>
+              ↩ Reply
+            </div>
+            <div className="context-menu-divider" />
+            <div className="context-menu-item" onClick={() => {
+              // TODO: Create branch conversation
+              closeContextMenu();
+            }}>
+              🌿 Create Branch Conversation
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ConvInfo Panel */}
+      {showConvInfo && (
+        <ConvInfoPanel
+          onClose={() => setShowConvInfo(false)}
+          stats={stats}
+          model="Sonnet"
+        />
       )}
-      <ChatInput
-        onSend={handleSend}
-        onStop={handleStop}
-        isLoading={isStreaming || sending}
-      />
     </div>
   );
 }

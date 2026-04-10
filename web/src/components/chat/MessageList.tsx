@@ -4,7 +4,11 @@ import { useEffect, useRef } from 'react';
 import { Message } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
 
-export function MessageList({ messages, isStreaming }: { messages: Message[]; isStreaming?: boolean }) {
+export function MessageList({ messages, isStreaming, onMessageContextMenu }: {
+  messages: Message[];
+  isStreaming?: boolean;
+  onMessageContextMenu?: (e: React.MouseEvent, msg: Message) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,7 +29,7 @@ export function MessageList({ messages, isStreaming }: { messages: Message[]; is
     >
       <div className="chat-inner" style={{ width: '100%' }}>
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onContextMenu={onMessageContextMenu} />
         ))}
       </div>
     </div>

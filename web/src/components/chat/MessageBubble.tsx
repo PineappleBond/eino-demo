@@ -9,35 +9,37 @@ import { ToolCallCard } from './ToolCallCard';
 
 const { Text } = Typography;
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({ message, onContextMenu }: { message: Message; onContextMenu?: (e: React.MouseEvent, msg: Message) => void }) {
   const isUser = message.sender_role === 'user';
 
   return (
-    <div className="slide-up" style={{ marginBottom: 24, display: 'block', width: '100%' }}>
+    <div
+      className="message-group"
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, message); }}
+    >
       {/* Sender info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+      <div className="message-sender">
         <Avatar
           size={24}
+          className="message-avatar"
           icon={isUser ? <UserOutlined /> : <RobotOutlined />}
           style={{
             fontSize: 11,
-            fontWeight: 700,
             background: isUser ? 'var(--accent)' : 'var(--bg-elevated)',
-            flexShrink: 0,
           }}
         />
-        <Text style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <span className="message-name">
           {isUser ? 'You' : 'Assistant'}
-        </Text>
+        </span>
         {message.created_at && (
-          <Text style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          <span className="message-time">
             {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+          </span>
         )}
       </div>
 
       {/* Content */}
-      <div style={{ paddingLeft: 32 }}>
+      <div className="message-content">
         {isUser ? (
           <Text style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
             {message.content}
@@ -51,32 +53,12 @@ export function MessageBubble({ message }: { message: Message }) {
                   const isBlock = props.className?.includes('language-') || String(children).includes('\n');
                   if (isBlock) {
                     return (
-                      <pre style={{
-                        background: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-md)',
-                        padding: '14px 16px',
-                        margin: '8px 0',
-                        overflowX: 'auto',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12.5,
-                        lineHeight: 1.6,
-                      }}>
+                      <pre style={{ margin: '8px 0' }}>
                         <code {...props}>{children}</code>
                       </pre>
                     );
                   }
-                  return (
-                    <code style={{
-                      fontFamily: 'var(--font-mono)',
-                      background: 'var(--bg-elevated)',
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      fontSize: 13,
-                    }} {...props}>
-                      {children}
-                    </code>
-                  );
+                  return <code {...props}>{children}</code>;
                 },
                 pre: ({ children }) => <>{children}</>,
               }}
