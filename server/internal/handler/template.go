@@ -47,7 +47,6 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService) 
 			"name":        project.Name,
 			"config":      project.Config,
 			"created_at":  project.CreatedAt,
-			"updated_at":  project.UpdatedAt,
 		})
 	})
 }

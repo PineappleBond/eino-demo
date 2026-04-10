@@ -13,7 +13,7 @@ type Agent struct {
 	Description  string         `gorm:"type:text;not null;default:''"`
 	Avatar       string         `gorm:"type:varchar(255);not null;default:''"`
 	SystemPrompt string         `gorm:"type:text;not null;default:''"`
-	Config       map[string]any `gorm:"type:jsonb;not null;default:'{}'"`
+	Config       JSONMap        `gorm:"type:jsonb;not null;default:'{}'"`
 	SortOrder    int            `gorm:"not null;default:0"`
 }
 

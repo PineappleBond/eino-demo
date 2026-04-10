@@ -64,7 +64,7 @@ func RegisterRoutes(
 ) {
 	r := handler.NewRouter(cfg, log, db)
 
-	api := handler.GetAPI(r)
+	api := handler.GetAPI(r, db)
 	handler.RegisterUserRoutes(api, userSvc)
 	handler.RegisterSettingsRoutes(api, settingsSvc)
 	handler.RegisterTemplateRoutes(api, tplSvc)

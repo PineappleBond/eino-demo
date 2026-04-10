@@ -54,7 +54,7 @@ func (s *TemplateService) CreateProjectFromTemplate(userID uuid.UUID, templateID
 		UserID:     userID,
 		TemplateID: templateID,
 		Name:       name,
-		Config:     config,
+		Config:     model.JSONMap(config),
 	}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -71,7 +71,7 @@ func (s *TemplateService) CreateProjectFromTemplate(userID uuid.UUID, templateID
 				AgentName:    agentInfo.AgentName,
 				Description:  agentInfo.Description,
 				SystemPrompt: agentInfo.SystemPrompt,
-				Config:       map[string]any{"model_tier": "sonnet"},
+				Config:       model.JSONMap{"model_tier": "sonnet"},
 			}
 			if err := tx.Create(&agent).Error; err != nil {
 				return err

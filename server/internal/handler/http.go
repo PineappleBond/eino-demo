@@ -45,8 +45,10 @@ func NewRouter(
 }
 
 // GetAPI returns the authenticated API group for route registration.
-func GetAPI(r *gin.Engine) *gin.RouterGroup {
-	return r.Group("/api/v1")
+func GetAPI(r *gin.Engine, db *gorm.DB) *gin.RouterGroup {
+	api := r.Group("/api/v1")
+	api.Use(authMiddleware(db))
+	return api
 }
 
 // authMiddleware extracts user_id from Bearer token via FirstOrCreate.

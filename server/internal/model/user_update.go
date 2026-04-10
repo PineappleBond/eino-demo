@@ -10,7 +10,7 @@ type UserUpdate struct {
 	UserID    uuid.UUID      `gorm:"type:uuid;not null;index:idx_user_seq;constraint:OnDelete:CASCADE"`
 	Seq       int64          `gorm:"not null;index:idx_user_seq"`
 	Type      string         `gorm:"type:varchar(40);not null"`
-	Payload   map[string]any `gorm:"type:jsonb;not null"`
+	Payload   JSONMap `gorm:"type:jsonb;not null"`
 }
 
 func (UserUpdate) TableName() string { return "user_updates" }

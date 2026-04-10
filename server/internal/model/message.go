@@ -15,7 +15,7 @@ type Message struct {
 	ReasonContent    string         `gorm:"type:text;not null;default:''"`
 	ReplyToSeq       *int64         `gorm:""`
 	MentionedMembers []string       `gorm:"type:text[]"`
-	Metadata         map[string]any `gorm:"type:jsonb;not null;default:'{}'"`
+	Metadata         JSONMap        `gorm:"type:jsonb;not null;default:'{}'"`
 	FinishReason     *string        `gorm:"type:varchar(20)"`
 	ErrorMessage     *string        `gorm:"type:text"`
 	DurationMs       *int           `gorm:""`

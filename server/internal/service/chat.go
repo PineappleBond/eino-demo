@@ -52,7 +52,7 @@ func (s *ChatService) SendMessage(userID, conversationID uuid.UUID, req SendMess
 		SenderRole:     "user",
 		SenderID:       userID.String(),
 		Content:        req.Content,
-		Metadata:       map[string]any{},
+		Metadata:       model.JSONMap{},
 	}
 	if err := s.db.Create(&msg).Error; err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (s *ChatService) CompleteSendMessage(
 		UserID: userID,
 		Seq:    seq,
 		Type:   "message.new",
-		Payload: map[string]any{
+		Payload: model.JSONMap{
 			"conversation_id": conversationID.String(),
 			"message_id":      resp.MessageID.String(),
 			"role":            "user",
@@ -143,7 +143,7 @@ func (s *ChatService) StopMessage(
 		UserID: userID,
 		Seq:    seq,
 		Type:   "message.stop",
-		Payload: map[string]any{
+		Payload: model.JSONMap{
 			"conversation_id": conversationID.String(),
 		},
 	}
