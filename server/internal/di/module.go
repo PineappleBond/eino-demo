@@ -8,6 +8,9 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	// Import templates package to trigger init() registration.
+	_ "github.com/PineappleBond/eino-demo-dev/server/internal/templates"
+
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/db"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/handler"
@@ -23,6 +26,7 @@ var Module = fx.Options(
 		ProvideRedis,
 		service.NewUserService,
 		service.NewSettingsService,
+		service.NewTemplateService,
 	),
 	// Handler modules — register Gin routes
 	fx.Invoke(RegisterRoutes),
@@ -45,12 +49,14 @@ func RegisterRoutes(
 	rdb *redis.Client,
 	userSvc *service.UserService,
 	settingsSvc *service.SettingsService,
+	tplSvc *service.TemplateService,
 ) {
 	r := handler.NewRouter(cfg, log, db)
 
 	api := handler.GetAPI(r)
 	handler.RegisterUserRoutes(api, userSvc)
 	handler.RegisterSettingsRoutes(api, settingsSvc)
+	handler.RegisterTemplateRoutes(api, tplSvc)
 
 	_ = rdb // Will be used in later tasks (WebSocket, seq queue)
 
