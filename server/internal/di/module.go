@@ -23,6 +23,7 @@ import (
 var Module = fx.Options(
 	fx.Provide(
 		config.Load,
+		func(cfg *config.Config) string { return cfg.DatabaseURL },
 		ProvideLogger,
 		db.ProvideDB,
 		ProvideRedis,

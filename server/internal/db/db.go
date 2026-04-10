@@ -19,7 +19,7 @@ func ProvideDB(databaseURL string, log *zap.Logger) *gorm.DB {
 	}
 
 	// Run pgvector extension first (before AutoMigrate creates tables that use it)
-	if err := setupPGVector(db); err != nil {
+	if err := setupPGVector(db, log); err != nil {
 		log.Fatal("db: failed to setup pgvector", zap.Error(err))
 	}
 
