@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/PineappleBond/eino-demo/server/internal/model"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
 
 // ProvideDB opens a GORM connection and runs AutoMigrate.
