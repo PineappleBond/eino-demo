@@ -7,6 +7,7 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { WSProvider } from '@/providers/WSProvider';
 import { UpdateProvider } from '@/providers/UpdateProvider';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import '@/app/globals.css';
 
 export default async function RootLayout({
   children,

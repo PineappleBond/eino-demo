@@ -1,66 +1,131 @@
 'use client';
 
-import { Layout, Menu, Space } from 'antd';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+import { Layout, Space, Dropdown, Button } from 'antd';
+import {
+  SettingOutlined,
+  SunOutlined,
+  MoonOutlined,
+  GlobalOutlined,
+  DownOutlined,
+} from '@ant-design/icons';
 import { useTranslations } from 'next-intl';
-import { ThemeSwitch } from './ThemeSwitch';
+import { useTheme } from '@/hooks/useTheme';
+import { SettingsDrawer } from './SettingsDrawer';
 
 const { Header } = Layout;
 
 interface TopBarProps {
   currentLocale: string;
   projectName?: string;
+  projectId?: string;
 }
 
-export function TopBar({ currentLocale, projectName }: TopBarProps) {
+export function TopBar({ currentLocale, projectName, projectId }: TopBarProps) {
   const t = useTranslations('app');
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const projectId = pathname.match(/\/project\/([^/]+)/)?.[1] || '';
+  const { theme, setTheme } = useTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const items = [
-    {
-      key: `/${currentLocale}/project/${projectId}/chat`,
-      label: <Link href={`/${currentLocale}/project/${projectId}/chat`}>{t('chat')}</Link>,
-    },
-  ];
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+
+  const toggleLocale = () => {
+    document.cookie = `NEXT_LOCALE=${currentLocale === 'en' ? 'zh' : 'en'};path=/;max-age=31536000`;
+    window.location.reload();
+  };
 
   return (
-    <Header
-      style={{
-        height: 52,
-        lineHeight: '52px',
-        padding: '0 16px',
-        display: 'flex',
-        alignItems: 'center',
-        borderBottom: '1px solid #f0f0f0',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href={`/${currentLocale}/`} style={{ fontSize: 16, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
-            {t('title')}
-          </Link>
-          {projectName && (
-            <span style={{ color: '#999' }}>›</span>
-          )}
-          {projectName && (
-            <span style={{ fontWeight: 500 }}>{projectName}</span>
-          )}
-          {projectId && (
-            <Menu
-              mode="horizontal"
-              selectedKeys={[pathname]}
-              items={items}
-              style={{ border: 'none', minWidth: 0, background: 'transparent' }}
+    <>
+      <Header
+        style={{
+          height: 52,
+          padding: '0 16px',
+          background: 'var(--bg-secondary)',
+          borderBottom: '1px solid var(--border-subtle)',
+          lineHeight: 'normal',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+          {/* Left: Project dropdown or Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {projectName ? (
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'info',
+                      label: t('home'),
+                    },
+                  ],
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  minWidth: 200,
+                }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
+                    {projectName}
+                  </span>
+                  <DownOutlined style={{ fontSize: 10, color: 'var(--text-tertiary)' }} />
+                </div>
+              </Dropdown>
+            ) : (
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {t('title')}
+              </span>
+            )}
+          </div>
+
+          {/* Right: Action buttons */}
+          <Space size={4}>
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={() => setSettingsOpen(true)}
+              style={{
+                width: 32,
+                height: 32,
+                color: 'var(--text-secondary)',
+                borderRadius: 'var(--radius-sm)',
+              }}
             />
-          )}
+            <Button
+              type="text"
+              icon={theme === 'dark' ? <SunOutlined /> : <MoonOutlined />}
+              onClick={toggleTheme}
+              style={{
+                width: 32,
+                height: 32,
+                color: 'var(--text-secondary)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            />
+            <Button
+              type="text"
+              icon={<GlobalOutlined />}
+              onClick={toggleLocale}
+              style={{
+                width: 32,
+                height: 32,
+                minWidth: 32,
+                color: 'var(--text-secondary)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12,
+              }}
+            >
+              {currentLocale.toUpperCase()}
+            </Button>
+          </Space>
         </div>
-        <Space size={12}>
-          <ThemeSwitch />
-        </Space>
-      </div>
-    </Header>
+      </Header>
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
   );
 }

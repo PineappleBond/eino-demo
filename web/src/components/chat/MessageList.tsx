@@ -23,17 +23,14 @@ export function MessageList({ messages, isStreaming }: { messages: Message[]; is
       style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '16px 0',
-        display: 'flex',
-        flexDirection: 'column',
+        padding: '24px 0',
       }}
     >
-      {messages.map((msg, i) => {
-        const isLastStreaming = isStreaming && i === messages.length - 1 && msg.sender_role === 'assistant';
-        return (
-          <MessageBubble key={msg.id} message={msg} isStreaming={!!isLastStreaming} />
-        );
-      })}
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id} message={msg} />
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,350 @@
+/* ═══ Fonts ═══ */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+/* ═══ CSS Variables — Dark Theme ═══ */
+:root {
+  /* Background hierarchy */
+  --bg-primary: #0e0e10;
+  --bg-secondary: #161618;
+  --bg-tertiary: #1e1e21;
+  --bg-elevated: #262629;
+  --bg-hover: #2a2a2e;
+  --bg-active: #323237;
+
+  /* Border */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+
+  /* Text hierarchy */
+  --text-primary: #e8e8ed;
+  --text-secondary: #9898a0;
+  --text-tertiary: #5c5c66;
+
+  /* Accent */
+  --accent: #6c5ce7;
+  --accent-hover: #7c6cf7;
+  --accent-soft: rgba(108, 92, 231, 0.12);
+
+  /* Semantic */
+  --green: #4ade80;
+  --green-soft: rgba(74, 222, 128, 0.12);
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.12);
+  --blue: #60a5fa;
+  --blue-soft: rgba(96, 165, 250, 0.12);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-label: 'Space Mono', monospace;
+}
+
+/* ═══ Reset & Base ═══ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* ═══ Scrollbar ═══ */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ═══ Animations ═══ */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes typing {
+  0% { opacity: 0.3; }
+  50% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+.fade-in { animation: fadeIn 0.15s ease; }
+.slide-up { animation: slideUp 0.3s ease; }
+
+/* ═══ Selection ═══ */
+::selection {
+  background: var(--accent);
+  color: white;
+}
+
+/* ═══ Ant Design Dark Overrides ═══ */
+/* Force body background in dark mode */
+.ant-app {
+  height: 100%;
+}
+
+/* Make Ant Design inputs match our dark theme */
+.ant-input {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-input::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused {
+  border-color: var(--accent) !important;
+}
+
+.ant-select-selector {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-select-dropdown {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
+}
+
+.ant-select-item {
+  color: var(--text-primary) !important;
+}
+
+.ant-select-item-option-active {
+  background: var(--bg-hover) !important;
+}
+
+.ant-select-item-option-selected {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  font-weight: 600 !important;
+}
+
+/* Card styling */
+.ant-card {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.ant-card-bordered {
+  border-color: var(--border-subtle) !important;
+}
+
+.ant-card-hoverable:hover {
+  border-color: var(--border-default) !important;
+}
+
+.ant-card-head {
+  border-bottom-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card-meta-title {
+  color: var(--text-primary) !important;
+}
+
+/* Tag styling */
+.ant-tag {
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}
+
+/* Button styling */
+.ant-btn-text:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Drawer styling */
+.ant-drawer-content {
+  background: var(--bg-secondary) !important;
+  border-left: 1px solid var(--border-subtle) !important;
+}
+
+.ant-drawer-header {
+  border-bottom-color: var(--border-subtle) !important;
+  background: var(--bg-secondary) !important;
+}
+
+.ant-drawer-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-drawer-body {
+  background: var(--bg-secondary) !important;
+}
+
+/* Modal/Dialog */
+.ant-modal-content {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+.ant-modal-header {
+  background: var(--bg-secondary) !important;
+  border-bottom-color: var(--border-subtle) !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-body {
+  background: var(--bg-secondary) !important;
+}
+
+.ant-modal-footer {
+  border-top-color: var(--border-subtle) !important;
+  background: var(--bg-secondary) !important;
+}
+
+/* Popconfirm/Popover */
+.ant-popover-content {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+.ant-popover-inner {
+  background: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-popover-arrow-content {
+  background: var(--bg-elevated) !important;
+}
+
+/* Dropdown */
+.ant-dropdown-menu {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
+}
+
+.ant-dropdown-menu-item {
+  color: var(--text-primary) !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: var(--bg-hover) !important;
+}
+
+/* Divider */
+.ant-divider {
+  border-color: var(--border-subtle) !important;
+}
+
+/* Empty state */
+.ant-empty-description {
+  color: var(--text-tertiary) !important;
+}
+
+/* Spin */
+.ant-spin-dot-item {
+  background: var(--accent) !important;
+}
+
+/* Result */
+.ant-result-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-result-subtitle {
+  color: var(--text-secondary) !important;
+}
+
+/* Layout overrides */
+.ant-layout {
+  background: transparent !important;
+}
+
+.ant-layout-header {
+  background: var(--bg-secondary) !important;
+}
+
+.ant-layout-sider {
+  background: var(--bg-secondary) !important;
+}
+
+/* Sider item styling (for ChatSider) */
+.ant-layout-sider-dark .ant-layout-sider-children {
+  background: var(--bg-secondary) !important;
+}
+
+/* Collapse / Accordion */
+.ant-collapse {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-collapse-header {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+}
+
+.ant-collapse-content {
+  border-top: 1px solid var(--border-subtle) !important;
+  background: transparent !important;
+}
+
+.ant-collapse-content-box {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-collapse-arrow {
+  color: var(--text-tertiary) !important;
+}

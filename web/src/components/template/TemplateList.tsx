@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Row, Col, Spin, message } from 'antd';
 import { TemplateCard } from './TemplateCard';
 import { api, TemplateInfo } from '@/lib/api';

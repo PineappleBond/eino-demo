@@ -1,10 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Card, Tag, Button, Space, message } from 'antd';
+import { Card, Tag, Button, Space, message, Typography } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
 import { useTranslations } from 'next-intl';
 import { api, TemplateInfo } from '@/lib/api';
+
+const { Text } = Typography;
 
 interface TemplateCardProps extends TemplateInfo {
   locale: string;
@@ -35,28 +37,35 @@ export function TemplateCard({ id, name, description, tags, difficulty, locale }
     <>
       {contextHolder}
       <Card
-      hoverable
-      actions={[
-        <Button type="primary" icon={<RocketOutlined />} onClick={handleStart}>
-          {t('start')}
-        </Button>,
-      ]}
-    >
-      <Card.Meta
-        title={name}
-        description={
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
-            <p style={{ color: '#666', marginBottom: 8 }}>{description}</p>
-            <Space wrap>
-              {tags.map((tag) => (
-                <Tag key={tag}>{tag}</Tag>
-              ))}
-              <Tag color={difficultyColors[difficulty]}>{t(`difficulty.${difficulty}`)}</Tag>
+        hoverable
+        actions={[
+          <Button
+            type="primary"
+            icon={<RocketOutlined />}
+            onClick={handleStart}
+            style={{ borderRadius: 'var(--radius-sm)' }}
+          >
+            {t('start')}
+          </Button>,
+        ]}
+      >
+        <Card.Meta
+          title={<Text style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{name}</Text>}
+          description={
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <Text style={{ color: 'var(--text-secondary)' }}>{description}</Text>
+              <Space wrap>
+                {tags.map((tag) => (
+                  <Tag key={tag}>{tag}</Tag>
+                ))}
+                <Tag color={difficultyColors[difficulty]}>
+                  {t(`difficulty.${difficulty}`)}
+                </Tag>
+              </Space>
             </Space>
-          </Space>
-        }
-      />
-    </Card>
+          }
+        />
+      </Card>
     </>
   );
 }

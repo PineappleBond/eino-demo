@@ -36,7 +36,7 @@
     },
     "language": "Language",
     "theme": "Theme",
-    "saved": "Settings saved"
+    "saved": "Save Settings"
   },
   "auth": {
     "tokenLabel": "Auth Token",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { Spin, Result, message } from 'antd';
+import { Spin, Result, App } from 'antd';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -13,24 +13,25 @@ import type { Update } from '@/lib/updateDispatcher';
 export default function ConvChatPage() {
   const params = useParams();
   const convId = params.convId as string;
+  const { message } = App.useApp();
+  const t = useTranslations('chat');
+
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const t = useTranslations('chat');
   const streamingMsgIdRef = useRef<string | null>(null);
-  const [messageApi, contextHolder] = message.useMessage();
 
+  // Handle streaming updates from WebSocket
   const handleStreamingUpdate = useCallback((update: Update) => {
     switch (update.type) {
       case 'message.new': {
         const payload = update.payload as Record<string, unknown>;
-        const msgId = payload.id as string | undefined;
         setMessages((prev) => [
           ...prev,
           {
-            id: msgId || `stream-${Date.now()}`,
+            id: (payload.id as string) || `stream-${Date.now()}`,
             conversation_id: convId,
             seq: update.seq,
             sender_role: 'assistant',
@@ -46,7 +47,6 @@ export default function ConvChatPage() {
             created_at: new Date().toISOString(),
           },
         ]);
-        streamingMsgIdRef.current = msgId || null;
         setStreamingContent('');
         setIsStreaming(true);
         break;
@@ -59,7 +59,6 @@ export default function ConvChatPage() {
       }
       case 'message.done': {
         setIsStreaming(false);
-        streamingMsgIdRef.current = null;
         setStreamingContent(null);
         api.get<MessageType[]>(`/conversations/${convId}/messages`)
           .then(setMessages)
@@ -68,29 +67,29 @@ export default function ConvChatPage() {
       }
       case 'message.stop': {
         setIsStreaming(false);
-        streamingMsgIdRef.current = null;
+        setStreamingContent(null);
         setSending(false);
         break;
       }
       case 'message.error': {
         const payload = update.payload as Record<string, unknown>;
-        messageApi.error((payload.error as string) || 'Stream error');
+        message.error((payload.error as string) || 'Stream error');
         setIsStreaming(false);
-        streamingMsgIdRef.current = null;
         setSending(false);
         break;
       }
     }
-  }, [convId, messageApi]);
+  }, [convId, message]);
 
   useSubscribe(`conv:${convId}`, handleStreamingUpdate);
 
+  // Initial load
   useEffect(() => {
     api.get<MessageType[]>(`/conversations/${convId}/messages`)
       .then(setMessages)
-      .catch((err) => messageApi.error(err.message))
+      .catch((err) => message.error(err.message))
       .finally(() => setLoading(false));
-  }, [convId, messageApi]);
+  }, [convId, message]);
 
   const handleSend = useCallback(async (content: string) => {
     setSending(true);
@@ -115,27 +114,28 @@ export default function ConvChatPage() {
     try {
       await api.post(`/conversations/${convId}/messages`, { content });
     } catch (err) {
-      messageApi.error(err instanceof Error ? err.message : 'Failed to send');
+      message.error(err instanceof Error ? err.message : 'Failed to send');
       setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       setSending(false);
     }
-  }, [convId, messageApi]);
+  }, [convId, message]);
 
   const handleStop = useCallback(async () => {
     try {
       await api.post(`/conversations/${convId}/stop`);
-      messageApi.info('Stopped');
+      message.info('Stopped');
     } catch (err) {
-      messageApi.error(err instanceof Error ? err.message : 'Failed to stop');
+      message.error(err instanceof Error ? err.message : 'Failed to stop');
     } finally {
       setSending(false);
     }
-  }, [convId, messageApi]);
+  }, [convId, message]);
 
   if (loading) {
     return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
   }
 
+  // Merge streaming content into the last message for display
   const displayMessages = [...messages];
   if (isStreaming && streamingContent !== null) {
     const lastMsg = displayMessages[displayMessages.length - 1];
@@ -145,23 +145,26 @@ export default function ConvChatPage() {
   }
 
   return (
-    <>
-      {contextHolder}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {displayMessages.length === 0 && !isStreaming ? (
-          <Result
-            subTitle={t('noMessages')}
-            style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-          />
-        ) : (
-          <MessageList messages={displayMessages} isStreaming={isStreaming} />
-        )}
-        <ChatInput
-          onSend={handleSend}
-          onStop={handleStop}
-          isLoading={sending || isStreaming}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {displayMessages.length === 0 && !isStreaming ? (
+        <Result
+          subTitle={t('noMessages')}
+          style={{
+            flex: 1,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: 'var(--text-secondary)',
+          }}
         />
-      </div>
-    </>
+      ) : (
+        <MessageList messages={displayMessages} isStreaming={isStreaming} />
+      )}
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        isLoading={isStreaming || sending}
+      />
+    </div>
   );
 }
