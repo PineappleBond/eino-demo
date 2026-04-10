@@ -24,7 +24,12 @@ func NewSettingsService(db *gorm.DB, log *zap.Logger) *SettingsService {
 // GetSettings returns user settings.
 func (s *SettingsService) GetSettings(userID uuid.UUID) (*model.Settings, error) {
 	var settings model.Settings
-	if err := s.db.Where("user_id = ?", userID).First(&settings).Error; err != nil {
+	if err := s.db.Where("user_id = ?", userID).FirstOrCreate(&settings, model.Settings{
+		UserID:    userID,
+		ModelTier: "sonnet",
+		Locale:    "en",
+		Theme:     "light",
+	}).Error; err != nil {
 		return nil, err
 	}
 	return &settings, nil

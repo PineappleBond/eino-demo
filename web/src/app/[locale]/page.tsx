@@ -1,4 +1,4 @@
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/layout/Header';
 import { TemplateList } from '@/components/template/TemplateList';
 
@@ -8,7 +8,7 @@ export default async function HomePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = useTranslations('home');
+  const t = await getTranslations('home');
 
   return (
     <>
