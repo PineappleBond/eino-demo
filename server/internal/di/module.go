@@ -11,6 +11,8 @@ import (
 	// Import templates package to trigger init() registration.
 	_ "github.com/PineappleBond/eino-demo-dev/server/internal/templates"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
+
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/db"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/handler"
@@ -24,6 +26,7 @@ var Module = fx.Options(
 		ProvideLogger,
 		db.ProvideDB,
 		ProvideRedis,
+		ws.NewManager,
 		service.NewUserService,
 		service.NewSettingsService,
 		service.NewTemplateService,
@@ -49,6 +52,7 @@ func RegisterRoutes(
 	log *zap.Logger,
 	db *gorm.DB,
 	rdb *redis.Client,
+	wsManager *ws.Manager,
 	userSvc *service.UserService,
 	settingsSvc *service.SettingsService,
 	tplSvc *service.TemplateService,
@@ -64,7 +68,8 @@ func RegisterRoutes(
 	handler.RegisterProjectRoutes(api, projectSvc)
 	handler.RegisterConversationRoutes(api, convSvc)
 
-	_ = rdb // Will be used in later tasks (WebSocket, seq queue)
+	// WebSocket upgrade endpoint (not under /api/v1)
+	ws.RegisterWSRoutes(r, wsManager, db, log)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
