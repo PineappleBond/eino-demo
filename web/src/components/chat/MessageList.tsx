@@ -21,8 +21,9 @@ export function MessageList({ messages, isStreaming }: { messages: Message[]; is
     <div
       ref={containerRef}
       className="chat-messages"
+      style={{ width: '100%' }}
     >
-      <div className="chat-inner">
+      <div className="chat-inner" style={{ width: '100%' }}>
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}

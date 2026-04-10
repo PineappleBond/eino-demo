@@ -37,6 +37,9 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          width: '100%',
+          padding: 0,
+          overflow: 'hidden',
         }}>
           {children}
         </Content>
