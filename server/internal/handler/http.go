@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -10,16 +9,17 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/auth"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
-	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 )
 
 // Setup holds all dependencies and provides route registration.
 type Setup struct {
-	Cfg    *config.Config
-	Log    *zap.Logger
-	DB     *gorm.DB
-	API    *gin.RouterGroup
+	Cfg *config.Config
+	Log *zap.Logger
+	DB  *gorm.DB
+	API *gin.RouterGroup
 }
 
 // corsMiddleware allows cross-origin requests for local development.
@@ -41,16 +41,12 @@ func corsMiddleware() gin.HandlerFunc {
 func NewRouter(
 	cfg *config.Config,
 	log *zap.Logger,
-	db *gorm.DB,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(zapRecovery(log))
 	r.Use(requestLogger(log))
 	r.Use(corsMiddleware())
-
-	api := r.Group("/api/v1")
-	api.Use(authMiddleware(db))
 
 	// Health check (no auth).
 	r.GET("/health", func(c *gin.Context) {
@@ -70,37 +66,17 @@ func GetAPI(r *gin.Engine, db *gorm.DB) *gin.RouterGroup {
 // authMiddleware extracts user_id from Bearer token via FirstOrCreate.
 func authMiddleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		auth := c.GetHeader("Authorization")
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if token == "" || token == auth {
+		authHeader := c.GetHeader("Authorization")
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		userID, err := auth.ResolveTokenToUser(db, token)
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{"code": "UNAUTHORIZED", "message": "missing or empty Authorization header"},
+				"error": gin.H{"code": "UNAUTHORIZED", "message": "missing or invalid Authorization header"},
 			})
 			return
 		}
 
-		// Demo mode: derive a deterministic UUID from the token.
-		userID := uuid.NewSHA1(uuid.Nil, []byte(token))
-		var user model.User
-		result := db.Where("id = ?", userID).First(&user)
-		if result.Error != nil {
-			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				user = model.User{Name: ""}
-				if err := db.FirstOrCreate(&user, model.User{BaseModel: model.BaseModel{ID: userID}}).Error; err != nil {
-					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-						"error": gin.H{"code": "INTERNAL_ERROR", "message": "database error"},
-					})
-					return
-				}
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": gin.H{"code": "INTERNAL_ERROR", "message": "database error"},
-				})
-				return
-			}
-		}
-
-		c.Set("user_id", user.ID)
+		c.Set("user_id", userID)
 		c.Next()
 	}
 }
@@ -123,14 +99,39 @@ func requestLogger(log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
+// zapRecovery returns a Gin recovery middleware that logs panics via zap.
+func zapRecovery(log *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("panic recovered",
+					zap.Any("recover", r),
+					zap.String("method", c.Request.Method),
+					zap.String("path", c.Request.URL.Path),
+				)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"},
+				})
+			}
+		}()
+		c.Next()
+	}
+}
+
 // respondJSON sends a JSON response.
 func respondJSON(c *gin.Context, status int, data any) {
 	c.JSON(status, data)
 }
 
-// respondError sends a uniform error response.
+// respondError sends a uniform error response using the OpenAPI ErrorResponse type.
 func respondError(c *gin.Context, status int, code, message string) {
-	c.JSON(status, gin.H{
-		"error": gin.H{"code": code, "message": message},
+	c.JSON(status, types.ErrorResponse{
+		Error: struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}{
+			Code:    code,
+			Message: message,
+		},
 	})
 }

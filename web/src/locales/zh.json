@@ -1,46 +1,90 @@
 {
   "app": {
-    "title": "Eino 演示",
-    "home": "首页",
-    "chat": "对话",
-    "settings": "设置"
+    "title": "Eino Demo",
+    "home": "Home",
+    "chat": "Chat",
+    "settings": "Settings"
   },
   "home": {
-    "title": "模板库",
-    "subtitle": "选择一个模板开始学习 Eino",
-    "start": "创建项目",
+    "title": "Template Gallery",
+    "subtitle": "Choose a template to start learning Eino",
+    "start": "Start Project",
     "difficulty": {
-      "beginner": "入门",
-      "intermediate": "中级",
-      "advanced": "高级"
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced"
     }
   },
   "chat": {
-    "title": "对话",
-    "new": "新建对话",
-    "placeholder": "输入消息...",
-    "send": "发送",
-    "stop": "停止",
-    "noMessages": "暂无消息，开始对话吧！",
-    "noConversations": "暂无对话，创建一个开始吧。",
-    "archived": "已归档",
-    "compacting": "压缩中..."
+    "title": "Conversations",
+    "new": "New Conversation",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "stop": "Stop",
+    "noMessages": "No messages yet. Start a conversation!",
+    "noConversations": "No conversations. Create one to start.",
+    "archived": "Archived",
+    "compacting": "Compacting...",
+    "search": "Search...",
+    "untitled": "Untitled",
+    "enterToSend": "Enter to send",
+    "rename": "Rename",
+    "archive": "Archive",
+    "compactContext": "Compact Context",
+    "deleteConfirm": "Delete this conversation?",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "failedArchive": "Failed to archive",
+    "failedDelete": "Failed to delete",
+    "failedCreate": "Failed to create conversation"
   },
   "settings": {
-    "title": "设置",
-    "model": "模型",
+    "title": "Settings",
+    "model": "Model",
     "model_desc": {
-      "haiku": "Haiku — 轻量快速",
-      "sonnet": "Sonnet — 平衡质量与速度",
-      "opus": "Opus — 最适合复杂推理"
+      "haiku": "Haiku — Lightweight, fast responses",
+      "sonnet": "Sonnet — Balanced quality and speed",
+      "opus": "Opus — Best for complex reasoning"
     },
-    "language": "语言",
-    "theme": "主题",
-    "saved": "设置已保存"
+    "language": "Language",
+    "theme": "Theme",
+    "saved": "Save Settings",
+    "english": "English",
+    "chinese": "Chinese",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "project": {
+    "info": "Project Info",
+    "save": "Save",
+    "template": "Template",
+    "created": "Created",
+    "updated": "Updated",
+    "name": "Name",
+    "updateSuccess": "Project updated",
+    "updateFailed": "Failed to update"
+  },
+  "conv": {
+    "title": "Conversation Info",
+    "statistics": "Statistics",
+    "messages": "Messages",
+    "tokensPrompt": "Tokens (input)",
+    "tokensCompletion": "Tokens (output)",
+    "toolCalls": "Tool calls",
+    "model": "Model",
+    "activeModel": "Active model",
+    "template": "Template",
+    "members": "Members"
   },
   "auth": {
-    "tokenLabel": "认证令牌",
-    "tokenPlaceholder": "输入任意令牌（演示模式）",
-    "connect": "连接"
+    "tokenLabel": "Auth Token",
+    "tokenPlaceholder": "Enter any token for demo mode",
+    "connect": "Connect",
+    "title": "Authentication"
+  },
+  "notFound": {
+    "title": "404",
+    "message": "Sorry, the page you visited does not exist.",
+    "backHome": "Back Home"
   }
 }

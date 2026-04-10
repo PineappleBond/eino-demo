@@ -6,8 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
@@ -20,17 +22,9 @@ func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, ws
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list projects")
 			return
 		}
-		result := make([]gin.H, len(projects))
+		result := make([]types.Project, len(projects))
 		for i, p := range projects {
-			result[i] = gin.H{
-				"id":          p.ID,
-				"user_id":     p.UserID,
-				"template_id": p.TemplateID,
-				"name":        p.Name,
-				"config":      p.Config,
-				"created_at":  p.CreatedAt,
-				"updated_at":  p.UpdatedAt,
-			}
+			result[i] = convert.ToProject(p)
 		}
 		respondJSON(c, http.StatusOK, result)
 	})
@@ -44,18 +38,33 @@ func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, ws
 		}
 		project, err := svc.GetProject(userID, projectID)
 		if err != nil {
-			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return
 		}
-		respondJSON(c, http.StatusOK, gin.H{
-			"id":          project.ID,
-			"user_id":     project.UserID,
-			"template_id": project.TemplateID,
-			"name":        project.Name,
-			"config":      project.Config,
-			"created_at":  project.CreatedAt,
-			"updated_at":  project.UpdatedAt,
-		})
+		respondJSON(c, http.StatusOK, convert.ToProject(*project))
+	})
+
+	api.PUT("/projects/:id", func(c *gin.Context) {
+		userID := getUserID(c)
+		projectID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
+			return
+		}
+		var req struct {
+			Name   string        `json:"name"`
+			Config model.JSONMap `json:"config"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+			return
+		}
+		project, err := svc.UpdateProject(userID, projectID, req.Name, req.Config)
+		if err != nil {
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
+			return
+		}
+		respondJSON(c, http.StatusOK, convert.ToProject(*project))
 	})
 
 	api.DELETE("/projects/:id", func(c *gin.Context) {
@@ -79,7 +88,7 @@ func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, ws
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		); err != nil {
-			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return
 		}
 		c.JSON(http.StatusNoContent, nil)

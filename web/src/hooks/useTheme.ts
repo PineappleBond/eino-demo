@@ -7,6 +7,9 @@ export function getLatestTheme(): 'light' | 'dark' {
 
 export function setTheme(theme: 'light' | 'dark'): void {
   localStorage.setItem('theme', theme);
+  if (typeof window !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
 }
 
 export function useTheme() {

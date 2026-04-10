@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Layout, Space, Dropdown, Button } from 'antd';
 import {
   SettingOutlined,
@@ -12,8 +12,17 @@ import {
 import { useTranslations } from 'next-intl';
 import { useTheme } from '@/hooks/useTheme';
 import { SettingsDrawer } from './SettingsDrawer';
+import { ProjectInfoDrawer } from './ProjectInfoDrawer';
 
 const { Header } = Layout;
+
+const actionBtnStyle: CSSProperties = {
+  width: 36,
+  height: 36,
+  minWidth: 36,
+  color: 'var(--text-secondary)',
+  borderRadius: 'var(--radius-sm)',
+};
 
 interface TopBarProps {
   currentLocale: string;
@@ -25,12 +34,25 @@ export function TopBar({ currentLocale, projectName, projectId }: TopBarProps) {
   const t = useTranslations('app');
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [projectInfoOpen, setProjectInfoOpen] = useState(false);
+  const [displayName, setDisplayName] = useState(projectName || '');
 
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
 
   const toggleLocale = () => {
-    document.cookie = `NEXT_LOCALE=${currentLocale === 'en' ? 'zh' : 'en'};path=/;max-age=31536000`;
-    window.location.reload();
+    const newLocale = currentLocale === 'en' ? 'zh' : 'en';
+    document.cookie = `NEXT_LOCALE=${newLocale};path=/;max-age=31536000`;
+    const pathname = window.location.pathname;
+    const newPathname = pathname.replace(`/${currentLocale}`, `/${newLocale}`);
+    window.location.href = newPathname;
+  };
+
+  const handleSettingsClick = () => {
+    if (projectId) {
+      setProjectInfoOpen(true);
+    } else {
+      setSettingsOpen(true);
+    }
   };
 
   return (
@@ -47,13 +69,14 @@ export function TopBar({ currentLocale, projectName, projectId }: TopBarProps) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
           {/* Left: Project dropdown or Title */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {projectName ? (
+            {displayName ? (
               <Dropdown
                 menu={{
                   items: [
                     {
-                      key: 'info',
+                      key: 'home',
                       label: t('home'),
+                      onClick: () => window.location.href = `/${currentLocale}`,
                     },
                   ],
                 }}
@@ -71,7 +94,7 @@ export function TopBar({ currentLocale, projectName, projectId }: TopBarProps) {
                   minWidth: 200,
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
-                    {projectName}
+                    {displayName}
                   </span>
                   <DownOutlined style={{ fontSize: 10, color: 'var(--text-tertiary)' }} />
                 </div>
@@ -88,44 +111,42 @@ export function TopBar({ currentLocale, projectName, projectId }: TopBarProps) {
             <Button
               type="text"
               icon={<SettingOutlined />}
-              onClick={() => setSettingsOpen(true)}
-              style={{
-                width: 32,
-                height: 32,
-                color: 'var(--text-secondary)',
-                borderRadius: 'var(--radius-sm)',
-              }}
+              onClick={handleSettingsClick}
+              style={actionBtnStyle}
+              title={projectId ? 'Project Info' : 'Settings'}
             />
             <Button
               type="text"
               icon={theme === 'dark' ? <SunOutlined /> : <MoonOutlined />}
               onClick={toggleTheme}
-              style={{
-                width: 32,
-                height: 32,
-                color: 'var(--text-secondary)',
-                borderRadius: 'var(--radius-sm)',
-              }}
+              style={actionBtnStyle}
             />
             <Button
               type="text"
               icon={<GlobalOutlined />}
               onClick={toggleLocale}
-              style={{
-                width: 32,
-                height: 32,
-                minWidth: 32,
-                color: 'var(--text-secondary)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 12,
-              }}
+              style={{ ...actionBtnStyle, width: 52, minWidth: 52, gap: 4 }}
             >
-              {currentLocale.toUpperCase()}
+              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>
+                {currentLocale.toUpperCase()}
+              </span>
             </Button>
           </Space>
         </div>
       </Header>
+
+      {/* Global settings drawer (home page) */}
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Project info drawer (project pages) */}
+      {projectId && (
+        <ProjectInfoDrawer
+          open={projectInfoOpen}
+          projectId={projectId}
+          onClose={() => setProjectInfoOpen(false)}
+          onNameChange={setDisplayName}
+        />
+      )}
     </>
   );
 }

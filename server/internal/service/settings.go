@@ -46,6 +46,29 @@ type UpdateSettingsRequest struct {
 
 // UpdateSettings updates only the provided fields.
 func (s *SettingsService) UpdateSettings(userID uuid.UUID, req UpdateSettingsRequest) (*model.Settings, error) {
+	// Validate enum values before updating.
+	if req.ModelTier != nil {
+		switch *req.ModelTier {
+		case "haiku", "sonnet", "opus":
+		default:
+			return nil, fmt.Errorf("invalid model_tier: %q (must be haiku, sonnet, or opus)", *req.ModelTier)
+		}
+	}
+	if req.Locale != nil {
+		switch *req.Locale {
+		case "en", "zh":
+		default:
+			return nil, fmt.Errorf("invalid locale: %q (must be en or zh)", *req.Locale)
+		}
+	}
+	if req.Theme != nil {
+		switch *req.Theme {
+		case "light", "dark":
+		default:
+			return nil, fmt.Errorf("invalid theme: %q (must be light or dark)", *req.Theme)
+		}
+	}
+
 	var settings model.Settings
 	if err := s.db.Where("user_id = ?", userID).First(&settings).Error; err != nil {
 		return nil, err
@@ -64,14 +87,17 @@ func (s *SettingsService) UpdateSettings(userID uuid.UUID, req UpdateSettingsReq
 	updates["updated_at"] = time.Now()
 
 	if len(updates) > 1 { // more than just updated_at
-		s.db.Model(&settings).Updates(updates)
+		if err := s.db.Model(&settings).Updates(updates).Error; err != nil {
+			return nil, err
+		}
 		s.db.Where("user_id = ?", userID).First(&settings)
 	}
 
 	return &settings, nil
 }
 
-// CompleteUpdateSettings handles settings update with seq assignment and WS push.
+// CompleteUpdateSettings handles settings update with seq assignment, user_update, and WS push.
+// Wraps settings update + user_update in a single transaction for atomicity.
 func (s *SettingsService) CompleteUpdateSettings(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -79,21 +105,113 @@ func (s *SettingsService) CompleteUpdateSettings(
 	nextSeq NextSeqFunc,
 	pushUpdate PushUpdateFunc,
 ) (*model.Settings, error) {
-	settings, err := s.UpdateSettings(userID, req)
-	if err != nil {
-		return nil, err
+	// 1. Validate enum values (same as UpdateSettings)
+	if req.ModelTier != nil {
+		switch *req.ModelTier {
+		case "haiku", "sonnet", "opus":
+		default:
+			return nil, fmt.Errorf("invalid model_tier: %q (must be haiku, sonnet, or opus)", *req.ModelTier)
+		}
+	}
+	if req.Locale != nil {
+		switch *req.Locale {
+		case "en", "zh":
+		default:
+			return nil, fmt.Errorf("invalid locale: %q (must be en or zh)", *req.Locale)
+		}
+	}
+	if req.Theme != nil {
+		switch *req.Theme {
+		case "light", "dark":
+		default:
+			return nil, fmt.Errorf("invalid theme: %q (must be light or dark)", *req.Theme)
+		}
 	}
 
+	// 2. Allocate seq
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("seq assignment failed: %w", err)
 	}
 
+	var settings *model.Settings
+
+	// 3. Update settings + create user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		var s model.Settings
+		if err := tx.Where("user_id = ?", userID).First(&s).Error; err != nil {
+			return err
+		}
+
+		updates := map[string]any{}
+		if req.ModelTier != nil {
+			updates["model_tier"] = *req.ModelTier
+		}
+		if req.Locale != nil {
+			updates["locale"] = *req.Locale
+		}
+		if req.Theme != nil {
+			updates["theme"] = *req.Theme
+		}
+		updates["updated_at"] = time.Now()
+
+		if len(updates) > 1 { // more than just updated_at
+			if err := tx.Model(&s).Updates(updates).Error; err != nil {
+				return err
+			}
+			tx.Where("user_id = ?", userID).First(&s)
+		}
+
+		payload := model.JSONMap{
+			"seq":        seq,
+			"model_tier": s.ModelTier,
+			"locale":     s.Locale,
+			"theme":      s.Theme,
+			"changed":    make([]any, 0),
+		}
+		if req.ModelTier != nil {
+			payload["changed"] = append(payload["changed"].([]any), "model_tier")
+		}
+		if req.Locale != nil {
+			payload["changed"] = append(payload["changed"].([]any), "locale")
+		}
+		if req.Theme != nil {
+			payload["changed"] = append(payload["changed"].([]any), "theme")
+		}
+
+		update := model.UserUpdate{
+			UserID:  userID,
+			Seq:     seq,
+			Type:    "settings.changed",
+			Payload: payload,
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+
+		settings = &s
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, model.UserUpdate{
+		UserID:  userID,
+		Seq:     seq,
+		Type:    "settings.changed",
+		Payload: makeUpdatePayloadForSettings(req, seq, settings),
+	})
+	return settings, nil
+}
+
+func makeUpdatePayloadForSettings(req UpdateSettingsRequest, seq int64, settings *model.Settings) model.JSONMap {
 	payload := model.JSONMap{
 		"seq":        seq,
 		"model_tier": settings.ModelTier,
 		"locale":     settings.Locale,
 		"theme":      settings.Theme,
+		"changed":    make([]any, 0),
 	}
 	if req.ModelTier != nil {
 		payload["changed"] = append(payload["changed"].([]any), "model_tier")
@@ -104,17 +222,5 @@ func (s *SettingsService) CompleteUpdateSettings(
 	if req.Theme != nil {
 		payload["changed"] = append(payload["changed"].([]any), "theme")
 	}
-
-	update := model.UserUpdate{
-		UserID:  userID,
-		Seq:     seq,
-		Type:    "settings.changed",
-		Payload: payload,
-	}
-	if err := s.db.Create(&update).Error; err != nil {
-		return nil, err
-	}
-
-	pushUpdate(userID, update)
-	return settings, nil
+	return payload
 }

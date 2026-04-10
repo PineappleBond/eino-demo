@@ -15,6 +15,9 @@ import (
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/db"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/tools"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/handler"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 )
@@ -28,6 +31,9 @@ var Module = fx.Options(
 		db.ProvideDB,
 		ProvideRedis,
 		ws.NewManager,
+		eino.NewModelProvider,
+		tools.NewToolRegistry,
+		runner.NewRunSessionManager,
 		service.NewUserService,
 		service.NewSettingsService,
 		service.NewTemplateService,
@@ -62,10 +68,10 @@ func RegisterRoutes(
 	convSvc *service.ConversationService,
 	chatSvc *service.ChatService,
 ) {
-	r := handler.NewRouter(cfg, log, db)
+	r := handler.NewRouter(cfg, log)
 
 	api := handler.GetAPI(r, db)
-	handler.RegisterUserRoutes(api, userSvc, db, rdb, wsManager, log)
+	handler.RegisterUserRoutes(api, userSvc, db, wsManager, log)
 	handler.RegisterSettingsRoutes(api, settingsSvc, wsManager)
 	handler.RegisterTemplateRoutes(api, tplSvc, wsManager)
 	handler.RegisterProjectRoutes(api, projectSvc, wsManager)

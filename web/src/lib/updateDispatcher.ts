@@ -17,11 +17,30 @@ interface Update {
 }
 
 type Subscriber = (update: Update) => void;
+type GapCallback = (localMaxSeq: number, incomingMinSeq: number) => void;
 
 class UpdateDispatcher {
   private subscribers = new Map<string, Set<Subscriber>>();
   private processing = false;
   private queue: Update[][] = [];
+  private maxServerSeq: number | null = null;
+  private onGapDetected: GapCallback | null = null;
+
+  /**
+   * Register a callback that fires when a seq gap is detected.
+   * The callback should trigger HTTP pull for the missing range.
+   */
+  setGapCallback(fn: GapCallback): void {
+    this.onGapDetected = fn;
+  }
+
+  /**
+   * Set the max_seq from server's connected frame.
+   * Used for large-gap detection: if local latest_seq is far behind, trigger HTTP pull.
+   */
+  setMaxServerSeq(seq: number): void {
+    this.maxServerSeq = seq;
+  }
 
   /**
    * Subscribe to a topic. Returns unsubscribe function.
@@ -68,8 +87,12 @@ class UpdateDispatcher {
       const minPersistable = Math.min(...persistable.map((u) => u.seq));
 
       if (minPersistable !== localMaxSeq + 1) {
-        // Seq gap — abort, trigger HTTP pull
-        console.warn(`[UpdateDispatcher] seq gap: local=${localMaxSeq}, incoming min=${minPersistable}`);
+        // Seq gap detected — notify callback to trigger HTTP pull, then skip this batch.
+        // The missing updates will arrive via HTTP pull and be processed in a subsequent batch.
+        console.warn(
+          `[UpdateDispatcher] seq gap: local=${localMaxSeq}, incoming min=${minPersistable}`
+        );
+        this.onGapDetected?.(localMaxSeq, minPersistable - 1);
         return;
       }
 
@@ -77,8 +100,11 @@ class UpdateDispatcher {
       await setLatestSeq(maxSeq);
     }
 
-    // Notify subscribers by topic
+    // Notify subscribers by topic, skipping empty updates (seq gap fillers).
     for (const update of updates) {
+      if (update.type === 'empty') {
+        continue; // seq gap filler — no payload, no subscriber interest
+      }
       const topic = deriveTopic(update.payload);
       const subs = this.subscribers.get(topic);
       if (subs) {

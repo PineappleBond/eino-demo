@@ -28,7 +28,7 @@ export function TemplateCard({ id, name, description, tags, locale }: TemplateIn
         <div className="template-name">{name}</div>
         <div className="template-desc">{description}</div>
         <div className="template-tags">
-          {tags.map((tag) => (
+          {tags?.map((tag) => (
             <span key={tag} className="template-tag">{tag}</span>
           ))}
         </div>

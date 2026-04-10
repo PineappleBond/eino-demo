@@ -1,21 +1,38 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Dropdown } from 'antd';
+import type { MenuProps } from 'antd';
 import { Message } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
 
-export function MessageList({ messages, isStreaming, onMessageContextMenu }: {
+export function MessageList({ messages, isStreaming, messageContextMenuItems }: {
   messages: Message[];
   isStreaming?: boolean;
-  onMessageContextMenu?: (e: React.MouseEvent, msg: Message) => void;
+  messageContextMenuItems?: (msg: Message) => MenuProps['items'];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [userAtBottom, setUserAtBottom] = useState(true);
 
+  // Track whether user is scrolled near the bottom
   useEffect(() => {
-    if (containerRef.current) {
+    const el = containerRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const threshold = 80; // pixels from bottom
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+      setUserAtBottom(atBottom);
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll only when user is at the bottom
+  useEffect(() => {
+    if (containerRef.current && userAtBottom) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, userAtBottom]);
 
   if (messages.length === 0) {
     return null;
@@ -28,9 +45,18 @@ export function MessageList({ messages, isStreaming, onMessageContextMenu }: {
       style={{ width: '100%' }}
     >
       <div className="chat-inner" style={{ width: '100%' }}>
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} onContextMenu={onMessageContextMenu} />
-        ))}
+        {messages.map((msg) => {
+          const items = messageContextMenuItems?.(msg);
+          const bubble = <MessageBubble key={msg.id} message={msg} />;
+          if (items && items.length > 0) {
+            return (
+              <Dropdown key={msg.id} menu={{ items }} trigger={['contextMenu']}>
+                {bubble}
+              </Dropdown>
+            );
+          }
+          return bubble;
+        })}
       </div>
     </div>
   );

@@ -36,7 +36,9 @@ func NewManager(rdb *redis.Client, log *zap.Logger) *Manager {
 }
 
 // AddConnection registers a new WebSocket for a user and starts read/write loops.
-func (m *Manager) AddConnection(ctx context.Context, userID uuid.UUID, conn *websocket.Conn) {
+// connCtx is a per-connection context. connCancel is called by readLoop on all exit paths
+// to signal ServeHTTP that the connection is done.
+func (m *Manager) AddConnection(connCtx context.Context, userID uuid.UUID, conn *websocket.Conn, connCancel context.CancelFunc) {
 	wc := &wsConn{
 		conn:   conn,
 		send:   make(chan []byte, 256),
@@ -47,12 +49,10 @@ func (m *Manager) AddConnection(ctx context.Context, userID uuid.UUID, conn *web
 	m.conns[userID] = append(m.conns[userID], wc)
 	m.mu.Unlock()
 
-	// Start read/write loops with a cancellable context.
-	// The heartbeat timeout is enforced by the readLoop using a resettable timer.
-	loopCtx, cancel := context.WithCancel(ctx)
-
-	go m.writeLoop(loopCtx, wc)
-	go m.readLoop(loopCtx, wc, cancel)
+	// Start read/write loops with the per-connection context.
+	// When connCtx is cancelled (reconnect kick or heartbeat timeout), both loops exit cleanly.
+	go m.writeLoop(connCtx, wc)
+	go m.readLoop(connCtx, wc, connCancel)
 }
 
 // PushToUserConnections broadcasts an Update to all connections for a user.
@@ -79,6 +79,7 @@ func (m *Manager) PushToUserConnections(userID uuid.UUID, update Update) {
 }
 
 // PushBatchToUserConnections broadcasts a batch of Updates to all connections for a user.
+// Used when multiple updates need to be sent atomically (e.g., offline recovery).
 func (m *Manager) PushBatchToUserConnections(userID uuid.UUID, updates []Update) {
 	if len(updates) == 0 {
 		return
@@ -109,6 +110,19 @@ func (m *Manager) NextSeq(ctx context.Context, userID uuid.UUID) (int64, error) 
 	return m.rdb.Incr(ctx, "seq:"+userID.String()).Result()
 }
 
+// KickAllConnections closes and removes all connections for a user.
+// Called during reconnection to prevent stale connections from accumulating.
+func (m *Manager) KickAllConnections(userID uuid.UUID) {
+	m.mu.Lock()
+	conns := m.conns[userID]
+	delete(m.conns, userID)
+	m.mu.Unlock()
+
+	for _, wc := range conns {
+		wc.conn.Close(websocket.StatusGoingAway, "reconnected")
+	}
+}
+
 // writeLoop sends frames to the client.
 func (m *Manager) writeLoop(ctx context.Context, wc *wsConn) {
 	for {
@@ -127,21 +141,20 @@ const heartbeatTimeout = 60 * time.Second
 
 // readLoop handles incoming client frames (only ping).
 // Uses a resettable timer: each received ping resets the 60s timeout.
-// If no ping arrives within 60s, the loop exits and cleans up the connection.
-func (m *Manager) readLoop(ctx context.Context, wc *wsConn, cancel context.CancelFunc) {
-	defer cancel()
-	defer m.RemoveConnection(wc.userID, wc)
-
+// On all exit paths, readLoop calls connCancel to unblock ServeHTTP.
+func (m *Manager) readLoop(ctx context.Context, wc *wsConn, connCancel context.CancelFunc) {
+	defer connCancel()
 	timer := time.NewTimer(heartbeatTimeout)
 	defer timer.Stop()
 
-	done := make(chan struct{})
+	// Read in a separate goroutine so we can cancel it via ctx.
+	readDone := make(chan struct{})
 	go func() {
+		defer close(readDone)
 		for {
 			_, msg, err := wc.conn.Read(ctx)
 			if err != nil {
-				close(done)
-				return
+				return // ctx cancelled or connection closed
 			}
 
 			var frame ClientFrame
@@ -150,7 +163,7 @@ func (m *Manager) readLoop(ctx context.Context, wc *wsConn, cancel context.Cance
 			}
 
 			if frame.Type == FramePing {
-				// Reset the timeout — connection is alive
+				// Reset the timeout — connection is alive.
 				if !timer.Stop() {
 					select {
 					case <-timer.C:
@@ -164,12 +177,15 @@ func (m *Manager) readLoop(ctx context.Context, wc *wsConn, cancel context.Cance
 
 	select {
 	case <-ctx.Done():
-		return
+		m.log.Info("ws: connection context cancelled", zap.String("user_id", wc.userID.String()))
+		wc.conn.Close(websocket.StatusGoingAway, "closed")
+		m.RemoveConnection(wc.userID, wc)
+		<-readDone
 	case <-timer.C:
 		m.log.Warn("ws: heartbeat timeout, closing connection", zap.String("user_id", wc.userID.String()))
-		return
-	case <-done:
-		return
+		wc.conn.Close(websocket.StatusGoingAway, "heartbeat timeout")
+		m.RemoveConnection(wc.userID, wc)
+		<-readDone
 	}
 }
 

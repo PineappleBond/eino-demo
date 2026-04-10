@@ -6,8 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
@@ -29,24 +31,9 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list conversations")
 			return
 		}
-		result := make([]gin.H, len(conversations))
+		result := make([]types.Conversation, len(conversations))
 		for i, conv := range conversations {
-			result[i] = gin.H{
-				"id":               conv.ID,
-				"project_id":       conv.ProjectID,
-				"user_id":          conv.UserID,
-				"title":            conv.Title,
-				"summary":          conv.Summary,
-				"status":           conv.Status,
-				"last_preview":     conv.LastMessagePreview,
-				"message_count":    conv.MessageCount,
-				"latest_seq":       conv.LatestMessageSeq,
-				"member_count":     conv.MemberCount,
-				"token_prompt":     conv.TokenPrompt,
-				"token_completion": conv.TokenCompletion,
-				"created_at":       conv.CreatedAt,
-				"updated_at":       conv.UpdatedAt,
-			}
+			result[i] = convert.ToConversation(conv)
 		}
 		respondJSON(c, http.StatusOK, result)
 	})
@@ -58,16 +45,19 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
-		var req service.CreateConversationRequest
+		var req types.PostProjectsIdConversationsJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
 			// Allow empty body — use defaults
-			req = service.CreateConversationRequest{}
+			req = types.PostProjectsIdConversationsJSONBody{}
+		}
+		svcReq := service.CreateConversationRequest{
+			Title: valueOrZero(req.Title),
 		}
 		conv, err := svc.CompleteCreateConversation(
 			c.Request.Context(),
 			userID,
 			projectID,
-			req,
+			svcReq,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
 				wsUpdate := ws.Update{
@@ -79,18 +69,10 @@ func RegisterConversationRoutes(
 			},
 		)
 		if err != nil {
-			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "failed to create conversation")
 			return
 		}
-		respondJSON(c, http.StatusCreated, gin.H{
-			"id":         conv.ID,
-			"project_id": conv.ProjectID,
-			"user_id":    conv.UserID,
-			"title":      conv.Title,
-			"status":     conv.Status,
-			"created_at": conv.CreatedAt,
-			"updated_at": conv.UpdatedAt,
-		})
+		respondJSON(c, http.StatusCreated, convert.ToConversation(*conv))
 	})
 
 	api.DELETE("/conversations/:id", func(c *gin.Context) {
@@ -114,9 +96,43 @@ func RegisterConversationRoutes(
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		); err != nil {
-			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			return
 		}
 		c.JSON(http.StatusNoContent, nil)
 	})
+
+	// List conversation members
+	api.GET("/conversations/:id/members", func(c *gin.Context) {
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		members, err := svc.ListMembers(conversationID)
+		if err != nil {
+			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list members")
+			return
+		}
+		result := make([]gin.H, len(members))
+		for i, m := range members {
+			result[i] = gin.H{
+				"id":              m.ID,
+				"conversation_id": m.ConversationID,
+				"member_type":     m.MemberType,
+				"member_id":       m.MemberID,
+				"member_name":     m.MemberName,
+				"is_owner":        m.IsOwner,
+			}
+		}
+		respondJSON(c, http.StatusOK, result)
+	})
+}
+
+func valueOrZero[T any](v *T) T {
+	if v == nil {
+		var zero T
+		return zero
+	}
+	return *v
 }

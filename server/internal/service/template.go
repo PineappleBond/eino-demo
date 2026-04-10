@@ -37,61 +37,8 @@ func (s *TemplateService) GetTemplate(id string) (templates.TemplateDetail, erro
 	return t, nil
 }
 
-// CreateProjectFromTemplate creates a project with agents from a template.
-func (s *TemplateService) CreateProjectFromTemplate(userID uuid.UUID, templateID string, name string, config map[string]any) (*model.Project, error) {
-	t, ok := templates.Get(templateID)
-	if !ok {
-		return nil, fmt.Errorf("template %q not found", templateID)
-	}
-
-	if name == "" {
-		name = t.Name
-	}
-	if config == nil {
-		config = map[string]any{}
-	}
-
-	project := model.Project{
-		UserID:     userID,
-		TemplateID: templateID,
-		Name:       name,
-		Config:     model.JSONMap(config),
-	}
-
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&project).Error; err != nil {
-			return err
-		}
-
-		// Create agents from template
-		agentIDMap := make(map[string]uuid.UUID) // agent_key → agent UUID
-		for _, agentInfo := range t.Agents {
-			agent := model.Agent{
-				ProjectID:    project.ID,
-				AgentKey:     agentInfo.AgentKey,
-				AgentName:    agentInfo.AgentName,
-				Description:  agentInfo.Description,
-				SystemPrompt: agentInfo.SystemPrompt,
-				Config:       model.JSONMap{"model_tier": "sonnet"},
-			}
-			if err := tx.Create(&agent).Error; err != nil {
-				return err
-			}
-			agentIDMap[agentInfo.AgentKey] = agent.ID
-		}
-
-		_ = agentIDMap // Will be used for agent relationships in later templates
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	return &project, nil
-}
-
-// CompleteCreateProjectFromTemplate handles project creation from template with seq assignment and WS push.
+// CompleteCreateProjectFromTemplate handles project creation from template with seq assignment, user_update, and WS push.
+// Wraps project + agents + user_update in a single transaction for atomicity.
 func (s *TemplateService) CompleteCreateProjectFromTemplate(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -101,17 +48,77 @@ func (s *TemplateService) CompleteCreateProjectFromTemplate(
 	nextSeq NextSeqFunc,
 	pushUpdate PushUpdateFunc,
 ) (*model.Project, error) {
-	project, err := s.CreateProjectFromTemplate(userID, templateID, name, config)
-	if err != nil {
-		return nil, err
+	t, ok := templates.Get(templateID)
+	if !ok {
+		return nil, fmt.Errorf("template not found")
 	}
 
+	if name == "" {
+		name = t.Name
+	}
+	if config == nil {
+		config = map[string]any{}
+	}
+
+	// Allocate seq before transaction
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("seq assignment failed: %w", err)
 	}
 
-	update := model.UserUpdate{
+	var project *model.Project
+
+	// Create project + agents + user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		p := model.Project{
+			UserID:     userID,
+			TemplateID: templateID,
+			Name:       name,
+			Config:     model.JSONMap(config),
+		}
+		if err := tx.Create(&p).Error; err != nil {
+			return err
+		}
+
+		// Create agents from template
+		for _, agentInfo := range t.Agents {
+			agent := model.Agent{
+				ProjectID:    p.ID,
+				AgentKey:     agentInfo.AgentKey,
+				AgentName:    agentInfo.AgentName,
+				Description:  agentInfo.Description,
+				SystemPrompt: agentInfo.SystemPrompt,
+				Config:       model.JSONMap{"model_tier": "sonnet"},
+			}
+			if err := tx.Create(&agent).Error; err != nil {
+				return err
+			}
+		}
+
+		// Create user_update in the same transaction
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "project.created",
+			Payload: model.JSONMap{
+				"id":          p.ID.String(),
+				"template_id": templateID,
+				"name":        p.Name,
+				"seq":         seq,
+			},
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+
+		project = &p
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,
 		Type:   "project.created",
@@ -121,11 +128,6 @@ func (s *TemplateService) CompleteCreateProjectFromTemplate(
 			"name":        project.Name,
 			"seq":         seq,
 		},
-	}
-	if err := s.db.Create(&update).Error; err != nil {
-		return nil, err
-	}
-
-	pushUpdate(userID, update)
+	})
 	return project, nil
 }

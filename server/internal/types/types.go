@@ -8,7 +8,110 @@ import (
 	"time"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for MessageSenderRole.
+const (
+	MessageSenderRoleAssistant MessageSenderRole = "assistant"
+	MessageSenderRoleSystem    MessageSenderRole = "system"
+	MessageSenderRoleTool      MessageSenderRole = "tool"
+	MessageSenderRoleUser      MessageSenderRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the MessageSenderRole enum.
+func (e MessageSenderRole) Valid() bool {
+	switch e {
+	case MessageSenderRoleAssistant:
+		return true
+	case MessageSenderRoleSystem:
+		return true
+	case MessageSenderRoleTool:
+		return true
+	case MessageSenderRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsLocale.
+const (
+	SettingsLocaleEn SettingsLocale = "en"
+	SettingsLocaleZh SettingsLocale = "zh"
+)
+
+// Valid indicates whether the value is a known member of the SettingsLocale enum.
+func (e SettingsLocale) Valid() bool {
+	switch e {
+	case SettingsLocaleEn:
+		return true
+	case SettingsLocaleZh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsModelTier.
+const (
+	SettingsModelTierHaiku  SettingsModelTier = "haiku"
+	SettingsModelTierOpus   SettingsModelTier = "opus"
+	SettingsModelTierSonnet SettingsModelTier = "sonnet"
+)
+
+// Valid indicates whether the value is a known member of the SettingsModelTier enum.
+func (e SettingsModelTier) Valid() bool {
+	switch e {
+	case SettingsModelTierHaiku:
+		return true
+	case SettingsModelTierOpus:
+		return true
+	case SettingsModelTierSonnet:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsTheme.
+const (
+	SettingsThemeDark  SettingsTheme = "dark"
+	SettingsThemeLight SettingsTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the SettingsTheme enum.
+func (e SettingsTheme) Valid() bool {
+	switch e {
+	case SettingsThemeDark:
+		return true
+	case SettingsThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateDifficulty.
+const (
+	Advanced     TemplateDifficulty = "advanced"
+	Beginner     TemplateDifficulty = "beginner"
+	Intermediate TemplateDifficulty = "intermediate"
+)
+
+// Valid indicates whether the value is a known member of the TemplateDifficulty enum.
+func (e TemplateDifficulty) Valid() bool {
+	switch e {
+	case Advanced:
+		return true
+	case Beginner:
+		return true
+	case Intermediate:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for UpdateType.
 const (
@@ -103,6 +206,63 @@ func (e WSServerFrameType) Valid() bool {
 	}
 }
 
+// Defines values for PutSettingsJSONBodyLocale.
+const (
+	PutSettingsJSONBodyLocaleEn PutSettingsJSONBodyLocale = "en"
+	PutSettingsJSONBodyLocaleZh PutSettingsJSONBodyLocale = "zh"
+)
+
+// Valid indicates whether the value is a known member of the PutSettingsJSONBodyLocale enum.
+func (e PutSettingsJSONBodyLocale) Valid() bool {
+	switch e {
+	case PutSettingsJSONBodyLocaleEn:
+		return true
+	case PutSettingsJSONBodyLocaleZh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutSettingsJSONBodyModelTier.
+const (
+	PutSettingsJSONBodyModelTierHaiku  PutSettingsJSONBodyModelTier = "haiku"
+	PutSettingsJSONBodyModelTierOpus   PutSettingsJSONBodyModelTier = "opus"
+	PutSettingsJSONBodyModelTierSonnet PutSettingsJSONBodyModelTier = "sonnet"
+)
+
+// Valid indicates whether the value is a known member of the PutSettingsJSONBodyModelTier enum.
+func (e PutSettingsJSONBodyModelTier) Valid() bool {
+	switch e {
+	case PutSettingsJSONBodyModelTierHaiku:
+		return true
+	case PutSettingsJSONBodyModelTierOpus:
+		return true
+	case PutSettingsJSONBodyModelTierSonnet:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutSettingsJSONBodyTheme.
+const (
+	PutSettingsJSONBodyThemeDark  PutSettingsJSONBodyTheme = "dark"
+	PutSettingsJSONBodyThemeLight PutSettingsJSONBodyTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the PutSettingsJSONBodyTheme enum.
+func (e PutSettingsJSONBodyTheme) Valid() bool {
+	switch e {
+	case PutSettingsJSONBodyThemeDark:
+		return true
+	case PutSettingsJSONBodyThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
 // ConnectedPayload defines model for ConnectedPayload.
 type ConnectedPayload struct {
 	// MaxSeq Server's current highest seq for this user.
@@ -111,8 +271,96 @@ type ConnectedPayload struct {
 	UserId     string    `json:"user_id"`
 }
 
+// Conversation defines model for Conversation.
+type Conversation struct {
+	CreatedAt       *time.Time         `json:"created_at,omitempty"`
+	Id              openapi_types.UUID `json:"id"`
+	LastPreview     *string            `json:"last_preview,omitempty"`
+	LatestSeq       *int               `json:"latest_seq,omitempty"`
+	MemberCount     *int               `json:"member_count,omitempty"`
+	MessageCount    *int               `json:"message_count,omitempty"`
+	ProjectId       openapi_types.UUID `json:"project_id"`
+	Status          *string            `json:"status,omitempty"`
+	Summary         *string            `json:"summary,omitempty"`
+	Title           *string            `json:"title,omitempty"`
+	TokenCompletion *int               `json:"token_completion,omitempty"`
+	TokenPrompt     *int               `json:"token_prompt,omitempty"`
+	UpdatedAt       *time.Time         `json:"updated_at,omitempty"`
+	UserId          openapi_types.UUID `json:"user_id"`
+}
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// Message defines model for Message.
+type Message struct {
+	Content          string                  `json:"content"`
+	ConversationId   string                  `json:"conversation_id"`
+	CreatedAt        *time.Time              `json:"created_at,omitempty"`
+	DurationMs       *int                    `json:"duration_ms,omitempty"`
+	ErrorMessage     *string                 `json:"error_message,omitempty"`
+	FinishReason     *string                 `json:"finish_reason,omitempty"`
+	Id               string                  `json:"id"`
+	MentionedMembers *[]string               `json:"mentioned_members,omitempty"`
+	Metadata         *map[string]interface{} `json:"metadata,omitempty"`
+	ReasonContent    *string                 `json:"reason_content,omitempty"`
+	ReplyToSeq       *int                    `json:"reply_to_seq,omitempty"`
+	SenderId         *string                 `json:"sender_id,omitempty"`
+	SenderRole       MessageSenderRole       `json:"sender_role"`
+	Seq              int                     `json:"seq"`
+	TokenCompletion  *int                    `json:"token_completion,omitempty"`
+	TokenPrompt      *int                    `json:"token_prompt,omitempty"`
+}
+
+// MessageSenderRole defines model for Message.SenderRole.
+type MessageSenderRole string
+
 // PingPayload Client heartbeat. Sent every 30 seconds.
 type PingPayload = map[string]interface{}
+
+// Project defines model for Project.
+type Project struct {
+	Config     *map[string]interface{} `json:"config,omitempty"`
+	CreatedAt  *time.Time              `json:"created_at,omitempty"`
+	Id         openapi_types.UUID      `json:"id"`
+	Name       string                  `json:"name"`
+	TemplateId string                  `json:"template_id"`
+	UserId     openapi_types.UUID      `json:"user_id"`
+}
+
+// Settings defines model for Settings.
+type Settings struct {
+	Locale    *SettingsLocale    `json:"locale,omitempty"`
+	ModelTier *SettingsModelTier `json:"model_tier,omitempty"`
+	Theme     *SettingsTheme     `json:"theme,omitempty"`
+	UpdatedAt *time.Time         `json:"updated_at,omitempty"`
+}
+
+// SettingsLocale defines model for Settings.Locale.
+type SettingsLocale string
+
+// SettingsModelTier defines model for Settings.ModelTier.
+type SettingsModelTier string
+
+// SettingsTheme defines model for Settings.Theme.
+type SettingsTheme string
+
+// Template defines model for Template.
+type Template struct {
+	Description string              `json:"description"`
+	Difficulty  *TemplateDifficulty `json:"difficulty,omitempty"`
+	Id          string              `json:"id"`
+	Name        string              `json:"name"`
+	Tags        *[]string           `json:"tags,omitempty"`
+}
+
+// TemplateDifficulty defines model for Template.Difficulty.
+type TemplateDifficulty string
 
 // Update defines model for Update.
 type Update struct {
@@ -120,12 +368,20 @@ type Update struct {
 	Payload map[string]interface{} `json:"payload"`
 
 	// Seq > 0 = persisted and replayable. 0 = ephemeral (streaming).
-	Seq  int        `json:"seq"`
+	Seq  int64      `json:"seq"`
 	Type UpdateType `json:"type"`
 }
 
 // UpdateType defines model for Update.Type.
 type UpdateType string
+
+// User defines model for User.
+type User struct {
+	AvatarUrl *string            `json:"avatar_url,omitempty"`
+	CreatedAt *time.Time         `json:"created_at,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Name      *string            `json:"name,omitempty"`
+}
 
 // WSClientFrame defines model for WSClientFrame.
 type WSClientFrame struct {
@@ -157,6 +413,61 @@ type WSServerFrame_Payload struct {
 
 // WSServerFrameType Server→Client frame types.
 type WSServerFrameType string
+
+// PostConversationsIdMessagesJSONBody defines parameters for PostConversationsIdMessages.
+type PostConversationsIdMessagesJSONBody struct {
+	Content string `json:"content"`
+}
+
+// PutProjectsIdJSONBody defines parameters for PutProjectsId.
+type PutProjectsIdJSONBody struct {
+	Config *map[string]interface{} `json:"config,omitempty"`
+	Name   *string                 `json:"name,omitempty"`
+}
+
+// PostProjectsIdConversationsJSONBody defines parameters for PostProjectsIdConversations.
+type PostProjectsIdConversationsJSONBody struct {
+	Title *string `json:"title,omitempty"`
+}
+
+// PutSettingsJSONBody defines parameters for PutSettings.
+type PutSettingsJSONBody struct {
+	Locale    *PutSettingsJSONBodyLocale    `json:"locale,omitempty"`
+	ModelTier *PutSettingsJSONBodyModelTier `json:"model_tier,omitempty"`
+	Theme     *PutSettingsJSONBodyTheme     `json:"theme,omitempty"`
+}
+
+// PutSettingsJSONBodyLocale defines parameters for PutSettings.
+type PutSettingsJSONBodyLocale string
+
+// PutSettingsJSONBodyModelTier defines parameters for PutSettings.
+type PutSettingsJSONBodyModelTier string
+
+// PutSettingsJSONBodyTheme defines parameters for PutSettings.
+type PutSettingsJSONBodyTheme string
+
+// PostTemplatesIdProjectsJSONBody defines parameters for PostTemplatesIdProjects.
+type PostTemplatesIdProjectsJSONBody = map[string]interface{}
+
+// GetUsersMeUpdatesParams defines parameters for GetUsersMeUpdates.
+type GetUsersMeUpdatesParams struct {
+	LastSeq *int64 `form:"last_seq,omitempty" json:"last_seq,omitempty"`
+}
+
+// PostConversationsIdMessagesJSONRequestBody defines body for PostConversationsIdMessages for application/json ContentType.
+type PostConversationsIdMessagesJSONRequestBody PostConversationsIdMessagesJSONBody
+
+// PutProjectsIdJSONRequestBody defines body for PutProjectsId for application/json ContentType.
+type PutProjectsIdJSONRequestBody PutProjectsIdJSONBody
+
+// PostProjectsIdConversationsJSONRequestBody defines body for PostProjectsIdConversations for application/json ContentType.
+type PostProjectsIdConversationsJSONRequestBody PostProjectsIdConversationsJSONBody
+
+// PutSettingsJSONRequestBody defines body for PutSettings for application/json ContentType.
+type PutSettingsJSONRequestBody PutSettingsJSONBody
+
+// PostTemplatesIdProjectsJSONRequestBody defines body for PostTemplatesIdProjects for application/json ContentType.
+type PostTemplatesIdProjectsJSONRequestBody = PostTemplatesIdProjectsJSONBody
 
 // AsConnectedPayload returns the union data inside the WSServerFrame_Payload as a ConnectedPayload
 func (t WSServerFrame_Payload) AsConnectedPayload() (ConnectedPayload, error) {

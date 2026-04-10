@@ -53,62 +53,12 @@ export const api = {
   delete: (path: string) => request<void>(path, { method: 'DELETE' }),
 };
 
-export type TemplateInfo = {
-  id: string;
-  name: string;
-  description: string;
-  tags: string[];
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-};
+import type { components } from '@/types/api';
 
-export type Project = {
-  id: string;
-  user_id: string;
-  template_id: string;
-  name: string;
-  config: Record<string, unknown>;
-  created_at: string;
-};
-
-export type Conversation = {
-  id: string;
-  project_id: string;
-  user_id: string;
-  title: string;
-  summary: string;
-  status: string;
-  last_preview: string;
-  message_count: number;
-  latest_seq: number;
-  member_count: number;
-  token_prompt: number;
-  token_completion: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export type Message = {
-  id: string;
-  conversation_id: string;
-  seq: number;
-  sender_role: 'user' | 'assistant' | 'system' | 'tool';
-  sender_id: string;
-  content: string;
-  reason_content: string;
-  metadata: Record<string, unknown>;
-  finish_reason: string | null;
-  error_message: string | null;
-  duration_ms: number | null;
-  token_prompt: number;
-  token_completion: number;
-  created_at: string;
-  reply_to_seq?: number;
-  mentioned_members?: string[];
-};
-
-export type Settings = {
-  model_tier: 'haiku' | 'sonnet' | 'opus';
-  locale: 'en' | 'zh';
-  theme: 'light' | 'dark';
-  updated_at: string;
-};
+// Re-export generated types with convenient aliases
+export type TemplateInfo = components['schemas']['Template'];
+export type Project = components['schemas']['Project'];
+export type Conversation = components['schemas']['Conversation'];
+export type Message = components['schemas']['Message'];
+export type Settings = components['schemas']['Settings'];
+export type User = components['schemas']['User'];

@@ -33,7 +33,7 @@ export function AuthModal({ open }: AuthModalProps) {
   return (
     <Modal
       open={open}
-      title="Authentication"
+      title={t('title')}
       closable={false}
       footer={null}
       maskClosable={false}

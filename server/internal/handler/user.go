@@ -1,49 +1,51 @@
 package handler
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
 // RegisterUserRoutes registers GET /users/me and GET /users/me/updates.
-func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm.DB, rdb *redis.Client, wsManager *ws.Manager, log *zap.Logger) {
+func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm.DB, wsManager *ws.Manager, log *zap.Logger) {
 	api.GET("/users/me", func(c *gin.Context) {
 		userID := getUserID(c)
 		user, settings, err := svc.GetMe(userID)
 		if err != nil {
-			respondError(c, 500, "INTERNAL_ERROR", "failed to fetch user")
+			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
 			return
 		}
-		respondJSON(c, 200, gin.H{
-			"id":         user.ID,
-			"name":       user.Name,
-			"created_at": user.CreatedAt,
-			"settings": gin.H{
-				"model_tier": settings.ModelTier,
-				"locale":     settings.Locale,
-				"theme":      settings.Theme,
-				"updated_at": settings.UpdatedAt,
-			},
+		createdAt := user.CreatedAt
+		var name *string
+		if user.Name != "" {
+			name = &user.Name
+		}
+		respondJSON(c, http.StatusOK, convert.MeResponse{
+			ID:        user.ID,
+			Name:      name,
+			CreatedAt: &createdAt,
+			Settings:  convert.ToSettings(*settings),
 		})
 	})
 
 	// Offline polling endpoint: GET /api/v1/users/me/updates?last_seq=N
-	// Returns updates with seq > last_seq for the authenticated user.
+	// Returns { updates: [...], max_seq, has_more } — client passes updates to applyUpdates().
 	api.GET("/users/me/updates", func(c *gin.Context) {
 		userID := getUserID(c)
 
 		lastSeqStr := c.DefaultQuery("last_seq", "0")
 		lastSeq, err := strconv.ParseInt(lastSeqStr, 10, 64)
 		if err != nil {
-			respondError(c, 400, "INVALID_PARAM", "last_seq must be an integer")
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "last_seq must be an integer")
 			return
 		}
 
@@ -53,27 +55,36 @@ func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm
 			Limit(100).
 			Find(&updates).Error; err != nil {
 			log.Error("failed to fetch updates", zap.Error(err))
-			respondError(c, 500, "INTERNAL_ERROR", "failed to fetch updates")
+			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch updates")
 			return
 		}
 
-		// Get current max seq from Redis
-		ctx := c.Request.Context()
-		maxSeq, _ := rdb.Get(ctx, "seq:"+userID.String()).Int64()
-
-		frames := make([]ws.Update, len(updates))
-		for i, u := range updates {
-			frames[i] = ws.Update{
-				Seq:     u.Seq,
-				Type:    u.Type,
-				Payload: u.Payload,
+		// Fill seq gaps with empty updates so the client's continuity check always passes.
+		// Redis INCR is not rolled back on DB write failure, so gaps can exist.
+		result := make([]types.Update, 0, len(updates))
+		expectedSeq := lastSeq + 1
+		for _, u := range updates {
+			for u.Seq > expectedSeq {
+				result = append(result, types.Update{
+					Seq:     expectedSeq,
+					Type:    types.Empty,
+					Payload: map[string]interface{}{},
+				})
+				expectedSeq++
 			}
+			result = append(result, convert.ToUpdate(u))
+			expectedSeq = u.Seq + 1
 		}
 
-		respondJSON(c, 200, gin.H{
-			"updates": frames,
-			"max_seq": maxSeq,
-			"has_more": len(updates) == 100,
+		var maxSeq int64
+		if len(result) > 0 {
+			maxSeq = result[len(result)-1].Seq
+		}
+
+		c.JSON(http.StatusOK, convert.UpdatesResponse{
+			Updates: result,
+			MaxSeq:  maxSeq,
+			HasMore: false,
 		})
 	})
 }

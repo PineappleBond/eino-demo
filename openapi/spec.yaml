@@ -5,10 +5,596 @@ info:
   description: Shared API types for Go and TypeScript code generation.
     This spec defines both HTTP endpoint types and WebSocket envelope types.
 
-paths: {}
+paths:
+  # ── Health ──
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Users ──
+  /users/me:
+    get:
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me/updates:
+    get:
+      summary: Poll for user updates (HTTP fallback)
+      parameters:
+        - name: last_seq
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Updates wrapper with pagination cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updates, max_seq, has_more]
+                properties:
+                  updates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Update"
+                  max_seq:
+                    type: integer
+                    format: int64
+                  has_more:
+                    type: boolean
+
+  # ── Templates ──
+  /templates:
+    get:
+      summary: List available templates
+      responses:
+        "200":
+          description: Array of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+
+  /templates/{id}:
+    get:
+      summary: Get template by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Template detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          description: Template not found
+
+  /templates/{id}/projects:
+    post:
+      summary: Create a project from a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  # ── Projects ──
+  /projects:
+    get:
+      summary: List current user's projects
+      responses:
+        "200":
+          description: Array of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      summary: Get project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+    delete:
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted
+        "404":
+          description: Project not found
+    put:
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+
+  # ── Conversations ──
+  /projects/{id}/conversations:
+    get:
+      summary: List conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      summary: Create a conversation in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  project_id:
+                    type: string
+                  user_id:
+                    type: string
+                  title:
+                    type: string
+                  status:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+
+  /conversations/{id}:
+    delete:
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Conversation deleted
+        "404":
+          description: Conversation not found
+
+  /conversations/{id}/members:
+    get:
+      summary: List conversation members
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    conversation_id:
+                      type: string
+                    member_type:
+                      type: string
+                    member_id:
+                      type: string
+                    member_name:
+                      type: string
+                    is_owner:
+                      type: boolean
+
+  # ── Messages ──
+  /conversations/{id}/messages:
+    get:
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      summary: Send a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id:
+                    type: string
+                  message_id:
+                    type: string
+                  seq:
+                    type: integer
+
+  # ── Chat Control ──
+  /conversations/{id}/stop:
+    post:
+      summary: Stop active streaming in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Streaming stopped
+
+  # ── Settings ──
+  /settings:
+    get:
+      summary: Get current user's settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      summary: Update settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model_tier:
+                  type: string
+                  enum: [haiku, sonnet, opus]
+                locale:
+                  type: string
+                  enum: [en, zh]
+                theme:
+                  type: string
+                  enum: [light, dark]
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  # ── Models ──
+  /models:
+    get:
+      summary: List available AI models
+      responses:
+        "200":
+          description: Array of model info
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, base_url, model]
+                      properties:
+                        name:
+                          type: string
+                        base_url:
+                          type: string
+                        model:
+                          type: string
 
 components:
   schemas:
+    # ── HTTP Entity Types ──
+
+    User:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Template:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+
+    Project:
+      type: object
+      required: [id, user_id, template_id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+        name:
+          type: string
+        config:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      required: [id, project_id, user_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+        last_preview:
+          type: string
+        message_count:
+          type: integer
+        latest_seq:
+          type: integer
+        member_count:
+          type: integer
+        token_prompt:
+          type: integer
+        token_completion:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Message:
+      type: object
+      required: [id, conversation_id, seq, sender_role, content]
+      properties:
+        id:
+          type: string
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+        sender_role:
+          type: string
+          enum: [user, assistant, system, tool]
+        sender_id:
+          type: string
+        content:
+          type: string
+        reason_content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        finish_reason:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        token_prompt:
+          type: integer
+        token_completion:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        reply_to_seq:
+          type: integer
+        mentioned_members:
+          type: array
+          items:
+            type: string
+
+    Settings:
+      type: object
+      properties:
+        model_tier:
+          type: string
+          enum: [haiku, sonnet, opus]
+        locale:
+          type: string
+          enum: [en, zh]
+        theme:
+          type: string
+          enum: [light, dark]
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
     # ── WebSocket Envelope ──
     # All WS frames share { "type": string, "payload": object }
 
@@ -68,6 +654,7 @@ components:
       properties:
         seq:
           type: integer
+          format: int64
           description: "> 0 = persisted and replayable. 0 = ephemeral (streaming)."
         type:
           type: string

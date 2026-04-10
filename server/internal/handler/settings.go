@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
@@ -15,28 +19,28 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 		userID := getUserID(c)
 		settings, err := svc.GetSettings(userID)
 		if err != nil {
-			respondError(c, 500, "INTERNAL_ERROR", "failed to fetch settings")
+			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch settings")
 			return
 		}
-		respondJSON(c, 200, gin.H{
-			"model_tier": settings.ModelTier,
-			"locale":     settings.Locale,
-			"theme":      settings.Theme,
-			"updated_at": settings.UpdatedAt,
-		})
+		respondJSON(c, http.StatusOK, convert.ToSettings(*settings))
 	})
 
 	api.PUT("/settings", func(c *gin.Context) {
 		userID := getUserID(c)
-		var req service.UpdateSettingsRequest
+		var req types.PutSettingsJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
-			respondError(c, 400, "INVALID_REQUEST", err.Error())
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 			return
+		}
+		svcReq := service.UpdateSettingsRequest{
+			ModelTier: (*string)(req.ModelTier),
+			Locale:    (*string)(req.Locale),
+			Theme:     (*string)(req.Theme),
 		}
 		settings, err := svc.CompleteUpdateSettings(
 			c.Request.Context(),
 			userID,
-			req,
+			svcReq,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
 				wsUpdate := ws.Update{
@@ -48,14 +52,9 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 			},
 		)
 		if err != nil {
-			respondError(c, 500, "INTERNAL_ERROR", "failed to update settings")
+			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update settings")
 			return
 		}
-		respondJSON(c, 200, gin.H{
-			"model_tier": settings.ModelTier,
-			"locale":     settings.Locale,
-			"theme":      settings.Theme,
-			"updated_at": settings.UpdatedAt,
-		})
+		respondJSON(c, http.StatusOK, convert.ToSettings(*settings))
 	})
 }

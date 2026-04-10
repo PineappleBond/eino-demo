@@ -1,0 +1,204 @@
+package agentexecutor
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/PineappleBond/gopher-claw/backend/internal/model"
+	socialmodel "github.com/PineappleBond/gopher-claw/backend/usingeino/model"
+	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// contextKey 用于从 context.Context 中提取 session/agent 上下文。
+type contextKey string
+
+const (
+	contextKeySessionID contextKey = "permission_session_id"
+	contextKeyAgentID   contextKey = "permission_agent_id"
+)
+
+// ContextWithSessionID 将 sessionID 注入 context.Context，供 PermissionCallbackAdapter 提取。
+func ContextWithSessionID(ctx context.Context, sessionID uuid.UUID) context.Context {
+	return context.WithValue(ctx, contextKeySessionID, sessionID.String())
+}
+
+// ContextWithAgentID 将 agentID 注入 context.Context，供 PermissionCallbackAdapter 提取。
+func ContextWithAgentID(ctx context.Context, agentID uuid.UUID) context.Context {
+	return context.WithValue(ctx, contextKeyAgentID, agentID.String())
+}
+
+// extractSessionAgentIDs 从 context.Context 中提取 sessionID 和 agentID。
+// 优先从自定义 context key 提取，其次从 adk session values 提取。
+// 无法获取时使用 uuid.Nil。
+func extractSessionAgentIDs(ctx context.Context) (sessionID, agentID uuid.UUID) {
+	sessionID = uuid.Nil
+	agentID = uuid.Nil
+
+	// 方式1：从自定义 context key 提取
+	if v := ctx.Value(contextKeySessionID); v != nil {
+		if s, ok := v.(string); ok {
+			if parsed, err := uuid.Parse(s); err == nil {
+				sessionID = parsed
+			}
+		}
+	}
+	if v := ctx.Value(contextKeyAgentID); v != nil {
+		if s, ok := v.(string); ok {
+			if parsed, err := uuid.Parse(s); err == nil {
+				agentID = parsed
+			}
+		}
+	}
+
+	// 方式2：从 adk session values 提取（运行时兜底）
+	if sessionID == uuid.Nil {
+		if v, ok := adk.GetSessionValue(ctx, "sessionID"); ok {
+			if s, ok := v.(string); ok {
+				if parsed, err := uuid.Parse(s); err == nil {
+					sessionID = parsed
+				}
+			}
+		}
+	}
+	if agentID == uuid.Nil {
+		if v, ok := adk.GetSessionValue(ctx, "agentID"); ok {
+			if s, ok := v.(string); ok {
+				if parsed, err := uuid.Parse(s); err == nil {
+					agentID = parsed
+				}
+			}
+		}
+	}
+
+	return sessionID, agentID
+}
+
+// PermissionCallbackAdapter 实现 socialpermission.PermissionMiddlewareCallback 接口，
+// 将中间件的权限检查委托给内部 DB 层。
+type PermissionCallbackAdapter struct {
+	db *gorm.DB
+}
+
+// NewPermissionCallbackAdapter 创建 PermissionCallbackAdapter。
+func NewPermissionCallbackAdapter(db *gorm.DB) *PermissionCallbackAdapter {
+	return &PermissionCallbackAdapter{db: db}
+}
+
+// TryRun 检查是否存在匹配的 active 规则可自动批准。
+// 如果有匹配规则 → 返回 nil（无需中断）。
+// 如果无匹配规则 → 返回 PermissionRequest（触发中断）。
+func (a *PermissionCallbackAdapter) TryRun(ctx context.Context, tCtx *adk.ToolContext, args string, opts ...tool.Option) (*socialmodel.PermissionRequest, error) {
+	sessionID, agentID := extractSessionAgentIDs(ctx)
+
+	// 查询所有 active 且未删除的规则
+	var rules []model.PermissionRule
+	if err := a.db.WithContext(ctx).
+		Where("tool_id = ? AND status = ? AND deleted_at IS NULL", tCtx.Name, model.PermissionRuleStatusActive).
+		Find(&rules).Error; err != nil {
+		return nil, fmt.Errorf("查询权限规则失败: %w", err)
+	}
+
+	// 遍历规则，检查是否可自动批准
+	for i := range rules {
+		if rules[i].CanAutoApprove(sessionID, agentID, tCtx.Name) {
+			return nil, nil // 有匹配规则，无需中断
+		}
+	}
+
+	// 无匹配规则，创建 PermissionRequest 触发中断
+	return &socialmodel.PermissionRequest{
+		ID:             uuid.New().String(),
+		ConversationID: sessionID.String(),
+		ToolName:       tCtx.Name,
+		Action:         tCtx.Name,
+		Arguments:      json.RawMessage(args),
+		RiskLevel:      socialmodel.RiskMedium,
+		Status:         socialmodel.StatusPending,
+		CreatedAt:      time.Now(),
+	}, nil
+}
+
+// CheckBlacklist 检查是否有匹配的 revoked 规则（黑名单）。
+// 使用 MatchesScope（跳过 status 检查）匹配 revoked 规则。
+func (a *PermissionCallbackAdapter) CheckBlacklist(ctx context.Context, tCtx *adk.ToolContext, permissionRequest *socialmodel.PermissionRequest, args string, opts ...tool.Option) (bool, error) {
+	sessionID, agentID := extractSessionAgentIDs(ctx)
+
+	// 查询该 tool 的所有 revoked 规则
+	var rules []model.PermissionRule
+	if err := a.db.WithContext(ctx).
+		Where("tool_id = ? AND status = ? AND deleted_at IS NULL", tCtx.Name, model.PermissionRuleStatusRevoked).
+		Find(&rules).Error; err != nil {
+		return false, fmt.Errorf("查询黑名单规则失败: %w", err)
+	}
+
+	if len(rules) == 0 {
+		return false, nil
+	}
+
+	// 使用 MatchesScope 匹配（跳过 status 检查）
+	for i := range rules {
+		if rules[i].MatchesScope(sessionID, agentID, permissionRequest.Action) {
+			return true, nil // 命中黑名单
+		}
+	}
+
+	return false, nil
+}
+
+// CheckWhitelist 检查是否有匹配的 active 规则（白名单）。
+// 使用 CanAutoApprove 匹配 active 规则。
+func (a *PermissionCallbackAdapter) CheckWhitelist(ctx context.Context, tCtx *adk.ToolContext, permissionRequest *socialmodel.PermissionRequest, args string, opts ...tool.Option) (bool, error) {
+	sessionID, agentID := extractSessionAgentIDs(ctx)
+
+	// 查询该 tool 的所有 active 规则
+	var rules []model.PermissionRule
+	if err := a.db.WithContext(ctx).
+		Where("tool_id = ? AND status = ? AND deleted_at IS NULL", tCtx.Name, model.PermissionRuleStatusActive).
+		Find(&rules).Error; err != nil {
+		return false, fmt.Errorf("查询白名单规则失败: %w", err)
+	}
+
+	// 使用 CanAutoApprove 匹配（CanAutoApprove 检查 status=active，此时查询的规则均为 active）
+	for i := range rules {
+		if rules[i].CanAutoApprove(sessionID, agentID, permissionRequest.Action) {
+			return true, nil // 命中白名单
+		}
+	}
+
+	return false, nil
+}
+
+// OnLog 将权限日志追加到 PermissionRequest.ExecutionLog 字段。
+func (a *PermissionCallbackAdapter) OnLog(ctx context.Context, tCtx *adk.ToolContext, permissionRequest *socialmodel.PermissionRequest, log *socialmodel.PermissionLog, args string, opts ...tool.Option) {
+	if permissionRequest == nil || permissionRequest.ID == "" {
+		return
+	}
+
+	// 通过 social ID 查询对应的内部 PermissionRequest
+	reqID, err := uuid.Parse(permissionRequest.ID)
+	if err != nil {
+		return
+	}
+
+	var internalReq model.PermissionRequest
+	if err := a.db.WithContext(ctx).Where("id = ?", reqID).First(&internalReq).Error; err != nil {
+		return
+	}
+
+	// 追加日志到 ExecutionLog（JSON 数组格式）
+	var logs []socialmodel.PermissionLog
+	if internalReq.ExecutionLog != "" {
+		_ = json.Unmarshal([]byte(internalReq.ExecutionLog), &logs)
+	}
+	logs = append(logs, *log)
+	logBytes, _ := json.Marshal(logs)
+
+	a.db.WithContext(ctx).Model(&model.PermissionRequest{}).
+		Where("id = ?", reqID).
+		Update("execution_log", string(logBytes))
+}

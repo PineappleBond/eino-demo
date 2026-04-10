@@ -17,10 +17,21 @@ export function deriveTopic(payload: Record<string, unknown>): string {
  * Called by useSubscribe in page components.
  */
 export function topicFromPath(pathname: string): string {
+  // /[locale]/project/[id]/chat/[convId] → conv:{convId}
+  const convMatch = pathname.match(/\/[a-z]{2}\/project\/([^/]+)\/chat\/([^/]+)/);
+  if (convMatch) {
+    return `conv:${convMatch[2]}`;
+  }
+
   // /[locale]/project/[id]/chat → system (project-level)
   const chatMatch = pathname.match(/\/[a-z]{2}\/project\/([^/]+)\/chat/);
   if (chatMatch) {
     return `project:${chatMatch[1]}`;
+  }
+
+  // /[locale]/settings → system
+  if (pathname.includes('/settings')) {
+    return 'system';
   }
 
   // /[locale]/ → system

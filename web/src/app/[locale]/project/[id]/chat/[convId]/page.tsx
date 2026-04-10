@@ -3,13 +3,20 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Spin, Result, App } from 'antd';
+import type { MenuProps } from 'antd';
+import {
+  CopyOutlined,
+  ForkOutlined,
+} from '@ant-design/icons';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
+import { StreamingText } from '@/components/chat/StreamingText';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
 import type { Update } from '@/lib/updateDispatcher';
+import { dispatcher } from '@/lib/updateDispatcher';
 
 export default function ConvChatPage() {
   const params = useParams();
@@ -23,9 +30,16 @@ export default function ConvChatPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [showConvInfo, setShowConvInfo] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; msg: MessageType;
-  } | null>(null);
+  const [members, setMembers] = useState<Array<{
+    id: string;
+    member_type: string;
+    member_name: string;
+    is_owner: boolean;
+  }>>([]);
+  const [mentions, setMentions] = useState<Array<{
+    id: string;
+    name: string;
+  }>>([]);
   const streamingMsgIdRef = useRef<string | null>(null);
 
   // Handle streaming updates from WebSocket
@@ -33,6 +47,23 @@ export default function ConvChatPage() {
     switch (update.type) {
       case 'message.new': {
         const payload = update.payload as Record<string, unknown>;
+        const senderRole = payload.role as string | undefined;
+
+        // For user messages: the optimistic temp message was already added on HTTP success.
+        // The real persisted message arrives here — replace the temp with the real one.
+        // For assistant messages: start a new message bubble.
+        if (senderRole === 'user') {
+          // Replace temp message with the real one
+          const realId = (payload.id as string) || '';
+          if (realId) {
+            setMessages((prev) =>
+              prev.map((m) => (m.id.startsWith('temp-') ? { ...m, id: realId } : m))
+            );
+          }
+          return;
+        }
+
+        // Assistant message.new — start streaming
         setMessages((prev) => [
           ...prev,
           {
@@ -40,7 +71,7 @@ export default function ConvChatPage() {
             conversation_id: convId,
             seq: update.seq,
             sender_role: 'assistant',
-            sender_id: '',
+            sender_id: (payload.sender_id as string) || '',
             content: '',
             reason_content: '',
             metadata: {},
@@ -58,16 +89,50 @@ export default function ConvChatPage() {
       }
       case 'message.delta': {
         const payload = update.payload as Record<string, unknown>;
-        const delta = (payload.content as string) || '';
+        const delta = (payload.delta as string) || '';
         setStreamingContent((prev) => (prev || '') + delta);
+        break;
+      }
+      case 'message.thinking': {
+        const payload = update.payload as Record<string, unknown>;
+        const delta = (payload.delta as string) || '';
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          return [
+            ...prev.slice(0, -1),
+            { ...last, reason_content: last.reason_content + delta },
+          ];
+        });
+        break;
+      }
+      case 'message.tool_call': {
+        const payload = update.payload as Record<string, unknown>;
+        const toolCall = {
+          name: (payload.tool_name as string) || '',
+          input: (payload.input as Record<string, unknown>) || {},
+          output: (payload.content as string) || '',
+          status: (payload.status as string) || 'done',
+        };
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          const existingCalls = (last.metadata?.tool_calls as Array<unknown> | undefined) || [];
+          return [
+            ...prev.slice(0, -1),
+            { ...last, metadata: { ...last.metadata, tool_calls: [...existingCalls, toolCall] } },
+          ];
+        });
         break;
       }
       case 'message.done': {
         setIsStreaming(false);
         setStreamingContent(null);
+        setSending(false);
+        // Refetch messages to get the final persisted state
         api.get<MessageType[]>(`/conversations/${convId}/messages`)
           .then(setMessages)
-          .catch(() => {});
+          .catch((err) => console.error('[Chat] message.done refetch failed', err));
         break;
       }
       case 'message.stop': {
@@ -88,6 +153,17 @@ export default function ConvChatPage() {
 
   useSubscribe(`conv:${convId}`, handleStreamingUpdate);
 
+  // Fetch members when ConvInfoPanel opens
+  useEffect(() => {
+    if (showConvInfo) {
+      api.get<Array<{ id: string; member_type: string; member_name: string; is_owner: boolean }>>(
+        `/conversations/${convId}/members`
+      )
+        .then(setMembers)
+        .catch(() => {});
+    }
+  }, [showConvInfo, convId]);
+
   // Initial load
   useEffect(() => {
     api.get<MessageType[]>(`/conversations/${convId}/messages`)
@@ -96,8 +172,10 @@ export default function ConvChatPage() {
       .finally(() => setLoading(false));
   }, [convId, message]);
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, mentionedMembers?: string[]) => {
     setSending(true);
+
+    // Optimistic: show temp message immediately
     const tempMsg: MessageType = {
       id: `temp-${Date.now()}`,
       conversation_id: convId,
@@ -117,7 +195,37 @@ export default function ConvChatPage() {
     setMessages((prev) => [...prev, tempMsg]);
 
     try {
-      await api.post(`/conversations/${convId}/messages`, { content });
+      const resp = await api.post<{ conversation_id: string; message_id: string; seq: number }>(
+        `/conversations/${convId}/messages`,
+        { content, mentioned_members: mentionedMembers }
+      );
+
+      // Remove optimistic temp message
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+
+      // Route real message through applyUpdates pipeline
+      const update: Update = {
+        seq: resp.seq,
+        type: 'message.new',
+        payload: {
+          id: resp.message_id,
+          conversation_id: resp.conversation_id,
+          content,
+          role: 'user',
+          sender_id: '',
+          reason_content: '',
+          metadata: {},
+          finish_reason: null,
+          error_message: null,
+          duration_ms: null,
+          token_prompt: 0,
+          token_completion: 0,
+          created_at: new Date().toISOString(),
+        },
+      };
+      dispatcher.applyUpdates([update]);
+      setMentions([]);
+      setSending(false);
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to send');
       setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
@@ -136,25 +244,43 @@ export default function ConvChatPage() {
     }
   }, [convId, message]);
 
-  const handleMessageContextMenu = useCallback((e: React.MouseEvent, msg: MessageType) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, msg });
+  const handleMemberMention = useCallback((member: { id: string; name: string }) => {
+    setMentions((prev) => {
+      if (prev.find((m) => m.id === member.id)) return prev;
+      return [...prev, member];
+    });
   }, []);
 
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const handleRemoveMention = useCallback((id: string) => {
+    setMentions((prev) => prev.filter((m) => m.id !== id));
+  }, []);
 
-  useEffect(() => {
-    if (contextMenu) {
-      const handler = () => closeContextMenu();
-      document.addEventListener('click', handler);
-      return () => document.removeEventListener('click', handler);
-    }
-  }, [contextMenu, closeContextMenu]);
-
-  const handleCopyMessage = useCallback((msg: MessageType) => {
-    navigator.clipboard?.writeText(msg.content);
-    closeContextMenu();
-  }, [closeContextMenu]);
+  const getMessageContextMenu = useCallback((msg: MessageType): MenuProps['items'] => {
+    return [
+      {
+        key: 'copy',
+        icon: <CopyOutlined />,
+        label: 'Copy',
+        onClick: () => {
+          navigator.clipboard?.writeText(msg.content);
+        },
+      },
+      { type: 'divider' },
+      {
+        key: 'reply',
+        icon: <ForkOutlined />,
+        label: 'Reply',
+        // TODO: Implement reply functionality
+      },
+      { type: 'divider' },
+      {
+        key: 'branch',
+        icon: <ForkOutlined />,
+        label: 'Create Branch Conversation',
+        // TODO: Implement branch conversation creation
+      },
+    ];
+  }, []);
 
   if (loading) {
     return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
@@ -162,7 +288,8 @@ export default function ConvChatPage() {
 
   // Merge streaming content into the last message for display
   const displayMessages = [...messages];
-  if (isStreaming && streamingContent !== null) {
+  const showStreamingInline = isStreaming && streamingContent !== null;
+  if (showStreamingInline) {
     const lastMsg = displayMessages[displayMessages.length - 1];
     if (lastMsg && lastMsg.sender_role === 'assistant') {
       displayMessages[displayMessages.length - 1] = { ...lastMsg, content: streamingContent };
@@ -178,9 +305,9 @@ export default function ConvChatPage() {
   }), { messages: 0, tokenPrompt: 0, tokenCompletion: 0, toolCalls: 0 });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', flex: 1, minWidth: 0, overflow: 'hidden' }}>
       {/* Main chat area */}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, position: 'relative' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}>
         {/* Info toggle button */}
         <button
           className="btn"
@@ -208,48 +335,31 @@ export default function ConvChatPage() {
             style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
           />
         ) : (
-          <MessageList messages={displayMessages} isStreaming={isStreaming} onMessageContextMenu={handleMessageContextMenu} />
+          <MessageList messages={displayMessages} isStreaming={isStreaming} messageContextMenuItems={getMessageContextMenu} />
         )}
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
           isLoading={isStreaming || sending}
+          mentions={mentions}
+          onRemoveMention={handleRemoveMention}
         />
-
-        {/* Message Context Menu */}
-        {contextMenu && (
-          <div
-            className="context-menu"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="context-menu-item" onClick={() => handleCopyMessage(contextMenu.msg)}>
-              📋 Copy
-            </div>
-            <div className="context-menu-divider" />
-            <div className="context-menu-item" onClick={() => {
-              // TODO: Reply
-              closeContextMenu();
-            }}>
-              ↩ Reply
-            </div>
-            <div className="context-menu-divider" />
-            <div className="context-menu-item" onClick={() => {
-              // TODO: Create branch conversation
-              closeContextMenu();
-            }}>
-              🌿 Create Branch Conversation
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ConvInfo Panel */}
       {showConvInfo && (
         <ConvInfoPanel
           onClose={() => setShowConvInfo(false)}
+          members={members.map((m) => ({
+            id: m.id,
+            name: m.member_name,
+            type: m.member_type as 'user' | 'agent',
+            color: m.is_owner ? 'var(--accent)' : 'var(--bg-elevated)',
+            role: m.is_owner ? 'owner' : 'agent',
+          }))}
           stats={stats}
           model="Sonnet"
+          onMemberMention={handleMemberMention}
         />
       )}
     </div>

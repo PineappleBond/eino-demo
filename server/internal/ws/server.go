@@ -8,11 +8,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/auth"
 )
 
 // WSHandler handles WebSocket upgrades.
@@ -35,18 +34,10 @@ func RegisterWSRoutes(r *gin.Engine, manager *Manager, db *gorm.DB, log *zap.Log
 
 func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	if token == "" {
+	userID, err := auth.ResolveTokenToUser(h.db, token)
+	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
-	}
-
-	// Resolve token to user UUID (same logic as auth middleware)
-	userID := uuid.NewSHA1(uuid.Nil, []byte(token))
-	var user model.User
-	result := h.db.Where("id = ?", userID).First(&user)
-	if result.Error != nil {
-		user.ID = userID
-		h.db.Create(&user)
 	}
 
 	// last_seq is reserved for future offline replay logic
@@ -61,20 +52,35 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	// On reconnect, kick all stale connections for this user before adding the new one.
+	// This prevents stale connections from accumulating and receiving duplicate pushes.
+	h.manager.KickAllConnections(userID)
+
+	// Create a per-connection context. Cancelled by readLoop on all exit paths
+	// (heartbeat timeout, client disconnect, or reconnect kick).
+	connCtx, connCancel := context.WithCancel(context.Background())
 
 	// Send connected frame
-	maxSeq, _ := h.manager.rdb.Get(ctx, "seq:"+user.ID.String()).Int64()
+	ctx := context.Background()
+	maxSeq, _ := h.manager.rdb.Get(ctx, "seq:"+userID.String()).Int64()
 	connectedData := ServerFrame{
 		Type: FrameConnected,
 		Payload: ConnectedPayload{
-			UserID:     user.ID.String(),
+			UserID:     userID.String(),
 			ServerTime: time.Now().UTC().Format(time.RFC3339),
 			MaxSeq:     maxSeq,
 		},
 	}
 	data, _ := json.Marshal(connectedData)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(connCtx, websocket.MessageText, data); err != nil {
+		h.log.Error("ws: connected frame write failed", zap.Error(err))
+		return
+	}
 
-	h.manager.AddConnection(ctx, user.ID, conn)
+	h.manager.AddConnection(connCtx, userID, conn, connCancel)
+
+	// Block until the connection is closed (heartbeat timeout, client disconnect, or reconnect kick).
+	// The readLoop calls connCancel() on all exit paths, which unblocks this wait.
+	// defer connCancel() handles cleanup if AddConnection returns early due to write error above.
+	<-connCtx.Done()
 }

@@ -2,24 +2,32 @@
 
 import { useState } from 'react';
 import { Button } from 'antd';
-import { SendOutlined, StopOutlined } from '@ant-design/icons';
+import { SendOutlined, StopOutlined, CloseOutlined } from '@ant-design/icons';
 import { useTranslations } from 'next-intl';
 
-interface ChatInputProps {
-  onSend: (content: string) => Promise<void>;
-  onStop?: () => Promise<void>;
-  isLoading?: boolean;
+interface MentionMember {
+  id: string;
+  name: string;
 }
 
-export function ChatInput({ onSend, onStop, isLoading }: ChatInputProps) {
+interface ChatInputProps {
+  onSend: (content: string, mentionedMembers?: string[]) => Promise<void>;
+  onStop?: () => Promise<void>;
+  isLoading?: boolean;
+  mentions?: MentionMember[];
+  onRemoveMention?: (id: string) => void;
+}
+
+export function ChatInput({ onSend, onStop, isLoading, mentions, onRemoveMention }: ChatInputProps) {
   const [text, setText] = useState('');
   const t = useTranslations('chat');
 
   const handleSend = async () => {
     if (!text.trim() || isLoading) return;
     const content = text.trim();
+    const mentionedIds = mentions?.map((m) => m.id);
     setText('');
-    await onSend(content);
+    await onSend(content, mentionedIds);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -32,6 +40,23 @@ export function ChatInput({ onSend, onStop, isLoading }: ChatInputProps) {
   return (
     <div className="chat-input-area">
       <div className="chat-input-inner">
+        {mentions && mentions.length > 0 && (
+          <div className="chat-input-mentions">
+            {mentions.map((m) => (
+              <span key={m.id} className="mention-tag">
+                @{m.name}
+                {onRemoveMention && (
+                  <span
+                    className="mention-tag-remove"
+                    onClick={() => onRemoveMention(m.id)}
+                  >
+                    <CloseOutlined style={{ fontSize: 10 }} />
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="chat-input-box">
           <textarea
             className="chat-input-textarea"

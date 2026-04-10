@@ -49,7 +49,8 @@
 
 ### Offline Polling
 
-- Returns raw `[]Update` (not wrapped). Client passes the array directly into `applyUpdates()`.
+- Returns `{ updates: [...], max_seq, has_more }` — the server fills missing seq numbers with `empty` updates.
+- Client passes `updates` array into `applyUpdates()`. The `empty` updates are skipped by the subscriber notifier.
 
 ### WebSocket Frame Envelope
 
@@ -65,6 +66,8 @@
 ```
 
 Generates both Go (`server/internal/types/types.go`) and TypeScript (`web/src/types/api.d.ts`) types from `openapi/spec.yaml`.
+
+**All API and WebSocket payloads must reference the generated types.** Never hand-write field names that exist in the spec — this is the only way to guarantee field-name consistency between backend and frontend.
 
 ---
 
@@ -174,8 +177,13 @@ type Update = MessageNewUpdate | MessageDeltaUpdate | MessageDoneUpdate
 
 - `applyUpdates(updates: Update[])` -- single entry point for all updates. Thread-safe: concurrent calls are serialized via a mutex/queue.
 - Partitions into `persistable (seq > 0)` and `ephemeral (seq = 0)`.
-- Persists to IndexedDB in a single transaction, then notifies topic subscribers.
-- **IndexedDB strategy**: `applyUpdates()` only handles Update event flow (seq > 0 persists to `updates` store). Other entities (messages, conversations, users, projects) are stored in separate IndexedDB tables via HTTP sync. After `applyUpdates()` notifies subscribers, components may trigger HTTP requests to sync the latest entity data from the server, then update their own tables and re-render.
+- For persistable: validates seq continuity against `latest_seq` cursor. If gap detected, triggers HTTP pull for the
+  missing range and discards the current batch. If continuous, updates the `latest_seq` cursor.
+- For ephemeral: no IndexedDB write, no seq check.
+- **IndexedDB strategy**: `applyUpdates()` does NOT write to a dedicated `updates` store. Only `latest_seq` (a single
+  integer in the `settings` store) tracks the global sync cursor. If missed during disconnect, `latest_seq` + HTTP pull
+  recovers missing entities. Other entities (messages, conversations, projects) are stored in separate IndexedDB tables
+  via HTTP sync after subscribers are notified.
 
 ### Topic Routing
 
@@ -194,24 +202,24 @@ type Update = MessageNewUpdate | MessageDeltaUpdate | MessageDoneUpdate
 
 ```text
 1. Partition: persistable (seq > 0) vs ephemeral (seq = 0)
-2. For persistable: check seq continuity with local maxSeq
-   - If gap detected: abort, trigger HTTP pull for missing range
-   - If continuous: write to IndexedDB (upsert by seq)
+2. For persistable: check seq continuity with local latest_seq
+   - If gap detected: trigger HTTP pull for missing range (via onGapDetected callback), discard current batch
+   - If continuous: update latest_seq cursor in IndexedDB settings store
 3. For ephemeral: skip IndexedDB
-4. Extract entity from payload: has conversation entity → conv:{conversation_id}, otherwise → system
+4. For each update (skip "empty" gap-fillers): extract entity from payload → derive topic
 5. Notify active subscribers for that topic
 ```
 
 ### IndexedDB Schema
 
-- Store name: `updates` — fields: `{ seq, topic, type, payload, created_at }`. `keyPath: "seq"`, index on `topic`.
-- Additional stores (populated via HTTP sync, not by `applyUpdates()`): `messages`, `conversations`, `projects`, `users`, `settings`.
+- Store name: `settings` — contains `latest_seq` cursor (single integer).
+- Additional stores (populated via HTTP sync, not by `applyUpdates()`): `messages`, `conversations`, `projects`, `users`.
 - Chat page flush: queries IndexedDB `messages` store for the current conversation. Missing data triggers HTTP sync, which updates local tables and then re-renders.
 
 ### Flow
 
 ```text
-source → applyUpdates → dispatch by topic → (seq>0: store IndexedDB) → notify subscribers → component re-render
+source → applyUpdates → (seq>0: update latest_seq cursor) → (skip empty updates) → notify subscribers → component re-render
 ```
 
 ---
@@ -425,31 +433,31 @@ sequenceDiagram
 
     rect rgb(255, 250, 240)
     Note over C,Sub: HTTP Pull Request
-    C->>S: GET /api/v1/users/me/updates?last_seq=<local_maxSeq>
+    C->>S: GET /api/v1/users/me/updates?last_seq=<local_latestSeq>
     alt last_seq == 0
-        Note over S: Client cleared local DB → return only the last Update
+        Note over S: Fresh client → return only the last Update
         S->>DB: SELECT latest user_update WHERE user_id = ?
     else last_seq > 0
         S->>DB: SELECT user_updates WHERE user_id = ? AND seq > last_seq ORDER BY seq ASC
         Note over S: Fill missing seq numbers with "empty" updates to ensure continuity
     end
     DB-->>S: []Update
-    S-->>C: 200 []Update (raw array, no wrapper)
+    S-->>C: 200 { updates, max_seq, has_more }
     end
 
     rect rgb(255, 240, 245)
     Note over C,Sub: Client processes Updates
     C->>C: applyUpdates(updates)
-    alt seq > 0 AND continuous with local maxSeq
-        C->>IDB: store all Updates (single transaction, upsert by seq)
-        C->>C: for each update: extract entity from payload → derive topic
+    alt seq > 0 AND continuous with local latestSeq
+        C->>C: update latest_seq cursor in settings store
+        C->>C: for each update (skip "empty"): extract entity from payload → derive topic
         C->>Sub: notify subscribers(topic, update)
-        C->>C: update local maxSeq = max(seq)
+        C->>C: update local latestSeq = max(seq)
         Sub->>Sub: subscribers re-render
     else seq gap detected (not continuous)
         C->>C: abort this batch
-        C->>C: trigger HTTP pull with last_seq = local_maxSeq to fill gap first
-        Note over C: applyUpdates terminates for this batch
+        C->>C: trigger HTTP pull with last_seq = local_latestSeq to fill gap first
+        Note over C: applyUpdates terminates for this batch, gap recovery happens via HTTP
     end
     end
 
@@ -472,17 +480,17 @@ flowchart TD
     A["applyUpdates(updates: Update[])"] --> B["Partition: persistable (seq > 0) vs ephemeral (seq = 0)"]
     B --> C{"persistable.length > 0?"}
 
-    C -->|yes| D["Check seq continuity: min(persistable.seq) == localMaxSeq + 1?"]
-    D -->|no, gap detected| E["ABORT: trigger HTTP pull for missing range"]
-    E --> F["applyUpdates terminates"]
+    C -->|yes| D["Check seq continuity: min(persistable.seq) == localLatestSeq + 1?"]
+    D -->|no, gap detected| E["ABORT: trigger HTTP pull for missing range via onGapDetected callback"]
+    E --> F["applyUpdates terminates for this batch"]
 
-    D -->|yes, continuous| G["Write to IndexedDB: single transaction, upsert by seq"]
-    G --> H["Update localMaxSeq = max(persistable.seq)"]
-    H --> I["Process all updates (persistable + ephemeral)"]
+    D -->|yes, continuous| G["Update latest_seq cursor in IndexedDB settings store"]
+    G --> H["Process all updates (persistable + ephemeral)"]
 
-    C -->|no, all ephemeral| I
+    C -->|no, all ephemeral| H
 
-    I --> J["For each update: extract entity from payload → derive topic"]
+    H --> I["For each update: skip 'empty' gap-fillers"]
+    I --> J["Extract entity from payload → derive topic"]
     J --> K["Notify active subscribers for that topic"]
     K --> L["Subscribers handle update by type:"]
 

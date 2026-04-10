@@ -6,8 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
@@ -15,17 +17,21 @@ import (
 func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, wsManager *ws.Manager) {
 	api.GET("/templates", func(c *gin.Context) {
 		list := svc.ListTemplates()
-		respondJSON(c, http.StatusOK, list)
+		result := make([]types.Template, len(list))
+		for i, t := range list {
+			result[i] = convert.ToTemplate(t)
+		}
+		respondJSON(c, http.StatusOK, result)
 	})
 
 	api.GET("/templates/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		t, err := svc.GetTemplate(id)
 		if err != nil {
-			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "template not found")
 			return
 		}
-		respondJSON(c, http.StatusOK, t)
+		respondJSON(c, http.StatusOK, convert.ToTemplate(t.TemplateInfo))
 	})
 
 	api.POST("/templates/:id/projects", func(c *gin.Context) {
@@ -36,14 +42,22 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, 
 			Name   string         `json:"name"`
 			Config map[string]any `json:"config"`
 		}
-		c.ShouldBindJSON(&req)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+			return
+		}
+
+		cfg := model.JSONMap(req.Config)
+		if cfg == nil {
+			cfg = make(map[string]any)
+		}
 
 		project, err := svc.CompleteCreateProjectFromTemplate(
 			c.Request.Context(),
 			userID,
 			templateID,
 			req.Name,
-			req.Config,
+			cfg,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
 				wsUpdate := ws.Update{
@@ -55,16 +69,9 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, 
 			},
 		)
 		if err != nil {
-			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "failed to create project from template")
 			return
 		}
-		respondJSON(c, http.StatusCreated, gin.H{
-			"id":          project.ID,
-			"user_id":     project.UserID,
-			"template_id": project.TemplateID,
-			"name":        project.Name,
-			"config":      project.Config,
-			"created_at":  project.CreatedAt,
-		})
+		respondJSON(c, http.StatusCreated, convert.ToProject(*project))
 	})
 }

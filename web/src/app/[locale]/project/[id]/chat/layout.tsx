@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname, useParams } from 'next/navigation';
-import { Layout } from 'antd';
+import { Layout, Spin } from 'antd';
 import { TopBar } from '@/components/layout/Header';
 import { ChatSider } from '@/components/layout/ChatSider';
+import { api } from '@/lib/api';
 
 const { Sider, Content } = Layout;
 
@@ -16,9 +17,30 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const convIdFromPath = pathname.split('/').pop() || '';
   const [selectedConv, setSelectedConv] = useState(convIdFromPath);
 
+  // Sync selected conversation when route changes
+  useEffect(() => {
+    const currentConvId = pathname.split('/').pop() || '';
+    setSelectedConv(currentConvId);
+  }, [pathname]);
+  const [projectName, setProjectName] = useState('Project');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (projectId) {
+      api.get<{ name: string }>(`/projects/${projectId}`)
+        .then((p) => setProjectName(p.name || 'Project'))
+        .catch(() => setProjectName('Project'))
+        .finally(() => setLoading(false));
+    }
+  }, [projectId]);
+
+  if (loading) {
+    return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
+  }
+
   return (
     <Layout style={{ height: '100vh' }}>
-      <TopBar currentLocale={locale} projectName="Project" projectId={projectId} />
+      <TopBar currentLocale={locale} projectName={projectName} projectId={projectId} />
       <Layout>
         <Sider
           width={240}
@@ -32,17 +54,16 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
         >
           <ChatSider selectedKey={selectedConv} />
         </Sider>
-        <Content style={{
+        <div style={{
           background: 'var(--bg-primary)',
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          width: '100%',
-          padding: 0,
+          flex: 1,
           overflow: 'hidden',
         }}>
           {children}
-        </Content>
+        </div>
       </Layout>
     </Layout>
   );

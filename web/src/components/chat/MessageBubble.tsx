@@ -4,18 +4,18 @@ import { Avatar, Typography } from 'antd';
 import { UserOutlined, RobotOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { Message } from '@/lib/api';
 import { ToolCallCard } from './ToolCallCard';
 
 const { Text } = Typography;
 
-export function MessageBubble({ message, onContextMenu }: { message: Message; onContextMenu?: (e: React.MouseEvent, msg: Message) => void }) {
+export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender_role === 'user';
 
   return (
     <div
       className="message-group"
-      onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, message); }}
     >
       {/* Sender info */}
       <div className="message-sender">
@@ -48,6 +48,7 @@ export function MessageBubble({ message, onContextMenu }: { message: Message; on
           <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)' }}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
               components={{
                 code: ({ children, ...props }) => {
                   const isBlock = props.className?.includes('language-') || String(children).includes('\n');

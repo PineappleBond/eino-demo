@@ -2,13 +2,18 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Input, App, Empty, Divider, Popconfirm } from 'antd';
+import { Button, Input, App, Empty, Divider, Dropdown, Popconfirm } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
   InboxOutlined,
   SearchOutlined,
   SettingOutlined,
   FileOutlined,
+  EditOutlined,
+  FolderOutlined,
+  CompressOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import Link from 'next/link';
 import { api, Conversation } from '@/lib/api';
@@ -29,9 +34,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [contextMenu, setContextMenu] = useState<{
-    x: number; y: number; conv: Conversation;
-  } | null>(null);
+  const [contextMenuConv, setContextMenuConv] = useState<Conversation | null>(null);
 
   useEffect(() => {
     api.get<Conversation[]>(`/projects/${projectId}/conversations`)
@@ -45,7 +48,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
       const res = await api.post<{ id: string }>(`/projects/${projectId}/conversations`, {});
       router.push(`/${locale}/project/${projectId}/chat/${res.id}`);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to create conversation');
+      message.error(t('failedCreate'));
     }
   };
 
@@ -56,7 +59,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
         prev.map((c) => c.id === convId ? { ...c, status: 'archived' } : c)
       );
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to archive');
+      message.error(t('failedArchive'));
     }
   };
 
@@ -65,7 +68,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
       await api.delete(`/conversations/${convId}`);
       setConversations((prev) => prev.filter((c) => c.id !== convId));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Failed to delete');
+      message.error(t('failedDelete'));
     }
   };
 
@@ -80,18 +83,63 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   const handleContextMenu = useCallback((e: React.MouseEvent, conv: Conversation) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, conv });
+    setContextMenuConv(conv);
   }, []);
 
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const closeContextMenu = useCallback(() => setContextMenuConv(null), []);
 
-  useEffect(() => {
-    if (contextMenu) {
-      const handler = () => closeContextMenu();
-      document.addEventListener('click', handler);
-      return () => document.removeEventListener('click', handler);
-    }
-  }, [contextMenu, closeContextMenu]);
+  const getContextMenuItems = useCallback((): MenuProps['items'] => {
+    if (!contextMenuConv) return [];
+    return [
+      {
+        key: 'rename',
+        icon: <EditOutlined />,
+        label: t('rename'),
+        onClick: () => {
+          // TODO: Rename via modal
+          closeContextMenu();
+        },
+      },
+      {
+        key: 'archive',
+        icon: <FolderOutlined />,
+        label: t('archive'),
+        onClick: () => {
+          handleArchive(contextMenuConv.id);
+          closeContextMenu();
+        },
+      },
+      {
+        key: 'compact',
+        icon: <CompressOutlined />,
+        label: t('compactContext'),
+        onClick: () => {
+          handleCompact(contextMenuConv.id);
+          closeContextMenu();
+        },
+      },
+      { type: 'divider' },
+      {
+        key: 'delete',
+        danger: true,
+        icon: <DeleteOutlined />,
+        label: (
+          <Popconfirm
+            title={t('deleteConfirm')}
+            onConfirm={() => {
+              handleDelete(contextMenuConv.id);
+              closeContextMenu();
+            }}
+            onCancel={closeContextMenu}
+            okText={t('delete')}
+            cancelText={t('cancel')}
+          >
+            <span>{t('delete')}</span>
+          </Popconfirm>
+        ),
+      },
+    ];
+  }, [contextMenuConv, closeContextMenu]);
 
   const filtered = conversations.filter((c) =>
     c.title?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -137,7 +185,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
       <div style={{ padding: '0 8px 8px' }}>
         <Input
           prefix={<SearchOutlined style={{ fontSize: 12, color: 'var(--text-tertiary)' }} />}
-          placeholder="Search..."
+          placeholder={t('search')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           size="small"
@@ -163,44 +211,50 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
         ) : (
           activeConvs.map((conv) => (
             <div key={conv.id} style={{ marginBottom: 2 }}>
-              <Link
-                href={`/${locale}/project/${projectId}/chat/${conv.id}`}
-                className={`sider-item ${conv.id === selectedKey ? 'active' : ''}`}
-                onContextMenu={(e) => handleContextMenu(e, conv)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  textDecoration: 'none',
-                  fontSize: 13,
-                  background: conv.id === selectedKey ? 'var(--accent-soft)' : 'transparent',
-                  transition: 'all 0.12s ease',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  if (conv.id !== selectedKey) {
-                    (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (conv.id !== selectedKey) {
-                    (e.currentTarget as HTMLElement).style.background = 'transparent';
-                  }
-                }}
+              <Dropdown
+                menu={{ items: contextMenuConv?.id === conv.id ? getContextMenuItems() : [] }}
+                trigger={['contextMenu']}
+                onOpenChange={(open) => { if (!open) closeContextMenu(); }}
               >
-                <span style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  color: conv.id === selectedKey ? 'var(--accent)' : 'var(--text-secondary)',
-                  fontWeight: conv.id === selectedKey ? 600 : 400,
-                }}>
-                  {conv.title || 'Untitled'}
-                </span>
-              </Link>
+                <Link
+                  href={`/${locale}/project/${projectId}/chat/${conv.id}`}
+                  className={`sider-item ${conv.id === selectedKey ? 'active' : ''}`}
+                  onContextMenu={(e) => handleContextMenu(e, conv)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    textDecoration: 'none',
+                    fontSize: 13,
+                    background: conv.id === selectedKey ? 'var(--accent-soft)' : 'transparent',
+                    transition: 'all 0.12s ease',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (conv.id !== selectedKey) {
+                      (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (conv.id !== selectedKey) {
+                      (e.currentTarget as HTMLElement).style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <span style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: conv.id === selectedKey ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontWeight: conv.id === selectedKey ? 600 : 400,
+                  }}>
+                    {conv.title || t('untitled')}
+                  </span>
+                </Link>
+              </Dropdown>
             </div>
           ))
         )}
@@ -302,64 +356,13 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
             (e.currentTarget as HTMLElement).style.background = 'transparent';
           }}
           onClick={() => {
-            const event = new CustomEvent('open-settings');
-            window.dispatchEvent(event);
+            router.push(`/${locale}/settings`);
           }}
         >
           <SettingOutlined style={{ fontSize: 14 }} />
           {tApp('settings')}
         </div>
       </div>
-
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="context-menu-item"
-            onClick={() => {
-              // TODO: Rename via inline edit
-              closeContextMenu();
-            }}
-          >
-            ✏️ Rename
-          </div>
-          <div className="context-menu-divider" />
-          <div
-            className="context-menu-item"
-            onClick={() => {
-              handleArchive(contextMenu.conv.id);
-              closeContextMenu();
-            }}
-          >
-            📁 Archive
-          </div>
-          <div
-            className="context-menu-item"
-            onClick={() => {
-              handleCompact(contextMenu.conv.id);
-              closeContextMenu();
-            }}
-          >
-            🗜️ Compact Context
-          </div>
-          <div className="context-menu-divider" />
-          <Popconfirm
-            title="Delete this conversation?"
-            onConfirm={() => {
-              handleDelete(contextMenu.conv.id);
-              closeContextMenu();
-            }}
-          >
-            <div className="context-menu-item danger">
-              🗑️ Delete
-            </div>
-          </Popconfirm>
-        </div>
-      )}
     </div>
   );
 }
