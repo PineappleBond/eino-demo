@@ -1,6 +1,8 @@
 package di
 
 import (
+	"context"
+
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/db"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/handler"
 )
 
 // Module wires all dependencies for the application.
@@ -30,7 +33,7 @@ func ProvideRedis(cfg *config.Config) *redis.Client {
 	return rdb
 }
 
-// RegisterRoutes sets up all Gin routes.
+// RegisterRoutes sets up all Gin routes and starts the server.
 func RegisterRoutes(
 	lc fx.Lifecycle,
 	cfg *config.Config,
@@ -38,6 +41,20 @@ func RegisterRoutes(
 	db *gorm.DB,
 	rdb *redis.Client,
 ) {
-	// TODO: will be filled in later tasks
-	log.Info("routes registered (stub)")
+	r := handler.NewRouter(cfg, log, db)
+
+	_ = rdb // Will be used in later tasks (WebSocket, seq queue)
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			addr := ":" + cfg.ServerPort
+			log.Info("server starting", zap.String("addr", addr))
+			go func() {
+				if err := r.Run(addr); err != nil {
+					log.Error("server error", zap.Error(err))
+				}
+			}()
+			return nil
+		},
+	})
 }
