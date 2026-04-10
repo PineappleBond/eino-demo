@@ -4,3 +4,8 @@ CLAUDE.md
 .env
 .superpowers
 .worktrees
+node_modules
+.next
+package-lock.json
+dist
+tsconfig.tsbuildinfo

@@ -3,6 +3,8 @@ package config
 import (
 	"flag"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 // ModelConfig holds one tier of model configuration.
@@ -25,6 +27,7 @@ func Load() *Config {
 	port := flag.String("port", "8080", "HTTP server port")
 	flag.Parse()
 
+	_ = godotenv.Load()
 	// Override port from env if set
 	if p := os.Getenv("SERVER_PORT"); p != "" {
 		port = &p

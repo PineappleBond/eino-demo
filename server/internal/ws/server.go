@@ -52,7 +52,10 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// last_seq is reserved for future offline replay logic
 	_ = r.URL.Query().Get("last_seq")
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+		OriginPatterns:     []string{"*"},
+	})
 	if err != nil {
 		h.log.Error("ws: accept failed", zap.Error(err))
 		return

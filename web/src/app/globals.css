@@ -919,6 +919,15 @@ body {
   flex-shrink: 0;
 }
 
+/* Disabled primary button visibility */
+.chat-input-actions .ant-btn-primary.ant-btn-disabled {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-tertiary) !important;
+  opacity: 1 !important;
+  cursor: not-allowed;
+}
+
 .chat-input-hint {
   font-size: 11px;
   color: var(--text-tertiary);
