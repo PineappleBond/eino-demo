@@ -22,6 +22,21 @@ type Setup struct {
 	API    *gin.RouterGroup
 }
 
+// corsMiddleware allows cross-origin requests for local development.
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Header("Access-Control-Max-Age", "86400")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
 // NewRouter creates and configures the Gin engine with all routes.
 func NewRouter(
 	cfg *config.Config,
@@ -32,6 +47,7 @@ func NewRouter(
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(requestLogger(log))
+	r.Use(corsMiddleware())
 
 	api := r.Group("/api/v1")
 	api.Use(authMiddleware(db))
