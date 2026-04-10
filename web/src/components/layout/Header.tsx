@@ -1,63 +1,56 @@
 'use client';
 
+import { Layout, Menu } from 'antd';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Layout, Menu, Tooltip, Badge } from 'antd';
-import { DisconnectOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
-import { ThemeSwitch } from './ThemeSwitch';
-import { useWS } from '@/providers/WSProvider';
-import { useAuth } from '@/providers/AuthProvider';
 
-const { Header: AntHeader } = Layout;
+const { Header } = Layout;
 
-const navItems = [
-  { key: 'home', href: '/[locale]/', labelKey: 'app.home' },
-  { key: 'chat', href: '/[locale]/chat/', labelKey: 'app.chat' },
-  { key: 'settings', href: '/[locale]/settings', labelKey: 'app.settings' },
-] as const;
+interface AppHeaderProps {
+  currentLocale: string;
+}
 
-export function Header({ currentLocale }: { currentLocale: string }) {
+const navItems = (locale: string, t: (key: string) => string) => [
+  {
+    key: `/${locale}/`,
+    label: <Link href={`/${locale}/`}>{t('home')}</Link>,
+  },
+  {
+    key: `/${locale}/chat/`,
+    label: <Link href={`/${locale}/chat/`}>{t('chat')}</Link>,
+  },
+  {
+    key: `/${locale}/settings`,
+    label: <Link href={`/${locale}/settings`}>{t('settings')}</Link>,
+  },
+];
+
+export function AppHeader({ currentLocale }: AppHeaderProps) {
   const t = useTranslations('app');
-  const { connected, reconnecting } = useWS();
-  const { disconnect } = useAuth();
-
-  const items = navItems.map(({ key, href, labelKey }) => ({
-    key,
-    label: (
-      <Link href={href.replace('[locale]', currentLocale)}>
-        {t(labelKey.replace('app.', ''))}
-      </Link>
-    ),
-  }));
+  const pathname = usePathname();
 
   return (
-    <AntHeader style={{ padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%', maxWidth: 1200, margin: '0 auto' }}>
-        <Menu
-          mode="horizontal"
-          selectedKeys={[]}
-          items={items}
-          style={{ border: 'none', flex: 1, minWidth: 0 }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 24 }}>
-          <ThemeSwitch />
-          {connected && (
-            <Tooltip title="Disconnect">
-              <Badge color="#52c41a">
-                <DisconnectOutlined
-                  style={{ cursor: 'pointer', fontSize: 16 }}
-                  onClick={disconnect}
-                />
-              </Badge>
-            </Tooltip>
-          )}
-          {reconnecting && (
-            <Tooltip title="Reconnecting...">
-              <LoadingOutlined style={{ color: '#faad14' }} />
-            </Tooltip>
-          )}
-        </div>
-      </div>
-    </AntHeader>
+    <Header
+      style={{
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+      }}
+    >
+      <Link
+        href={`/${currentLocale}/`}
+        style={{ fontSize: 18, fontWeight: 600, color: 'inherit', marginRight: 48, flexShrink: 0 }}
+      >
+        {t('title')}
+      </Link>
+      <Menu
+        theme="dark"
+        mode="horizontal"
+        selectedKeys={[pathname]}
+        items={navItems(currentLocale, t)}
+        style={{ flex: 1, border: 'none', lineHeight: '64px' }}
+      />
+    </Header>
   );
 }

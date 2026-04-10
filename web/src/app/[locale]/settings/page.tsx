@@ -6,17 +6,6 @@ import { api, Settings as SettingsType } from '@/lib/api';
 import { useTranslations } from 'next-intl';
 import { useTheme } from '@/hooks/useTheme';
 
-const modelOptions = [
-  { value: 'haiku', label: 'Haiku', descKey: 'settings.model_desc.haiku' },
-  { value: 'sonnet', label: 'Sonnet', descKey: 'settings.model_desc.sonnet' },
-  { value: 'opus', label: 'Opus', descKey: 'settings.model_desc.opus' },
-] as const;
-
-const localeOptions = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-] as const;
-
 export default function SettingsPage() {
   const t = useTranslations('settings');
   const { setTheme } = useTheme();
@@ -58,30 +47,39 @@ export default function SettingsPage() {
   }
 
   return (
-    <Card title={t('title')} loading={saving} style={{ maxWidth: 520, margin: '24px auto' }}>
-      <Form form={form} layout="vertical" disabled={saving}>
-        <Form.Item label={t('model')} name="model_tier">
-          <Select
-            options={modelOptions.map((o) => ({ value: o.value, label: t(o.descKey) }))}
-            onChange={(v) => handleChange('model_tier', v)}
-          />
-        </Form.Item>
-        <Form.Item label={t('language')} name="locale">
-          <Select
-            options={localeOptions.map((o) => ({ value: o.value, label: o.label }))}
-            onChange={(v) => handleChange('locale', v)}
-          />
-        </Form.Item>
-        <Form.Item label={t('theme')} name="theme">
-          <Select
-            options={[
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            onChange={(v) => handleChange('theme', v)}
-          />
-        </Form.Item>
-      </Form>
-    </Card>
+    <div style={{ padding: 24, maxWidth: 520, margin: '0 auto', width: '100%' }}>
+      <Card title={t('title')} loading={saving}>
+        <Form form={form} layout="vertical" disabled={saving}>
+          <Form.Item label={t('model')} name="model_tier">
+            <Select
+              options={[
+                { value: 'haiku', label: t('model_desc.haiku') },
+                { value: 'sonnet', label: t('model_desc.sonnet') },
+                { value: 'opus', label: t('model_desc.opus') },
+              ]}
+              onChange={(v) => handleChange('model_tier', v)}
+            />
+          </Form.Item>
+          <Form.Item label={t('language')} name="locale">
+            <Select
+              options={[
+                { value: 'en', label: 'English' },
+                { value: 'zh', label: '中文' },
+              ]}
+              onChange={(v) => handleChange('locale', v)}
+            />
+          </Form.Item>
+          <Form.Item label={t('theme')} name="theme">
+            <Select
+              options={[
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+              ]}
+              onChange={(v) => handleChange('theme', v)}
+            />
+          </Form.Item>
+        </Form>
+      </Card>
+    </div>
   );
 }

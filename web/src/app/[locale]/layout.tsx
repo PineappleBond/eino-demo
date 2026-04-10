@@ -7,6 +7,7 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { WSProvider } from '@/providers/WSProvider';
 import { UpdateProvider } from '@/providers/UpdateProvider';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { MainLayout } from '@/components/layout/MainLayout';
 
 export default async function RootLayout({
   children,
@@ -27,7 +28,9 @@ export default async function RootLayout({
               <AuthProvider>
                 <WSProvider>
                   <UpdateProvider>
-                    <AuthGuard>{children}</AuthGuard>
+                    <AuthGuard>
+                      <MainLayout locale={locale}>{children}</MainLayout>
+                    </AuthGuard>
                   </UpdateProvider>
                 </WSProvider>
               </AuthProvider>

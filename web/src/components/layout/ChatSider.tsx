@@ -2,19 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Layout, Menu, Typography, Spin } from 'antd';
+import { Menu, Typography, Spin, Button } from 'antd';
 import {
   MessageOutlined,
   PlusOutlined,
   DeleteOutlined,
-  EditOutlined,
 } from '@ant-design/icons';
 import { api, Conversation } from '@/lib/api';
-import { useRouter } from 'next/navigation';
 import { message } from 'antd';
 import { useTranslations } from 'next-intl';
 
-const { Sider } = Layout;
 const { Title } = Typography;
 
 export function ChatSider({
@@ -26,7 +23,6 @@ export function ChatSider({
 }) {
   const params = useParams();
   const projectId = params.id as string;
-  const router = useRouter();
   const t = useTranslations('chat');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,14 +59,15 @@ export function ChatSider({
   }
 
   return (
-    <Sider width={240} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
-      <div style={{ padding: '16px 12px', borderBottom: '1px solid #f0f0f0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff' }}>
+      <div style={{ padding: '16px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={5} style={{ margin: 0 }}>{t('title')}</Title>
+        <Button type="text" icon={<PlusOutlined />} onClick={handleNew} />
       </div>
       <Menu
         mode="inline"
         selectedKeys={selectedKey ? [selectedKey] : []}
-        style={{ border: 'none' }}
+        style={{ flex: 1, border: 'none', overflowY: 'auto' }}
         items={[
           ...conversations.map((conv) => ({
             key: conv.id,
@@ -84,14 +81,8 @@ export function ChatSider({
               />
             ),
           })),
-          {
-            key: '__new__',
-            icon: <PlusOutlined />,
-            label: t('new'),
-            onClick: handleNew,
-          },
         ]}
       />
-    </Sider>
+    </div>
   );
 }

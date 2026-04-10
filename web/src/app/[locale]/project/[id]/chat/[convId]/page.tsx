@@ -2,15 +2,13 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { Layout, Spin, Result, message } from 'antd';
+import { Spin, Result, message } from 'antd';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
 import type { Update } from '@/lib/updateDispatcher';
-
-const { Content } = Layout;
 
 export default function ConvChatPage() {
   const params = useParams();
@@ -23,7 +21,6 @@ export default function ConvChatPage() {
   const t = useTranslations('chat');
   const streamingMsgIdRef = useRef<string | null>(null);
 
-  // Handle streaming updates from WebSocket
   const handleStreamingUpdate = useCallback((update: Update) => {
     switch (update.type) {
       case 'message.new': {
@@ -63,7 +60,6 @@ export default function ConvChatPage() {
         setIsStreaming(false);
         streamingMsgIdRef.current = null;
         setStreamingContent(null);
-        // Refresh messages to get the finalized message
         api.get<MessageType[]>(`/conversations/${convId}/messages`)
           .then(setMessages)
           .catch(() => {});
@@ -88,19 +84,15 @@ export default function ConvChatPage() {
 
   useSubscribe(`conv:${convId}`, handleStreamingUpdate);
 
-  // Initial load
   useEffect(() => {
     api.get<MessageType[]>(`/conversations/${convId}/messages`)
-      .then((data) => {
-        setMessages(data);
-      })
+      .then(setMessages)
       .catch((err) => message.error(err.message))
       .finally(() => setLoading(false));
   }, [convId]);
 
   const handleSend = useCallback(async (content: string) => {
     setSending(true);
-    // Optimistically add user message
     const tempMsg: MessageType = {
       id: `temp-${Date.now()}`,
       conversation_id: convId,
@@ -143,20 +135,16 @@ export default function ConvChatPage() {
     return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
   }
 
-  // Merge streaming content into the last message for display
   const displayMessages = [...messages];
   if (isStreaming && streamingContent !== null) {
     const lastMsg = displayMessages[displayMessages.length - 1];
     if (lastMsg && lastMsg.sender_role === 'assistant') {
-      displayMessages[displayMessages.length - 1] = {
-        ...lastMsg,
-        content: streamingContent,
-      };
+      displayMessages[displayMessages.length - 1] = { ...lastMsg, content: streamingContent };
     }
   }
 
   return (
-    <Content style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 52px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {displayMessages.length === 0 && !isStreaming ? (
         <Result
           subTitle={t('noMessages')}
@@ -170,6 +158,6 @@ export default function ConvChatPage() {
         onStop={handleStop}
         isLoading={sending || isStreaming}
       />
-    </Content>
+    </div>
   );
 }
