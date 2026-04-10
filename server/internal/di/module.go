@@ -28,6 +28,7 @@ var Module = fx.Options(
 		service.NewSettingsService,
 		service.NewTemplateService,
 		service.NewProjectService,
+		service.NewConversationService,
 	),
 	// Handler modules — register Gin routes
 	fx.Invoke(RegisterRoutes),
@@ -52,6 +53,7 @@ func RegisterRoutes(
 	settingsSvc *service.SettingsService,
 	tplSvc *service.TemplateService,
 	projectSvc *service.ProjectService,
+	convSvc *service.ConversationService,
 ) {
 	r := handler.NewRouter(cfg, log, db)
 
@@ -60,6 +62,7 @@ func RegisterRoutes(
 	handler.RegisterSettingsRoutes(api, settingsSvc)
 	handler.RegisterTemplateRoutes(api, tplSvc)
 	handler.RegisterProjectRoutes(api, projectSvc)
+	handler.RegisterConversationRoutes(api, convSvc)
 
 	_ = rdb // Will be used in later tasks (WebSocket, seq queue)
 
