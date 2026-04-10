@@ -47,11 +47,12 @@ func (m *Manager) AddConnection(ctx context.Context, userID uuid.UUID, conn *web
 	m.conns[userID] = append(m.conns[userID], wc)
 	m.mu.Unlock()
 
-	// Heartbeat timeout: 1 minute
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	// Start read/write loops with a cancellable context.
+	// The heartbeat timeout is enforced by the readLoop using a resettable timer.
+	loopCtx, cancel := context.WithCancel(ctx)
 
-	go m.writeLoop(ctx, wc, cancel)
-	go m.readLoop(ctx, wc, cancel)
+	go m.writeLoop(loopCtx, wc)
+	go m.readLoop(loopCtx, wc, cancel)
 }
 
 // PushToUserConnections broadcasts an Update to all connections for a user.
@@ -109,8 +110,7 @@ func (m *Manager) NextSeq(ctx context.Context, userID uuid.UUID) (int64, error) 
 }
 
 // writeLoop sends frames to the client.
-func (m *Manager) writeLoop(ctx context.Context, wc *wsConn, cancel context.CancelFunc) {
-	defer cancel()
+func (m *Manager) writeLoop(ctx context.Context, wc *wsConn) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,24 +123,53 @@ func (m *Manager) writeLoop(ctx context.Context, wc *wsConn, cancel context.Canc
 	}
 }
 
+const heartbeatTimeout = 60 * time.Second
+
 // readLoop handles incoming client frames (only ping).
+// Uses a resettable timer: each received ping resets the 60s timeout.
+// If no ping arrives within 60s, the loop exits and cleans up the connection.
 func (m *Manager) readLoop(ctx context.Context, wc *wsConn, cancel context.CancelFunc) {
 	defer cancel()
-	for {
-		_, msg, err := wc.conn.Read(ctx)
-		if err != nil {
-			return
-		}
+	defer m.RemoveConnection(wc.userID, wc)
 
-		var frame ClientFrame
-		if err := json.Unmarshal(msg, &frame); err != nil {
-			continue
-		}
+	timer := time.NewTimer(heartbeatTimeout)
+	defer timer.Stop()
 
-		if frame.Type == FramePing {
-			// Reset the timeout — connection is alive
-			// We rely on the parent context's timeout for eviction
+	done := make(chan struct{})
+	go func() {
+		for {
+			_, msg, err := wc.conn.Read(ctx)
+			if err != nil {
+				close(done)
+				return
+			}
+
+			var frame ClientFrame
+			if err := json.Unmarshal(msg, &frame); err != nil {
+				continue
+			}
+
+			if frame.Type == FramePing {
+				// Reset the timeout — connection is alive
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(heartbeatTimeout)
+			}
 		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		m.log.Warn("ws: heartbeat timeout, closing connection", zap.String("user_id", wc.userID.String()))
+		return
+	case <-done:
+		return
 	}
 }
 
