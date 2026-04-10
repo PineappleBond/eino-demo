@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -12,6 +13,14 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
+
+// Setup holds all dependencies and provides route registration.
+type Setup struct {
+	Cfg    *config.Config
+	Log    *zap.Logger
+	DB     *gorm.DB
+	API    *gin.RouterGroup
+}
 
 // NewRouter creates and configures the Gin engine with all routes.
 func NewRouter(
@@ -27,15 +36,17 @@ func NewRouter(
 	api := r.Group("/api/v1")
 	api.Use(authMiddleware(db))
 
-	// Routes will be registered by individual handlers here.
-	// For now, register a health check.
+	// Health check (no auth).
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	_ = api // api group will be used by route registration functions
-
 	return r
+}
+
+// GetAPI returns the authenticated API group for route registration.
+func GetAPI(r *gin.Engine) *gin.RouterGroup {
+	return r.Group("/api/v1")
 }
 
 // authMiddleware extracts user_id from Bearer token via FirstOrCreate.
@@ -55,7 +66,7 @@ func authMiddleware(db *gorm.DB) gin.HandlerFunc {
 		var user model.User
 		result := db.Where("id = ?", userID).First(&user)
 		if result.Error != nil {
-			if result.Error == gorm.ErrRecordNotFound {
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 				user = model.User{Name: ""}
 				if err := db.FirstOrCreate(&user, model.User{BaseModel: model.BaseModel{ID: userID}}).Error; err != nil {
 					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

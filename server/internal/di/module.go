@@ -11,6 +11,7 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/db"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/handler"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 )
 
 // Module wires all dependencies for the application.
@@ -20,6 +21,8 @@ var Module = fx.Options(
 		ProvideLogger,
 		db.ProvideDB,
 		ProvideRedis,
+		service.NewUserService,
+		service.NewSettingsService,
 	),
 	// Handler modules — register Gin routes
 	fx.Invoke(RegisterRoutes),
@@ -40,8 +43,14 @@ func RegisterRoutes(
 	log *zap.Logger,
 	db *gorm.DB,
 	rdb *redis.Client,
+	userSvc *service.UserService,
+	settingsSvc *service.SettingsService,
 ) {
 	r := handler.NewRouter(cfg, log, db)
+
+	api := handler.GetAPI(r)
+	handler.RegisterUserRoutes(api, userSvc)
+	handler.RegisterSettingsRoutes(api, settingsSvc)
 
 	_ = rdb // Will be used in later tasks (WebSocket, seq queue)
 
