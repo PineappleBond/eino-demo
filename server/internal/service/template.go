@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -88,4 +89,43 @@ func (s *TemplateService) CreateProjectFromTemplate(userID uuid.UUID, templateID
 		return nil, err
 	}
 	return &project, nil
+}
+
+// CompleteCreateProjectFromTemplate handles project creation from template with seq assignment and WS push.
+func (s *TemplateService) CompleteCreateProjectFromTemplate(
+	ctx context.Context,
+	userID uuid.UUID,
+	templateID string,
+	name string,
+	config map[string]any,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Project, error) {
+	project, err := s.CreateProjectFromTemplate(userID, templateID, name, config)
+	if err != nil {
+		return nil, err
+	}
+
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	update := model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "project.created",
+		Payload: model.JSONMap{
+			"id":          project.ID.String(),
+			"template_id": templateID,
+			"name":        project.Name,
+			"seq":         seq,
+		},
+	}
+	if err := s.db.Create(&update).Error; err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, update)
+	return project, nil
 }

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,4 +69,52 @@ func (s *SettingsService) UpdateSettings(userID uuid.UUID, req UpdateSettingsReq
 	}
 
 	return &settings, nil
+}
+
+// CompleteUpdateSettings handles settings update with seq assignment and WS push.
+func (s *SettingsService) CompleteUpdateSettings(
+	ctx context.Context,
+	userID uuid.UUID,
+	req UpdateSettingsRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Settings, error) {
+	settings, err := s.UpdateSettings(userID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	payload := model.JSONMap{
+		"seq":        seq,
+		"model_tier": settings.ModelTier,
+		"locale":     settings.Locale,
+		"theme":      settings.Theme,
+	}
+	if req.ModelTier != nil {
+		payload["changed"] = append(payload["changed"].([]any), "model_tier")
+	}
+	if req.Locale != nil {
+		payload["changed"] = append(payload["changed"].([]any), "locale")
+	}
+	if req.Theme != nil {
+		payload["changed"] = append(payload["changed"].([]any), "theme")
+	}
+
+	update := model.UserUpdate{
+		UserID:  userID,
+		Seq:     seq,
+		Type:    "settings.changed",
+		Payload: payload,
+	}
+	if err := s.db.Create(&update).Error; err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, update)
+	return settings, nil
 }

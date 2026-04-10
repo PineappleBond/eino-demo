@@ -6,11 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
 // RegisterConversationRoutes registers conversation endpoints.
-func RegisterConversationRoutes(api *gin.RouterGroup, svc *service.ConversationService) {
+func RegisterConversationRoutes(
+	api *gin.RouterGroup,
+	svc *service.ConversationService,
+	wsManager *ws.Manager,
+) {
 	api.GET("/projects/:id/conversations", func(c *gin.Context) {
 		userID := getUserID(c)
 		projectID, err := uuid.Parse(c.Param("id"))
@@ -57,7 +63,21 @@ func RegisterConversationRoutes(api *gin.RouterGroup, svc *service.ConversationS
 			// Allow empty body — use defaults
 			req = service.CreateConversationRequest{}
 		}
-		conv, err := svc.CreateConversation(userID, projectID, req)
+		conv, err := svc.CompleteCreateConversation(
+			c.Request.Context(),
+			userID,
+			projectID,
+			req,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := ws.Update{
+					Seq:     update.Seq,
+					Type:    update.Type,
+					Payload: update.Payload,
+				}
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		)
 		if err != nil {
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			return
@@ -80,7 +100,20 @@ func RegisterConversationRoutes(api *gin.RouterGroup, svc *service.ConversationS
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
-		if err := svc.DeleteConversation(userID, conversationID); err != nil {
+		if err := svc.CompleteDeleteConversation(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := ws.Update{
+					Seq:     update.Seq,
+					Type:    update.Type,
+					Payload: update.Payload,
+				}
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		); err != nil {
 			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
 		}

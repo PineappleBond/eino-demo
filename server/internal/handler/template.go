@@ -4,12 +4,15 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
 // RegisterTemplateRoutes registers template endpoints.
-func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService) {
+func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, wsManager *ws.Manager) {
 	api.GET("/templates", func(c *gin.Context) {
 		list := svc.ListTemplates()
 		respondJSON(c, http.StatusOK, list)
@@ -35,7 +38,22 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService) 
 		}
 		c.ShouldBindJSON(&req)
 
-		project, err := svc.CreateProjectFromTemplate(userID, templateID, req.Name, req.Config)
+		project, err := svc.CompleteCreateProjectFromTemplate(
+			c.Request.Context(),
+			userID,
+			templateID,
+			req.Name,
+			req.Config,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := ws.Update{
+					Seq:     update.Seq,
+					Type:    update.Type,
+					Payload: update.Payload,
+				}
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		)
 		if err != nil {
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			return

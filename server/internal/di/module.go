@@ -65,11 +65,11 @@ func RegisterRoutes(
 	r := handler.NewRouter(cfg, log, db)
 
 	api := handler.GetAPI(r, db)
-	handler.RegisterUserRoutes(api, userSvc)
-	handler.RegisterSettingsRoutes(api, settingsSvc)
-	handler.RegisterTemplateRoutes(api, tplSvc)
-	handler.RegisterProjectRoutes(api, projectSvc)
-	handler.RegisterConversationRoutes(api, convSvc)
+	handler.RegisterUserRoutes(api, userSvc, db, rdb, wsManager, log)
+	handler.RegisterSettingsRoutes(api, settingsSvc, wsManager)
+	handler.RegisterTemplateRoutes(api, tplSvc, wsManager)
+	handler.RegisterProjectRoutes(api, projectSvc, wsManager)
+	handler.RegisterConversationRoutes(api, convSvc, wsManager)
 	handler.RegisterChatRoutes(api, chatSvc, wsManager)
 	handler.RegisterModelRoutes(api, cfg)
 

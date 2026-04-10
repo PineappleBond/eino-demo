@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -73,6 +74,44 @@ func (s *ConversationService) CreateConversation(userID, projectID uuid.UUID, re
 	return &conversation, nil
 }
 
+// CompleteCreateConversation handles conversation creation with seq assignment and WS push.
+func (s *ConversationService) CompleteCreateConversation(
+	ctx context.Context,
+	userID, projectID uuid.UUID,
+	req CreateConversationRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	conv, err := s.CreateConversation(userID, projectID, req)
+	if err != nil {
+		return nil, err
+	}
+
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	update := model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.created",
+		Payload: model.JSONMap{
+			"id":         conv.ID.String(),
+			"project_id": projectID.String(),
+			"title":      conv.Title,
+			"status":     conv.Status,
+			"seq":        seq,
+		},
+	}
+	if err := s.db.Create(&update).Error; err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, update)
+	return conv, nil
+}
+
 // GetConversation returns a single conversation by ID, scoped to user.
 func (s *ConversationService) GetConversation(userID, conversationID uuid.UUID) (*model.Conversation, error) {
 	var conversation model.Conversation
@@ -91,5 +130,45 @@ func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUI
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("conversation not found")
 	}
+	return nil
+}
+
+// CompleteDeleteConversation handles conversation deletion with seq assignment and WS push.
+func (s *ConversationService) CompleteDeleteConversation(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) error {
+	// Verify conversation exists and belongs to user before deleting
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found")
+	}
+
+	if err := s.DeleteConversation(userID, conversationID); err != nil {
+		return err
+	}
+
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	update := model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.deleted",
+		Payload: model.JSONMap{
+			"id":         conversationID.String(),
+			"project_id": conv.ProjectID.String(),
+			"seq":        seq,
+		},
+	}
+	if err := s.db.Create(&update).Error; err != nil {
+		return err
+	}
+
+	pushUpdate(userID, update)
 	return nil
 }

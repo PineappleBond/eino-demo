@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -48,5 +49,38 @@ func (s *ProjectService) DeleteProject(userID, projectID uuid.UUID) error {
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("project not found")
 	}
+	return nil
+}
+
+// CompleteDeleteProject handles project deletion with seq assignment and WS push.
+func (s *ProjectService) CompleteDeleteProject(
+	ctx context.Context,
+	userID, projectID uuid.UUID,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) error {
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	if err := s.DeleteProject(userID, projectID); err != nil {
+		return err
+	}
+
+	update := model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "project.deleted",
+		Payload: model.JSONMap{
+			"id":  projectID.String(),
+			"seq": seq,
+		},
+	}
+	if err := s.db.Create(&update).Error; err != nil {
+		return err
+	}
+
+	pushUpdate(userID, update)
 	return nil
 }

@@ -6,11 +6,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 )
 
 // RegisterProjectRoutes registers project endpoints.
-func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService) {
+func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, wsManager *ws.Manager) {
 	api.GET("/projects", func(c *gin.Context) {
 		userID := getUserID(c)
 		projects, err := svc.ListProjects(userID)
@@ -63,7 +65,20 @@ func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService) {
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
-		if err := svc.DeleteProject(userID, projectID); err != nil {
+		if err := svc.CompleteDeleteProject(
+			c.Request.Context(),
+			userID,
+			projectID,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := ws.Update{
+					Seq:     update.Seq,
+					Type:    update.Type,
+					Payload: update.Payload,
+				}
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		); err != nil {
 			respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
 		}
