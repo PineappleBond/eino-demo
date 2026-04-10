@@ -1,56 +1,66 @@
 'use client';
 
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Space } from 'antd';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { ThemeSwitch } from './ThemeSwitch';
 
 const { Header } = Layout;
 
-interface AppHeaderProps {
+interface TopBarProps {
   currentLocale: string;
+  projectName?: string;
 }
 
-const navItems = (locale: string, t: (key: string) => string) => [
-  {
-    key: `/${locale}/`,
-    label: <Link href={`/${locale}/`}>{t('home')}</Link>,
-  },
-  {
-    key: `/${locale}/chat/`,
-    label: <Link href={`/${locale}/chat/`}>{t('chat')}</Link>,
-  },
-  {
-    key: `/${locale}/settings`,
-    label: <Link href={`/${locale}/settings`}>{t('settings')}</Link>,
-  },
-];
-
-export function AppHeader({ currentLocale }: AppHeaderProps) {
+export function TopBar({ currentLocale, projectName }: TopBarProps) {
   const t = useTranslations('app');
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const projectId = pathname.match(/\/project\/([^/]+)/)?.[1] || '';
+
+  const items = [
+    {
+      key: `/${currentLocale}/project/${projectId}/chat`,
+      label: <Link href={`/${currentLocale}/project/${projectId}/chat`}>{t('chat')}</Link>,
+    },
+  ];
 
   return (
     <Header
       style={{
-        padding: '0 24px',
+        height: 52,
+        lineHeight: '52px',
+        padding: '0 16px',
         display: 'flex',
         alignItems: 'center',
+        borderBottom: '1px solid #f0f0f0',
       }}
     >
-      <Link
-        href={`/${currentLocale}/`}
-        style={{ fontSize: 18, fontWeight: 600, color: 'inherit', marginRight: 48, flexShrink: 0 }}
-      >
-        {t('title')}
-      </Link>
-      <Menu
-        theme="dark"
-        mode="horizontal"
-        selectedKeys={[pathname]}
-        items={navItems(currentLocale, t)}
-        style={{ flex: 1, border: 'none', lineHeight: '64px' }}
-      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Link href={`/${currentLocale}/`} style={{ fontSize: 16, fontWeight: 600, color: 'inherit', textDecoration: 'none' }}>
+            {t('title')}
+          </Link>
+          {projectName && (
+            <span style={{ color: '#999' }}>›</span>
+          )}
+          {projectName && (
+            <span style={{ fontWeight: 500 }}>{projectName}</span>
+          )}
+          {projectId && (
+            <Menu
+              mode="horizontal"
+              selectedKeys={[pathname]}
+              items={items}
+              style={{ border: 'none', minWidth: 0, background: 'transparent' }}
+            />
+          )}
+        </div>
+        <Space size={12}>
+          <ThemeSwitch />
+        </Space>
+      </div>
     </Header>
   );
 }

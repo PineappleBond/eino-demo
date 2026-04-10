@@ -7,7 +7,6 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { WSProvider } from '@/providers/WSProvider';
 import { UpdateProvider } from '@/providers/UpdateProvider';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { MainLayout } from '@/components/layout/MainLayout';
 
 export default async function RootLayout({
   children,
@@ -22,15 +21,13 @@ export default async function RootLayout({
   return (
     <html lang={locale}>
       <body style={{ margin: 0 }}>
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider messages={messages} locale={locale}>
           <AntdRegistry>
             <ThemeProvider>
               <AuthProvider>
                 <WSProvider>
                   <UpdateProvider>
-                    <AuthGuard>
-                      <MainLayout locale={locale}>{children}</MainLayout>
-                    </AuthGuard>
+                    <AuthGuard>{children}</AuthGuard>
                   </UpdateProvider>
                 </WSProvider>
               </AuthProvider>
