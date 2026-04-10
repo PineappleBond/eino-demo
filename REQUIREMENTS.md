@@ -133,7 +133,7 @@ An interactive educational demo for the [Eino](https://github.com/cloudwego/eino
 
 ## Data Model (Summary)
 
-See [docs/DATABASE.md](docs/DATABASE.md) for full schema and ER diagrams.
+See [docs/DATABASE_POSTGRESQL.md](docs/DATABASE_POSTGRESQL.md) for full schema and ER diagrams.
 
 | Table | Key Fields |
 | --- | --- |
