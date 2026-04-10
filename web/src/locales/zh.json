@@ -1,0 +1,46 @@
+{
+  "app": {
+    "title": "Eino 演示",
+    "home": "首页",
+    "chat": "对话",
+    "settings": "设置"
+  },
+  "home": {
+    "title": "模板库",
+    "subtitle": "选择一个模板开始学习 Eino",
+    "start": "创建项目",
+    "difficulty": {
+      "beginner": "入门",
+      "intermediate": "中级",
+      "advanced": "高级"
+    }
+  },
+  "chat": {
+    "title": "对话",
+    "new": "新建对话",
+    "placeholder": "输入消息...",
+    "send": "发送",
+    "stop": "停止",
+    "noMessages": "暂无消息，开始对话吧！",
+    "noConversations": "暂无对话，创建一个开始吧。",
+    "archived": "已归档",
+    "compacting": "压缩中..."
+  },
+  "settings": {
+    "title": "设置",
+    "model": "模型",
+    "model_desc": {
+      "haiku": "Haiku — 轻量快速",
+      "sonnet": "Sonnet — 平衡质量与速度",
+      "opus": "Opus — 最适合复杂推理"
+    },
+    "language": "语言",
+    "theme": "主题",
+    "saved": "设置已保存"
+  },
+  "auth": {
+    "tokenLabel": "认证令牌",
+    "tokenPlaceholder": "输入任意令牌（演示模式）",
+    "connect": "连接"
+  }
+}
