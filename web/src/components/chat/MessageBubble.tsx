@@ -13,7 +13,7 @@ export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender_role === 'user';
 
   return (
-    <div className="slide-up" style={{ marginBottom: 24 }}>
+    <div className="slide-up" style={{ marginBottom: 24, display: 'block', width: '100%' }}>
       {/* Sender info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <Avatar
