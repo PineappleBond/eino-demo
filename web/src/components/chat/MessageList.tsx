@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Message } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({ messages, isStreaming }: { messages: Message[]; isStreaming?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,9 +28,12 @@ export function MessageList({ messages }: { messages: Message[] }) {
         flexDirection: 'column',
       }}
     >
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
+      {messages.map((msg, i) => {
+        const isLastStreaming = isStreaming && i === messages.length - 1 && msg.sender_role === 'assistant';
+        return (
+          <MessageBubble key={msg.id} message={msg} isStreaming={!!isLastStreaming} />
+        );
+      })}
     </div>
   );
 }

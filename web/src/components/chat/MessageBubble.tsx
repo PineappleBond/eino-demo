@@ -6,10 +6,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '@/lib/api';
 import { ToolCallCard } from './ToolCallCard';
+import { StreamingText } from './StreamingText';
 
 const { Text } = Typography;
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({ message, isStreaming: streaming }: { message: Message; isStreaming?: boolean }) {
   const isUser = message.sender_role === 'user';
 
   return (
@@ -35,6 +36,11 @@ export function MessageBubble({ message }: { message: Message }) {
             <Text style={{ color: isUser ? '#fff' : 'inherit', whiteSpace: 'pre-wrap' }}>
               {message.content}
             </Text>
+          ) : streaming ? (
+            <StreamingText
+              content={message.content}
+              isStreaming={streaming}
+            />
           ) : (
             <div style={{ fontSize: 14, lineHeight: 1.6 }}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
