@@ -1,15 +1,16 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
 import { dispatcher } from '@/lib/updateDispatcher';
 import { getLatestSeq } from '@/store/indexedDB';
 
 interface WSContextValue {
   connected: boolean;
   reconnecting: boolean;
+  reconnect: () => void;
 }
 
-const WSContext = createContext<WSContextValue>({ connected: false, reconnecting: false });
+const WSContext = createContext<WSContextValue>({ connected: false, reconnecting: false, reconnect: () => {} });
 
 export function useWS() {
   return useContext(WSContext);
@@ -31,6 +32,12 @@ export function WSProvider({ children }: { children: ReactNode }) {
   const connect = async () => {
     const token = getToken();
     if (!token) return;
+
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.onclose = null; // Don't trigger reconnect on manual close
+      wsRef.current.close();
+    }
 
     const lastSeq = await getLatestSeq();
     const url = `${WS_BASE}/ws?token=${encodeURIComponent(token)}&last_seq=${lastSeq}`;
@@ -80,6 +87,11 @@ export function WSProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  const reconnect = useCallback(() => {
+    reconnectDelayRef.current = 1000;
+    connect();
+  }, []);
+
   useEffect(() => {
     connect();
     return () => {
@@ -89,7 +101,7 @@ export function WSProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <WSContext.Provider value={{ connected, reconnecting }}>
+    <WSContext.Provider value={{ connected, reconnecting, reconnect }}>
       {children}
     </WSContext.Provider>
   );
