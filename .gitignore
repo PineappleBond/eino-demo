@@ -1,3 +1,6 @@
 .idea/
 downloads/
 CLAUDE.md
+.env
+.superpowers
+.worktrees
