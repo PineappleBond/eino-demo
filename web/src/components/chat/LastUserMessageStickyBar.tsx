@@ -7,13 +7,13 @@ import { Message } from '@/lib/api';
 
 interface LastUserMessageStickyBarProps {
   lastUserMessage: Message;
-  messageRef: React.RefObject<HTMLDivElement | null>;
+  messageElement: HTMLDivElement | null;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function LastUserMessageStickyBar({
   lastUserMessage,
-  messageRef,
+  messageElement,
   containerRef,
 }: LastUserMessageStickyBarProps) {
   const t = useTranslations('chat');
@@ -22,17 +22,16 @@ export function LastUserMessageStickyBar({
   const [isManuallyClosed, setIsManuallyClosed] = useState(false);
   const [needsExpand, setNeedsExpand] = useState(false);
 
-  // IntersectionObserver: detect when the message scrolls out of view
+  // IntersectionObserver: detect when the message scrolls out of view.
+  // Takes the actual DOM element (not a ref) so it re-subscribes when the element changes.
   useEffect(() => {
-    const target = messageRef.current;
     const root = containerRef.current;
-    if (!target || !root) return;
+    if (!messageElement || !root) return;
     if (typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         setIsIntersecting(entry.isIntersecting);
-        // Reset manual close when message becomes visible again
         if (entry.isIntersecting) {
           setIsManuallyClosed(false);
         }
@@ -40,9 +39,9 @@ export function LastUserMessageStickyBar({
       { root, threshold: 0 }
     );
 
-    observer.observe(target);
+    observer.observe(messageElement);
     return () => observer.disconnect();
-  }, [messageRef, containerRef, lastUserMessage.id]);
+  }, [messageElement, containerRef]);
 
   // Detect if content overflows the collapsed height
   const contentRef = useRef<HTMLDivElement>(null);
@@ -53,8 +52,8 @@ export function LastUserMessageStickyBar({
   }, [lastUserMessage.content, isExpanded]);
 
   const handleBackToMessage = useCallback(() => {
-    messageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [messageRef]);
+    messageElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [messageElement]);
 
   const handleClose = useCallback(() => {
     setIsManuallyClosed(true);

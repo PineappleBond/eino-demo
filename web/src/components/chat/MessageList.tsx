@@ -13,7 +13,7 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
   messageContextMenuItems?: (msg: Message) => MenuProps['items'];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastUserMsgRef = useRef<HTMLDivElement>(null);
+  const [lastUserMsgEl, setLastUserMsgEl] = useState<HTMLDivElement | null>(null);
   const [userAtBottom, setUserAtBottom] = useState(true);
 
   // Find the last user message index
@@ -62,7 +62,7 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
             if (isLastUser) {
               return (
                 <Dropdown key={msg.id} menu={{ items }} trigger={['contextMenu']}>
-                  <div ref={lastUserMsgRef}>{bubble}</div>
+                  <div ref={setLastUserMsgEl}>{bubble}</div>
                 </Dropdown>
               );
             }
@@ -75,7 +75,7 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
 
           if (isLastUser) {
             return (
-              <div key={msg.id} ref={lastUserMsgRef}>
+              <div key={msg.id} ref={setLastUserMsgEl}>
                 {bubble}
               </div>
             );
@@ -87,7 +87,7 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
       {lastUserMsgIdx >= 0 && (
         <LastUserMessageStickyBar
           lastUserMessage={messages[lastUserMsgIdx]}
-          messageRef={lastUserMsgRef}
+          messageElement={lastUserMsgEl}
           containerRef={containerRef}
         />
       )}
