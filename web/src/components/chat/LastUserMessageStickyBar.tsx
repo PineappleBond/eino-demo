@@ -7,41 +7,50 @@ import { Message } from '@/lib/api';
 
 interface LastUserMessageStickyBarProps {
   lastUserMessage: Message;
-  messageElement: HTMLDivElement | null;
+  lastUserMsgIdx: number;
   containerRef: React.RefObject<HTMLDivElement | null>;
+  messageContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function LastUserMessageStickyBar({
   lastUserMessage,
-  messageElement,
+  lastUserMsgIdx,
   containerRef,
+  messageContainerRef,
 }: LastUserMessageStickyBarProps) {
   const t = useTranslations('chat');
-  const [isIntersecting, setIsIntersecting] = useState(true);
+  const [isStuck, setIsStuck] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isManuallyClosed, setIsManuallyClosed] = useState(false);
   const [needsExpand, setNeedsExpand] = useState(false);
 
-  // IntersectionObserver: detect when the message scrolls out of view.
-  // Takes the actual DOM element (not a ref) so it re-subscribes when the element changes.
+  // Detect when the bar becomes sticky by checking scroll position
   useEffect(() => {
-    const root = containerRef.current;
-    if (!messageElement || !root) return;
-    if (typeof IntersectionObserver === 'undefined') return;
+    const container = containerRef.current;
+    const messages = messageContainerRef.current;
+    if (!container || !messages) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsIntersecting(entry.isIntersecting);
-        if (entry.isIntersecting) {
-          setIsManuallyClosed(false);
-        }
-      },
-      { root, threshold: 0 }
-    );
+    const checkStuck = () => {
+      // The bar's position in the scroll container
+      const msgEl = messages.children[lastUserMsgIdx] as HTMLElement | undefined;
+      if (!msgEl) return;
+      const barTop = msgEl.offsetTop + msgEl.offsetHeight; // bar is right after message
 
-    observer.observe(messageElement);
-    return () => observer.disconnect();
-  }, [messageElement, containerRef]);
+      // Bar is "stuck" when the scroll has passed the bar's natural position
+      const isStuckNow = container.scrollTop > barTop - 4; // 4px tolerance for top offset
+      setIsStuck(isStuckNow);
+    };
+
+    // Initial check after layout settles
+    const timer = setTimeout(checkStuck, 300);
+
+    container.addEventListener('scroll', checkStuck, { passive: true });
+    window.addEventListener('resize', checkStuck, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      container.removeEventListener('scroll', checkStuck);
+      window.removeEventListener('resize', checkStuck);
+    };
+  }, [containerRef, messageContainerRef, lastUserMsgIdx]);
 
   // Detect if content overflows the collapsed height
   const contentRef = useRef<HTMLDivElement>(null);
@@ -52,26 +61,40 @@ export function LastUserMessageStickyBar({
   }, [lastUserMessage.content, isExpanded]);
 
   const handleBackToMessage = useCallback(() => {
-    messageElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [messageElement]);
+    const messages = messageContainerRef.current;
+    if (!messages) return;
+    const msgEl = messages.children[lastUserMsgIdx] as HTMLElement | undefined;
+    if (msgEl) {
+      msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [messageContainerRef, lastUserMsgIdx]);
 
-  const handleClose = useCallback(() => {
-    setIsManuallyClosed(true);
+  const handleClose = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Hide the bar by hiding its content (keep it in DOM for layout)
+    (e.currentTarget.closest('.message-sticky-bar') as HTMLElement | null)?.style.setProperty('display', 'none');
   }, []);
 
   const handleToggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
 
-  // Don't render if message is visible, manually closed, or has no content
-  if (isIntersecting || isManuallyClosed || !lastUserMessage.content?.trim()) return null;
+  // Don't render if message has no content
+  if (!lastUserMessage.content?.trim()) return null;
 
   const timeStr = lastUserMessage.created_at
     ? new Date(lastUserMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
 
   return (
-    <div className="message-sticky-bar">
+    <div
+      className="message-sticky-bar"
+      style={{
+        opacity: isStuck ? 1 : 0,
+        pointerEvents: isStuck ? 'auto' : 'none',
+        transition: 'opacity 0.2s ease',
+      }}
+    >
       <div className="message-sticky-bubble">
         <div className="message-sticky-content">
           <div
