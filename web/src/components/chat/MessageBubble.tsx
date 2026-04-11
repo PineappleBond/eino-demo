@@ -1,7 +1,7 @@
 'use client';
 
-import { Avatar, Typography } from 'antd';
-import { UserOutlined, RobotOutlined } from '@ant-design/icons';
+import { Avatar } from 'antd';
+import { RobotOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -9,45 +9,60 @@ import { useTranslations } from 'next-intl';
 import { Message } from '@/lib/api';
 import { ToolCallCard } from './ToolCallCard';
 
-const { Text } = Typography;
-
 export function MessageBubble({ message }: { message: Message }) {
   const t = useTranslations('chat');
   const isUser = message.sender_role === 'user';
 
-  return (
-    <div
-      className="message-group"
-    >
-      {/* Sender info */}
-      <div className="message-sender">
-        <Avatar
-          size={24}
-          className="message-avatar"
-          icon={isUser ? <UserOutlined /> : <RobotOutlined />}
-          style={{
-            fontSize: 11,
-            background: isUser ? 'var(--accent)' : 'var(--bg-elevated)',
-          }}
-        />
-        <span className="message-name">
-          {isUser ? t('you') : t('assistant')}
-        </span>
-        {message.created_at && (
-          <span className="message-time">
-            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        )}
-      </div>
+  const timeStr = message.created_at
+    ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
 
-      {/* Content */}
-      <div className="message-content">
-        {isUser ? (
-          <Text style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+  const toolCalls = (message.metadata?.tool_calls as Array<{
+    name: string;
+    input: Record<string, unknown>;
+    output: string;
+    status: string;
+  }> | undefined);
+  const hasToolCalls = toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0;
+
+  if (isUser) {
+    return (
+      <div className="message-user">
+        <div className="message-bubble">
+          <div className="message-bubble-text" style={{ whiteSpace: 'pre-wrap' }}>
             {message.content}
-          </Text>
-        ) : (
-          <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)' }}>
+          </div>
+          {timeStr && <div className="message-time">{timeStr}</div>}
+          {hasToolCalls && (
+            <div className="message-tool-calls">
+              {toolCalls.map((tc, i) => (
+                <ToolCallCard
+                  key={i}
+                  name={tc.name}
+                  input={tc.input}
+                  output={tc.output}
+                  status={tc.status as 'running' | 'done' | 'error'}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="message-assistant">
+      <div className="message-avatar-wrapper">
+        <Avatar
+          size={28}
+          className="message-avatar"
+          icon={<RobotOutlined />}
+          style={{ fontSize: 14, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+        />
+        <div className="message-content-area">
+          <span className="message-sender-name">{t('assistant')}</span>
+          <div className="message-bubble">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}
@@ -69,19 +84,9 @@ export function MessageBubble({ message }: { message: Message }) {
               {message.content}
             </ReactMarkdown>
           </div>
-        )}
-
-        {/* Tool calls */}
-        {(() => {
-          const toolCalls = message.metadata?.tool_calls as Array<{
-            name: string;
-            input: Record<string, unknown>;
-            output: string;
-            status: string;
-          }> | undefined;
-          if (!toolCalls || !Array.isArray(toolCalls)) return null;
-          return (
-            <div style={{ marginTop: 12 }}>
+          {timeStr && <div className="message-time">{timeStr}</div>}
+          {hasToolCalls && (
+            <div className="message-tool-calls">
               {toolCalls.map((tc, i) => (
                 <ToolCallCard
                   key={i}
@@ -92,8 +97,8 @@ export function MessageBubble({ message }: { message: Message }) {
                 />
               ))}
             </div>
-          );
-        })()}
+          )}
+        </div>
       </div>
     </div>
   );
