@@ -107,7 +107,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
               colorItemBgSelected: isDark ? 'rgba(108, 92, 231, 0.12)' : 'rgba(108, 92, 231, 0.10)',
               colorItemBgHover: isDark ? '#2a2a2e' : '#e8e8ec',
               colorSplit: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)',
-              colorActiveBar: '#6c5ce7',
             },
             // Popconfirm / Popover
             Popover: {

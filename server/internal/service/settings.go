@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
@@ -23,15 +25,27 @@ func NewSettingsService(db *gorm.DB, log *zap.Logger) *SettingsService {
 	return &SettingsService{db: db, log: log}
 }
 
-// GetSettings returns user settings.
+// GetSettings returns user settings, creating defaults if none exist.
 func (s *SettingsService) GetSettings(userID uuid.UUID) (*model.Settings, error) {
 	var settings model.Settings
-	if err := s.db.Where("user_id = ?", userID).FirstOrCreate(&settings, model.Settings{
-		UserID:    userID,
-		ModelTier: "sonnet",
-		Locale:    "en",
-		Theme:     "light",
-	}).Error; err != nil {
+	err := s.db.Where("user_id = ?", userID).First(&settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Use ON CONFLICT for atomic upsert — prevents duplicate key errors under concurrency.
+		defaults := model.Settings{
+			UserID:    userID,
+			ModelTier: "sonnet",
+			Locale:    "en",
+			Theme:     "light",
+		}
+		if err := s.db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}},
+			DoNothing: true,
+		}).Create(&defaults).Error; err != nil {
+			return nil, err
+		}
+		err = s.db.Where("user_id = ?", userID).First(&settings).Error
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &settings, nil

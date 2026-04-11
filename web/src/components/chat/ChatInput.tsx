@@ -79,6 +79,7 @@ export function ChatInput({ onSend, onStop, isLoading, mentions, onRemoveMention
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('placeholder')}
+            aria-label={t('placeholder')}
             rows={1}
             disabled={isLoading}
             style={{ height: 'auto', overflowY: 'auto' }}

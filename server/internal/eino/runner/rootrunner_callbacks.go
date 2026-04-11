@@ -198,17 +198,6 @@ func (c *RootRunnerCallbacks) deleteTracker(addrStr string, role string) {
 	delete(c.trackers, key)
 }
 
-// findIncompleteAssistant returns any incomplete assistant tracker, regardless of addr.
-// This prevents creating multiple assistant messages when addr changes between callbacks.
-func (c *RootRunnerCallbacks) findIncompleteAssistant() *msgTracker {
-	for _, t := range c.trackers {
-		if t.role == "assistant" && t.msgID == uuid.Nil {
-			return t
-		}
-	}
-	return nil
-}
-
 // insertMessage creates a message in DB and assigns seq.
 func (c *RootRunnerCallbacks) insertMessage(ctx context.Context, t *msgTracker, initialContent string, initialReason string) error {
 	seq, err := c.cfg.NextSeq(ctx, c.cfg.UserID)
@@ -474,11 +463,6 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 // addr) to avoid creating multiple messages when the callback address changes
 // between OnThinking and OnOutputting.
 func (c *RootRunnerCallbacks) ensureAssistantMessage(ctx context.Context, addrStr string) *msgTracker {
-	// Reuse any incomplete assistant tracker first
-	if existing := c.findIncompleteAssistant(); existing != nil {
-		return existing
-	}
-
 	t := c.getOrCreateAssistantTracker(addrStr)
 	if t.msgID == uuid.Nil {
 		if err := c.insertMessage(ctx, t, "", ""); err != nil {
@@ -567,15 +551,15 @@ func (c *RootRunnerCallbacks) OnCompleted(ctx context.Context, role schema.RoleT
 	)
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
-	t := c.getOrCreateAssistantTracker(addrStr)
-	if t.msgID == uuid.Nil {
-		// Should not normally happen, but handle it
-		if err := c.insertMessage(ctx, t, outputContent, reasoningContent); err != nil {
-			c.cfg.Log.Error("failed to insert assistant message on completed", zap.Error(err))
-			return
-		}
+	defer func() {
+		c.deleteTracker(addrStr, "assistant")
+		c.mu.Unlock()
+	}()
+
+	t := c.ensureAssistantMessage(ctx, addrStr)
+	if t == nil {
+		return
 	}
 
 	c.completeMessage(ctx, t, outputContent, reasoningContent, usage)

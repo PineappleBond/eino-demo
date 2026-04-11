@@ -42,7 +42,7 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
     <div className="right-panel">
       <div className="right-panel-header">
         <span className="right-panel-title">{t('title')}</span>
-        <span className="panel-close" onClick={onClose}>
+        <span className="panel-close" onClick={onClose} aria-label="Close info panel" role="button" tabIndex={0}>
           <CloseOutlined style={{ fontSize: 14 }} />
         </span>
       </div>

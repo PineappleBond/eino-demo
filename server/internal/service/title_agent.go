@@ -141,7 +141,6 @@ func (s *ChatService) runTitleAgent(
 
 	// 5. Run agent with timeout
 	runCtx, cancel := context.WithTimeout(ctx, titleAgentTimeout)
-	defer cancel()
 
 	iter := runner.Query(runCtx, firstMessage)
 	done := make(chan struct{})
@@ -169,4 +168,5 @@ func (s *ChatService) runTitleAgent(
 	case <-runCtx.Done():
 		s.log.Warn("runTitleAgent: timed out", zap.Duration("timeout", titleAgentTimeout))
 	}
+	cancel()
 }

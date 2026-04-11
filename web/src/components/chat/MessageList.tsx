@@ -32,15 +32,18 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
       setUserAtBottom(atBottom);
     };
+    handleScroll(); // set correct value on mount
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Auto-scroll only when user is at the bottom
+  // Use rAF so scrollHeight reflects painted DOM, not stale layout
   useEffect(() => {
-    if (containerRef.current && userAtBottom) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
+    if (!userAtBottom) return;
+    requestAnimationFrame(() => {
+      containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight });
+    });
   }, [messages, userAtBottom]);
 
   if (messages.length === 0) {

@@ -30,16 +30,21 @@ func NewRunSessionManager() *RunSessionManager {
 	}
 }
 
-// Start registers a new agent run with its cancel function.
-func (m *RunSessionManager) Start(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// createSession is an internal helper. Caller must hold m.mu write lock.
+func (m *RunSessionManager) createSession(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) {
 	m.sessions[conversationID] = &AgentRunSession{
 		CancelFunc: cancel,
 		IsRunning:  true,
 		StopFunc:   stopFunc,
 		done:       make(chan struct{}),
 	}
+}
+
+// Start registers a new agent run with its cancel function.
+func (m *RunSessionManager) Start(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.createSession(conversationID, cancel, stopFunc)
 }
 
 // TryStart registers a new agent run only if no active session exists.
@@ -51,12 +56,7 @@ func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.Ca
 	if _, ok := m.sessions[conversationID]; ok {
 		return false
 	}
-	m.sessions[conversationID] = &AgentRunSession{
-		CancelFunc: cancel,
-		IsRunning:  true,
-		StopFunc:   stopFunc,
-		done:       make(chan struct{}),
-	}
+	m.createSession(conversationID, cancel, stopFunc)
 	return true
 }
 
@@ -102,21 +102,26 @@ func (m *RunSessionManager) Stop(conversationID uuid.UUID) {
 		m.mu.Unlock()
 		return
 	}
-	if s.CancelFunc != nil {
-		s.CancelFunc()
-	}
-	if s.StopFunc != nil {
-		s.StopFunc()
-	}
+	cancelFn := s.CancelFunc
+	stopFn := s.StopFunc
 	s.IsRunning = false
 	doneCh := s.done
 	m.mu.Unlock()
+
+	// Call cancel and stop outside the lock — StopFunc does DB writes that
+	// should not block other concurrent operations on the session map.
+	if cancelFn != nil {
+		cancelFn()
+	}
+	if stopFn != nil {
+		stopFn()
+	}
 
 	// Wait for the event loop goroutine to drain (with timeout).
 	// Use a short timeout so the HTTP handler responds quickly to the stop request.
 	select {
 	case <-doneCh:
-	case <-time.After(1 * time.Second):
+	case <-time.After(2 * time.Second):
 	}
 }
 

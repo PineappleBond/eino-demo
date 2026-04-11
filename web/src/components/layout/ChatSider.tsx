@@ -190,9 +190,10 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
     ];
   }, [contextMenuConv, closeContextMenu]);
 
-  const filtered = conversations.filter((c) =>
-    c.title?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filtered = conversations.filter((c) => {
+    const title = c.title ?? t('untitled');
+    return title.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const activeConvs = filtered.filter((c) => c.status !== 'archived');
   const archivedConvs = filtered.filter((c) => c.status === 'archived');
@@ -348,7 +349,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
               >
                 <InboxOutlined style={{ fontSize: 12 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {conv.title || 'Untitled'}
+                  {conv.title || t('untitled')}
                 </span>
               </Link>
             ))}

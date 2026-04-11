@@ -6,6 +6,7 @@ import { Layout, Spin } from 'antd';
 import { TopBar } from '@/components/layout/Header';
 import { ChatSider } from '@/components/layout/ChatSider';
 import { api } from '@/lib/api';
+import { useTranslations } from 'next-intl';
 
 const { Sider, Content } = Layout;
 
@@ -15,6 +16,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const locale = params.locale as string;
   const projectId = params.id as string;
   const convIdFromPath = pathname.split('/').pop() || '';
+  const tApp = useTranslations('app');
   const [selectedConv, setSelectedConv] = useState(convIdFromPath);
 
   // Sync selected conversation when route changes
@@ -22,14 +24,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     const currentConvId = pathname.split('/').pop() || '';
     setSelectedConv(currentConvId);
   }, [pathname]);
-  const [projectName, setProjectName] = useState('Project');
+  const [projectName, setProjectName] = useState(tApp('title'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (projectId) {
       api.get<{ name: string }>(`/projects/${projectId}`)
-        .then((p) => setProjectName(p.name || 'Project'))
-        .catch(() => setProjectName('Project'))
+        .then((p) => setProjectName(p.name || tApp('title')))
+        .catch(() => setProjectName(tApp('title')))
         .finally(() => setLoading(false));
     }
   }, [projectId]);

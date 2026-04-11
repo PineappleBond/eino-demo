@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, memo } from 'react';
 import { Avatar, Collapse, Tag } from 'antd';
 import { RobotOutlined, BulbOutlined, ToolOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
@@ -13,8 +13,9 @@ import { ToolCallCard } from './ToolCallCard';
 const SYSTEM_MSG_MAX_LINES = 5;
 
 function SystemMessage({ content }: { content: string }) {
+  const t = useTranslations('chat');
   const [expanded, setExpanded] = useState(false);
-  const contentRef = useRef<HTMLSpanElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const isLong = content.length > 200;
 
   return (
@@ -40,14 +41,14 @@ function SystemMessage({ content }: { content: string }) {
           onClick={() => setExpanded(!expanded)}
           style={{ flexShrink: 0, marginTop: 2 }}
         >
-          {expanded ? '收起' : '展开'}
+          {expanded ? t('collapse') : t('expandAll')}
         </button>
       )}
     </div>
   );
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
   const t = useTranslations('chat');
   const isUser = message.sender_role === 'user';
   const isTool = message.sender_role === 'tool';
@@ -203,4 +204,4 @@ export function MessageBubble({ message }: { message: Message }) {
       </div>
     </div>
   );
-}
+});

@@ -281,7 +281,10 @@ func (s *CompressionService) createCompressTool(
 		})
 }
 
-// CompressAndResume handles token overflow: compress the conversation, then resume the agent.
+// CompressAndResume handles token overflow by compressing the conversation.
+// It does NOT restart the agent — the caller (chat.go overflow handler) is
+// responsible for stopping the old session, cleaning up, and launching a
+// fresh runAgent after compression succeeds.
 // Called from the event loop when TokenOverflowError is detected.
 func (s *CompressionService) CompressAndResume(
 	ctx context.Context,
@@ -376,24 +379,29 @@ func (s *CompressionService) SyncSummarizationToDB(
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		summaryMsgID := uuid.New()
+		summarySeq, err := nextSeq(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("seq assignment failed for summary: %w", err)
+		}
 		summaryMsg := model.Message{
 			ConversationID: conversationID,
 			SenderRole:     "system",
 			SenderID:       "system",
 			Content:        summaryText,
 			Metadata:       model.JSONMap{"type": "summary"},
-			Seq:            0, // Summary doesn't need its own seq; min_seq is the boundary
+			Seq:            summarySeq,
 		}
 		summaryMsg.ID = summaryMsgID
 		if err := tx.Create(&summaryMsg).Error; err != nil {
 			return fmt.Errorf("failed to insert summary message: %w", err)
 		}
 
-		// 6. Update conversation min_seq
+		// 6. Update conversation min_seq to the summary's seq so it is
+		// included in future context loads (seq >= min_seq).
 		if err := tx.Model(&model.Conversation{}).
 			Where("id = ? AND user_id = ?", conversationID, userID).
 			Updates(map[string]interface{}{
-				"min_seq": newMinSeq,
+				"min_seq": summarySeq,
 				"summary": summaryText,
 			}).Error; err != nil {
 			return fmt.Errorf("failed to update conversation: %w", err)

@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/atomic"
 )
 
 var _handler callbacks.Handler = &RootRunnerHandler{}
@@ -28,8 +29,9 @@ type RootRunnerHandlerCallback interface {
 	OnCompleted(ctx context.Context, role schema.RoleType, addr compose.Address, reasoningContent string, outputContent string, usage *schema.TokenUsage)
 }
 type RootRunnerHandler struct {
-	callback RootRunnerHandlerCallback
-	tracer   trace.Tracer
+	callback         RootRunnerHandlerCallback
+	tracer           trace.Tracer
+	onCompletedTimes *atomic.Int32
 }
 
 func (h *RootRunnerHandler) OnStart(ctx context.Context, info *callbacks.RunInfo, input callbacks.CallbackInput) context.Context {
@@ -60,7 +62,6 @@ func (h *RootRunnerHandler) OnEndWithStreamOutput(ctx context.Context, info *cal
 	_, span := h.tracer.Start(ctx, "OnEndWithStreamOutput:"+string(info.Component)+":"+info.Name)
 	defer span.End()
 	defer output.Close()
-
 	for {
 		chunk, err := output.Recv()
 		if err != nil {
@@ -125,7 +126,9 @@ func (h *RootRunnerHandler) OnEndWithStreamOutput(ctx context.Context, info *cal
 					attribute.Int("Usage.PromptTokens", responseMeta.Usage.PromptTokens),
 				)
 			}
-			h.callback.OnCompleted(ctx, role, addr, reasoningContent, content, responseMeta.Usage)
+			if h.onCompletedTimes.Add(1) == 1 {
+				h.callback.OnCompleted(ctx, role, addr, reasoningContent, content, responseMeta.Usage)
+			}
 		}
 
 	}
@@ -136,7 +139,7 @@ func NewRootRunnerHandler(callback RootRunnerHandlerCallback, tracer trace.Trace
 	if tracer == nil {
 		tracer = otel.Tracer("eino-demo:RootRunner-handler")
 	}
-	return &RootRunnerHandler{callback: callback, tracer: tracer}
+	return &RootRunnerHandler{callback: callback, tracer: tracer, onCompletedTimes: atomic.NewInt32(0)}
 }
 
 func (h *RootRunnerHandler) OnError(ctx context.Context, info *callbacks.RunInfo, err error) context.Context {

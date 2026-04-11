@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -94,23 +95,25 @@ func (s *ChatService) CompleteSendMessage(
 		return nil, fmt.Errorf("content is required")
 	}
 
-	// 2. Check if this is the first message
-	var messageCount int64
-	if err := s.db.Model(&model.Message{}).Where("conversation_id = ?", conversationID).Count(&messageCount).Error; err != nil {
-		s.log.Error("CompleteSendMessage: failed to count messages", zap.Error(err))
-	}
-	isFirstMessage := messageCount == 0
-
-	// 3. Allocate seq after ownership confirmed
+	// 2. Allocate seq after ownership confirmed
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("seq assignment failed: %w", err)
 	}
 
 	var messageID uuid.UUID
+	var isFirstMessage bool
 
 	// 3. Create user message + user_update in a single transaction
 	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Check if this is truly the first message inside the transaction to avoid
+		// race conditions where concurrent requests both see messageCount == 0.
+		var count int64
+		if err := tx.Model(&model.Message{}).Where("conversation_id = ?", conversationID).Count(&count).Error; err != nil {
+			s.log.Error("CompleteSendMessage: failed to count messages in transaction", zap.Error(err))
+		}
+		isFirstMessage = count == 0
+
 		msg := model.Message{
 			ConversationID: conversationID,
 			SenderRole:     "user",
@@ -263,7 +266,11 @@ func (s *ChatService) runAgent(
 	// TryStart is atomic: if another runAgent already registered, this returns false
 	// and we exit gracefully to prevent concurrent agent runs.
 	if !s.runSessionMgr.TryStart(conversationID, cancel, callbacks.Stop) {
-		s.log.Info("runAgent: another agent run already registered, skipping",
+		// Another agent run is active — enqueue the message so it will be
+		// consumed by the context injection middleware at the next model call
+		// boundary, or by the deferred pending-check when the current run ends.
+		s.messageQueue.Enqueue(conversationID, userContent)
+		s.log.Info("runAgent: another agent run active, enqueued message",
 			zap.String("conv", conversationID.String()),
 		)
 		cancel()
@@ -280,12 +287,19 @@ func (s *ChatService) runAgent(
 		tokenCounter = tc
 	}
 
+	// Max iteration scales with model tier: haiku for simple tasks, opus for
+	// complex reasoning chains.
+	maxIteration := map[string]int{"haiku": 20, "sonnet": 50, "opus": 100}[modelTier]
+	if maxIteration == 0 {
+		maxIteration = 50 // default to sonnet
+	}
+
 	runCfg := runner.RootRunnerConfig{
 		ModelProvider:    s.modelProvider,
 		ModelTier:        modelTier,
 		SystemPrompt:     systemPrompt,
 		Tools:            s.toolRegistry.GetBaseTools(),
-		MaxIteration:     100,
+		MaxIteration:     maxIteration,
 		ConversationID:   conversationID,
 		MessageQueue:     s.messageQueue,
 		ReductionEnabled: true,
@@ -342,7 +356,7 @@ func (s *ChatService) runAgent(
 	// Only load messages from min_seq onwards (earlier messages have been compressed)
 	var historyMessages []model.Message
 	if err := s.db.
-		Select("sender_role", "content").
+		Select("sender_role", "content", "reason_content", "tool_calling", "metadata").
 		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
 			conversationID, conv.MinSeq, []string{"user", "assistant", "system"}).
 		Order("seq ASC").
@@ -357,7 +371,21 @@ func (s *ChatService) runAgent(
 		case "user":
 			messages = append(messages, schema.UserMessage(msg.Content))
 		case "assistant":
-			messages = append(messages, schema.AssistantMessage(msg.Content, nil))
+			// Parse tool_calls from JSONB and attach to assistant messages so
+			// the LLM can see its previous tool call history after restart/resume.
+			var toolCalls []schema.ToolCall
+			if msg.ToolCalling != nil {
+				if raw, ok := msg.ToolCalling["tool_calls"]; ok {
+					if b, err := json.Marshal(raw); err == nil {
+						_ = json.Unmarshal(b, &toolCalls)
+					}
+				}
+			}
+			asstMsg := schema.AssistantMessage(msg.Content, toolCalls)
+			if msg.ReasonContent != "" {
+				asstMsg.ReasoningContent = msg.ReasonContent
+			}
+			messages = append(messages, asstMsg)
 		case "system":
 			messages = append(messages, schema.SystemMessage(msg.Content))
 		}
@@ -407,7 +435,7 @@ func (s *ChatService) runAgent(
 			pushUpdate(userID, update)
 		}
 
-		if promptTokens > maxPromptTokens {
+		if promptTokens > maxPromptTokens && false {
 			s.log.Warn("runAgent: prompt exceeds token limit, suggesting compaction",
 				zap.Int("tokens", promptTokens),
 				zap.Int("limit", maxPromptTokens),
@@ -531,16 +559,23 @@ func (s *ChatService) runAgent(
 							s.log.Info("runAgent: compression complete, restarting agent",
 								zap.String("conv", conversationID.String()),
 							)
-							// Restart agent with same params. The event loop defer will
-							// cleanup the old session; the new runAgent will create a fresh one.
-							// Clear stale checkpoint to force a fresh Run (not Resume).
-							s.runSessionMgr.ClearCheckpointID(conversationID)
+							// Restart agent with same params. Must Stop + Cleanup the
+							// old session first — the old event loop is still running
+							// (we are inside it) and its session is still in the map.
+							// TryStart in the new runAgent would fail if we don't
+							// clean up first.
 							go func() {
 								defer func() {
 									if r := recover(); r != nil {
 										s.log.Error("runAgent (post-compress) panic recovered", zap.Any("recover", r))
 									}
 								}()
+								// Stop the old run and wait for its event loop to drain.
+								// This is safe to call from within the old event loop
+								// goroutine — it cancels the context and waits up to 2s.
+								s.runSessionMgr.Stop(conversationID)
+								s.runSessionMgr.Cleanup(conversationID)
+								s.runSessionMgr.ClearCheckpointID(conversationID)
 								s.runAgent(context.WithoutCancel(ctx), userID, conversationID, userContent, nextSeq, pushUpdate)
 							}()
 							return
@@ -611,16 +646,21 @@ func (s *ChatService) StopMessage(
 		return fmt.Errorf("conversation not found")
 	}
 
-	// 1. Cancel the running agent
+	// 1. Check if agent is running before stopping
+	if !s.runSessionMgr.IsRunning(conversationID) {
+		return nil
+	}
+
+	// 2. Cancel the running agent
 	s.runSessionMgr.Stop(conversationID)
 
-	// 2. Assign seq
+	// 3. Assign seq
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("seq assignment failed: %w", err)
 	}
 
-	// 3. Create user_update for the stop event
+	// 4. Create user_update for the stop event
 	update := model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,
@@ -664,8 +704,9 @@ func (s *ChatService) GetConversationMessages(userID, conversationID uuid.UUID, 
 	return messages, nil
 }
 
-// StartCompaction compresses the conversation in-place.
-// If an agent is actively running, it stops it first.
+// StartCompaction stops the running agent (if any) and launches compression
+// asynchronously. Returns immediately; progress is reported via Update events
+// (conversation.compacting → conversation.compressed).
 func (s *ChatService) StartCompaction(
 	ctx context.Context,
 	userID, conversationID uuid.UUID,
@@ -683,10 +724,19 @@ func (s *ChatService) StartCompaction(
 		s.runSessionMgr.Stop(conversationID)
 	}
 
-	// 3. Compress in-place
-	if _, err := s.compressionSvc.CompressConversation(ctx, userID, conversationID, nextSeq, pushUpdate); err != nil {
-		return fmt.Errorf("failed to compress conversation: %w", err)
-	}
+	// 3. Launch compression asynchronously — returns immediately
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.log.Error("StartCompaction: panic recovered", zap.Any("recover", r))
+			}
+		}()
+		if _, err := s.compressionSvc.CompressConversation(
+			context.WithoutCancel(ctx), userID, conversationID, nextSeq, pushUpdate,
+		); err != nil {
+			s.log.Error("StartCompaction: compression failed", zap.Error(err))
+		}
+	}()
 
 	return nil
 }

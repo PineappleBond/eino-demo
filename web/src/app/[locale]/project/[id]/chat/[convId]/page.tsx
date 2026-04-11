@@ -1,13 +1,10 @@
 'use client';
 
-import { useEffect, useReducer, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Spin, Result, App } from 'antd';
 import type { MenuProps } from 'antd';
-import {
-  CopyOutlined,
-  ForkOutlined,
-} from '@ant-design/icons';
+import { CopyOutlined } from '@ant-design/icons';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
@@ -50,7 +47,7 @@ type ChatAction =
   | { type: 'ADD_TOOL_CALL_TO_LAST_MESSAGE'; payload: Record<string, unknown> }
   | { type: 'ADD_TEMP_MESSAGE'; payload: MessageType }
   | { type: 'REMOVE_TEMP_MESSAGE'; payload: string }
-  | { type: 'REPLACE_TEMP_MESSAGE'; payload: { tempPrefix: string; message: MessageType } }
+  | { type: 'REPLACE_TEMP_MESSAGE'; payload: { tempId: string; message: MessageType } }
   | { type: 'SET_IS_STREAMING'; payload: boolean }
   | { type: 'SET_SENDING'; payload: boolean }
   | { type: 'TOGGLE_CONV_INFO' }
@@ -104,10 +101,10 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'REMOVE_TEMP_MESSAGE':
       return { ...state, messages: state.messages.filter((m) => m.id !== action.payload) };
     case 'REPLACE_TEMP_MESSAGE': {
-      const { tempPrefix, message } = action.payload;
+      const { tempId, message } = action.payload;
       return {
         ...state,
-        messages: state.messages.map((m) => (m.id.startsWith(tempPrefix) ? { ...m, id: message.id } : m)),
+        messages: state.messages.map((m) => (m.id === tempId ? message : m)),
       };
     }
     case 'SET_IS_STREAMING':
@@ -161,6 +158,9 @@ export default function ConvChatPage() {
 
   const [state, dispatch] = useReducer(chatReducer, initialState);
 
+  // Store compact destroy function in a ref to avoid global window mutation
+  const compactDestroyRef = useRef<(() => void) | null>(null);
+
   // Keep a ref to the latest messages so the streaming handler can check
   // for duplicates without relying on a stale closure over `state.messages`.
   const messagesRef = useRef(state.messages);
@@ -186,12 +186,12 @@ export default function ConvChatPage() {
             payload: {
               id: realId,
               conversation_id: payload.conversation_id || '',
-              seq: (payload as Record<string, unknown>).seq as number | undefined,
+              seq: payload.seq,
               sender_role: 'user',
               sender_id: payload.sender_id || '',
-              content: (payload.content as string | undefined) || '',
+              content: payload.content || '',
               reason_content: '',
-              metadata: (payload.metadata as Record<string, unknown> | undefined) || {},
+              metadata: {},
               finish_reason: null,
               error_message: null,
               duration_ms: null,
@@ -286,16 +286,12 @@ export default function ConvChatPage() {
         break;
       }
       case 'conversation.compacting': {
-        const destroy = message.loading('Compacting conversation...', 0);
-        (window as any).__compactDestroy = destroy;
+        compactDestroyRef.current = message.loading('Compacting conversation...', 0);
         break;
       }
       case 'conversation.compacted': {
-        const destroy = (window as any).__compactDestroy;
-        if (destroy) {
-          destroy();
-          delete (window as any).__compactDestroy;
-        }
+        compactDestroyRef.current?.();
+        compactDestroyRef.current = null;
         message.destroy(); // fallback
         const payload = update.payload as components['schemas']['ConversationCompactedPayload'];
         const newConvId = payload.new_conv_id as string | undefined;
@@ -305,12 +301,12 @@ export default function ConvChatPage() {
         break;
       }
       case 'conversation.updated': {
-        const payload = update.payload as Record<string, unknown>;
+        const payload = update.payload as components['schemas']['ConversationUpdatedPayload'];
         dispatch({
           type: 'SET_CONV_TOKENS',
           payload: {
-            tokenPrompt: (payload.token_prompt as number | undefined) ?? undefined,
-            tokenCompletion: (payload.token_completion as number | undefined) ?? undefined,
+            tokenPrompt: payload.token_prompt,
+            tokenCompletion: payload.token_completion,
           },
         });
         break;
@@ -336,15 +332,21 @@ export default function ConvChatPage() {
   useEffect(() => {
     let cancelled = false;
     const loadMessages = async () => {
-      // Try IndexedDB first for offline support
+      // Try IndexedDB first for offline support, but don't clear loading yet
+      // — we need the HTTP fetch to complete so we have the latest data.
+      let cached: MessageType[] = [];
       try {
-        const cached = await getMessages(convId);
-        if (!cancelled && cached.length > 0) {
-          dispatch({ type: 'SET_MESSAGES', payload: cached as MessageType[] });
-          dispatch({ type: 'SET_LOADING', payload: false });
-        }
+        const dbResult = await getMessages(convId);
+        cached = dbResult as MessageType[];
       } catch {
         // IndexedDB not available, fall through to HTTP
+      }
+
+      if (cancelled) return;
+
+      // If we have cached data, show it immediately for fast first paint
+      if (cached.length > 0) {
+        dispatch({ type: 'SET_MESSAGES', payload: cached as MessageType[] });
       }
 
       // Always refresh from server for latest data
@@ -357,14 +359,21 @@ export default function ConvChatPage() {
         })
         .catch((err) => {
           if (cancelled) return;
-          message.error(err.message);
+          // If HTTP fails and we still have cached data, keep it
+          if (cached.length === 0) {
+            message.error(err.message);
+          }
         })
         .finally(() => {
           if (!cancelled) dispatch({ type: 'SET_LOADING', payload: false });
         });
     };
     loadMessages();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      compactDestroyRef.current?.();
+      compactDestroyRef.current = null;
+    };
   }, [convId, message]);
 
   // ─── Send message ───
@@ -401,31 +410,21 @@ export default function ConvChatPage() {
       dispatch({ type: 'CLEAR_MENTIONS' });
 
       // Route real message through applyUpdates pipeline for seq tracking
-      // and notification of other subscribers. Note: applyUpdates may skip
-      // this update if there's a seq gap (localMaxSeq + 1 !== resp.seq), in
-      // which case handleStreamingUpdate's ADD_MESSAGE never fires. We
-      // dispatch ADD_MESSAGE unconditionally below to ensure the user's
-      // message always appears; the reducer's dedup check prevents doubles.
-      const update: Update = {
+      // and notification of other subscribers. The payload conforms to
+      // MessageNewPayload from the spec — the direct dispatch below serves
+      // as belt-and-suspenders in case seq gap recovery skips this update.
+      const newPayload: components['schemas']['MessageNewPayload'] = {
+        conversation_id: resp.conversation_id,
+        message_id: resp.message_id,
         seq: resp.seq,
-        type: 'message.new',
-        payload: {
-          id: resp.message_id,
-          conversation_id: resp.conversation_id,
-          content,
-          role: 'user',
-          sender_id: '',
-          reason_content: '',
-          metadata: {},
-          finish_reason: null,
-          error_message: null,
-          duration_ms: null,
-          token_prompt: 0,
-          token_completion: 0,
-          created_at: new Date().toISOString(),
-        },
-      } as never;
-      dispatcher.applyUpdates([update]);
+        role: 'user',
+        sender_id: '',
+        addr: '',
+        content,
+      };
+      dispatcher.applyUpdates([
+        { seq: resp.seq, type: 'message.new', payload: newPayload } as unknown as Update,
+      ]);
 
       // Ensure the real message is added regardless of seq continuity
       dispatch({
@@ -487,40 +486,28 @@ export default function ConvChatPage() {
         key: 'copy',
         icon: <CopyOutlined />,
         label: t('copy'),
-        onClick: () => {
-          navigator.clipboard?.writeText(msg.content);
+        onClick: async () => {
+          try {
+            await navigator.clipboard.writeText(msg.content);
+          } catch {
+            // Clipboard not available or permission denied — ignore silently
+          }
         },
-      },
-      { type: 'divider' },
-      {
-        key: 'reply',
-        icon: <ForkOutlined />,
-        label: t('reply'),
-      },
-      { type: 'divider' },
-      {
-        key: 'branch',
-        icon: <ForkOutlined />,
-        label: t('createBranch'),
       },
     ];
   }, [t]);
 
-  // ─── Render ───
-
-  if (state.loading) {
-    return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
-  }
+  // ─── Derived values ───
 
   const displayMessages = state.messages;
 
   // Stats for ConvInfoPanel
-  const msgStats = state.messages.reduce((acc, m) => ({
+  const msgStats = useMemo(() => state.messages.reduce((acc, m) => ({
     messages: acc.messages + 1,
     tokenPrompt: acc.tokenPrompt + (m.token_prompt || 0),
     tokenCompletion: acc.tokenCompletion + (m.token_completion || 0),
     toolCalls: acc.toolCalls + (((m.metadata as Record<string, unknown> | undefined)?.tool_calls as Array<unknown> | undefined)?.length || 0),
-  }), { messages: 0, tokenPrompt: 0, tokenCompletion: 0, toolCalls: 0 });
+  }), { messages: 0, tokenPrompt: 0, tokenCompletion: 0, toolCalls: 0 }), [state.messages]);
 
   // Use conversation-level token stats from backend when available
   // (tiktoken-estimated prompt size is more accurate than SUM of individual API calls)
@@ -530,6 +517,12 @@ export default function ConvChatPage() {
     tokenCompletion: state.convTokenCompletion || msgStats.tokenCompletion,
     toolCalls: msgStats.toolCalls,
   };
+
+  // ─── Render ───
+
+  if (state.loading) {
+    return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }} />;
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -551,12 +544,13 @@ export default function ConvChatPage() {
             opacity: 0.5,
           }}
           title={state.showConvInfo ? 'Hide conversation info' : 'Show conversation info'}
+          aria-label={state.showConvInfo ? 'Hide conversation info' : 'Show conversation info'}
           onClick={() => dispatch({ type: 'TOGGLE_CONV_INFO' })}
         >
           ℹ
         </button>
 
-        {displayMessages.length === 0 && !state.isStreaming ? (
+        {displayMessages.length === 0 && !state.isStreaming && !state.loading ? (
           <Result
             subTitle={t('noMessages')}
             style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
