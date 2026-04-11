@@ -228,8 +228,9 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 			},
 			EmitInternalEvents: true,
 		},
-		MaxIteration: maxIter,
-		Handlers:     handlers,
+		MaxIteration:      maxIter,
+		Handlers:          handlers,
+		WithoutWriteTodos: true,
 	})
 	if err != nil {
 		return nil, err
