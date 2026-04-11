@@ -352,43 +352,11 @@ func (s *ChatService) runAgent(
 	checkpointID, hasCheckpoint := s.runSessionMgr.GetCheckpointID(conversationID)
 
 	var iter *adk.AsyncIterator[*adk.AgentEvent]
-	// Load conversation history as context: user, assistant, and system messages
-	// Only load messages from min_seq onwards (earlier messages have been compressed)
-	var historyMessages []model.Message
-	if err := s.db.
-		Select("sender_role", "content", "reason_content", "tool_calling", "metadata").
-		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
-			conversationID, conv.MinSeq, []string{"user", "assistant", "system"}).
-		Order("seq ASC").
-		Find(&historyMessages).Error; err != nil {
-		s.log.Error("runAgent: failed to load conversation history", zap.Error(err))
-	}
 
-	// Build message list from history + current user message
-	var messages []*schema.Message
-	for _, msg := range historyMessages {
-		switch msg.SenderRole {
-		case "user":
-			messages = append(messages, schema.UserMessage(msg.Content))
-		case "assistant":
-			// Parse tool_calls from JSONB and attach to assistant messages so
-			// the LLM can see its previous tool call history after restart/resume.
-			var toolCalls []schema.ToolCall
-			if msg.ToolCalling != nil {
-				if raw, ok := msg.ToolCalling["tool_calls"]; ok {
-					if b, err := json.Marshal(raw); err == nil {
-						_ = json.Unmarshal(b, &toolCalls)
-					}
-				}
-			}
-			asstMsg := schema.AssistantMessage(msg.Content, toolCalls)
-			if msg.ReasonContent != "" {
-				asstMsg.ReasoningContent = msg.ReasonContent
-			}
-			messages = append(messages, asstMsg)
-		case "system":
-			messages = append(messages, schema.SystemMessage(msg.Content))
-		}
+	// 6. Load conversation history — shared function handles tool_calling and tool messages.
+	messages, err := loadConversationMessages(runCtx, s.db, conversationID, conv.MinSeq)
+	if err != nil {
+		s.log.Error("runAgent: failed to load conversation history", zap.Error(err))
 	}
 
 	// Check prompt token count before running agent to prevent context overflow.
@@ -435,34 +403,6 @@ func (s *ChatService) runAgent(
 			pushUpdate(userID, update)
 		}
 
-		if promptTokens > maxPromptTokens && false {
-			s.log.Warn("runAgent: prompt exceeds token limit, suggesting compaction",
-				zap.Int("tokens", promptTokens),
-				zap.Int("limit", maxPromptTokens),
-			)
-			// Push error update instead of running agent
-			errSeq, err := nextSeq(ctx, userID)
-			if err != nil {
-				s.log.Error("runAgent: seq assignment failed", zap.Error(err))
-			} else {
-				errUpdate := model.UserUpdate{
-					UserID: userID,
-					Seq:    errSeq,
-					Type:   "message.error",
-					Payload: model.JSONMap{
-						"conversation_id": conversationID.String(),
-						"error":           fmt.Sprintf("对话历史过长（约 %d tokens），超出限制 %d tokens。请先压缩后再发送。", promptTokens, maxPromptTokens),
-					},
-				}
-				if dbErr := s.db.WithContext(ctx).Create(&errUpdate).Error; dbErr != nil {
-					s.log.Error("failed to persist token-limit error update", zap.Error(dbErr))
-				}
-				pushUpdate(userID, errUpdate)
-			}
-			cancel()
-			s.runSessionMgr.Cleanup(conversationID)
-			return
-		}
 	}
 
 	if hasCheckpoint {
@@ -761,4 +701,89 @@ func isContextOverflowError(err error) bool {
 		}
 	}
 	return false
+}
+
+// loadConversationMessages loads DB messages for a conversation (seq >= minSeq)
+// and converts them to []*schema.Message, preserving tool call history.
+//
+// It loads user, assistant, tool, and system messages. For assistant messages
+// it parses tool_calls from the JSONB ToolCalling field. For tool messages it
+// matches each call to its response by positional order, pairing the output
+// with the tool_call_id so the LLM sees the complete call → result chain.
+func loadConversationMessages(ctx context.Context, db *gorm.DB, conversationID uuid.UUID, minSeq int64) ([]*schema.Message, error) {
+	var msgs []model.Message
+	if err := db.WithContext(ctx).
+		Select("sender_role", "content", "reason_content", "tool_calling", "metadata").
+		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
+			conversationID, minSeq, []string{"user", "assistant", "tool", "system"}).
+		Order("seq ASC").
+		Find(&msgs).Error; err != nil {
+		return nil, fmt.Errorf("failed to load conversation history: %w", err)
+	}
+
+	schemaMsgs := make([]*schema.Message, 0, len(msgs))
+	// Track pending tool_call_ids to pair with subsequent tool messages.
+	// Messages are in seq order, so tool calls appear before their results.
+	var pendingToolCallIDs []string
+
+	for _, m := range msgs {
+		switch m.SenderRole {
+		case "user":
+			schemaMsgs = append(schemaMsgs, schema.UserMessage(m.Content))
+		case "assistant":
+			toolCalls := parseToolCalls(m.ToolCalling)
+			asstMsg := schema.AssistantMessage(m.Content, toolCalls)
+			if m.ReasonContent != "" {
+				asstMsg.ReasoningContent = m.ReasonContent
+			}
+			schemaMsgs = append(schemaMsgs, asstMsg)
+			// Collect tool_call_ids from this assistant message for pairing.
+			for _, tc := range toolCalls {
+				if tc.ID != "" {
+					pendingToolCallIDs = append(pendingToolCallIDs, tc.ID)
+				}
+			}
+		case "tool":
+			// Tool message: content is the output, metadata has tool_name.
+			// Pair with the next pending tool_call_id by position.
+			toolCallID := ""
+			if len(pendingToolCallIDs) > 0 {
+				toolCallID = pendingToolCallIDs[0]
+				pendingToolCallIDs = pendingToolCallIDs[1:]
+			}
+			content := m.Content
+			if content == "" {
+				// Fallback to tool_calling output if content is empty.
+				if m.ToolCalling != nil {
+					if out, ok := m.ToolCalling["output"].(string); ok {
+						content = out
+					}
+				}
+			}
+			schemaMsgs = append(schemaMsgs, schema.ToolMessage(content, toolCallID))
+		case "system":
+			schemaMsgs = append(schemaMsgs, schema.SystemMessage(m.Content))
+		}
+	}
+
+	return schemaMsgs, nil
+}
+
+// parseToolCalls extracts schema.ToolCall slice from a JSONB tool_calling field.
+// The DB stores {"tool_calls": [...]}.
+func parseToolCalls(toolCalling model.JSONMap) []schema.ToolCall {
+	if toolCalling == nil {
+		return nil
+	}
+	raw, ok := toolCalling["tool_calls"]
+	if !ok {
+		return nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var toolCalls []schema.ToolCall
+	_ = json.Unmarshal(b, &toolCalls)
+	return toolCalls
 }

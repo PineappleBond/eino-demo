@@ -81,12 +81,12 @@ func (s *CompressionService) CompressConversation(
 		return nil, fmt.Errorf("conversation not found")
 	}
 
-	// 2. Load messages to compress (seq >= MinSeq)
+	// 2. Load messages to compress (seq >= MinSeq) — includes tool messages
 	var messages []model.Message
 	if err := s.db.
 		Select("sender_role", "content", "seq").
 		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
-			conversationID, conv.MinSeq, []string{"user", "assistant", "system"}).
+			conversationID, conv.MinSeq, []string{"user", "assistant", "tool", "system"}).
 		Order("seq ASC").
 		Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("failed to load conversation history: %w", err)
@@ -96,7 +96,7 @@ func (s *CompressionService) CompressConversation(
 		return &CompressConversationResult{}, nil
 	}
 
-	// 3. Build prompt content
+	// 3. Build prompt content from raw messages for the summary LLM
 	var msgContent strings.Builder
 	for _, m := range messages {
 		switch m.SenderRole {
@@ -104,6 +104,14 @@ func (s *CompressionService) CompressConversation(
 			msgContent.WriteString(fmt.Sprintf("<user>%s</user>\n", m.Content))
 		case "assistant":
 			msgContent.WriteString(fmt.Sprintf("<assistant>%s</assistant>\n", m.Content))
+		case "tool":
+			content := m.Content
+			if content == "" && m.ToolCalling != nil {
+				if out, ok := m.ToolCalling["output"].(string); ok {
+					content = out
+				}
+			}
+			msgContent.WriteString(fmt.Sprintf("<tool>%s</tool>\n", content))
 		case "system":
 			msgContent.WriteString(fmt.Sprintf("<system>%s</system>\n", m.Content))
 		}
@@ -332,45 +340,30 @@ func (s *CompressionService) SyncSummarizationToDB(
 		return fmt.Errorf("conversation not found: %w", err)
 	}
 
-	// 2. Load the messages that were compressed (seq >= min_seq)
-	var messages []model.Message
-	if err := s.db.WithContext(ctx).
-		Select("sender_role", "content", "seq").
-		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
-			conversationID, conv.MinSeq, []string{"user", "assistant", "system"}).
-		Order("seq ASC").
-		Find(&messages).Error; err != nil {
-		return fmt.Errorf("failed to load compressed messages: %w", err)
+	// 2. Load messages to summarize using the shared function (handles tool_calling + tool messages)
+	schemaMessages, err := loadConversationMessages(ctx, s.db, conversationID, conv.MinSeq)
+	if err != nil {
+		return fmt.Errorf("failed to load conversation history: %w", err)
 	}
 
-	if len(messages) == 0 {
+	if len(schemaMessages) == 0 {
 		return nil
 	}
 
 	// 3. Generate summary via LLM
-	var schemaMessages []*schema.Message
-	for _, m := range messages {
-		switch m.SenderRole {
-		case "user":
-			schemaMessages = append(schemaMessages, schema.UserMessage(m.Content))
-		case "assistant":
-			schemaMessages = append(schemaMessages, schema.AssistantMessage(m.Content, nil))
-		case "system":
-			schemaMessages = append(schemaMessages, schema.SystemMessage(m.Content))
-		}
-	}
 	summaryText, err := s.CompressMessagesToSummary(ctx, schemaMessages)
 	if err != nil {
 		s.log.Error("SyncSummarizationToDB: failed to generate summary, using fallback", zap.Error(err))
-		summaryText = fmt.Sprintf("对话历史已压缩。此前有 %d 条消息，最后 %d 条已被摘要。", len(messages), compressedMsgCount)
+		summaryText = fmt.Sprintf("对话历史已压缩。此前有 %d 条消息，已被摘要。", len(schemaMessages))
 	}
 
 	// 4. Find the max seq among compressed messages to set new min_seq
 	var maxCompressedSeq int64
-	for _, m := range messages {
-		if m.Seq > maxCompressedSeq {
-			maxCompressedSeq = m.Seq
-		}
+	if err := s.db.WithContext(ctx).Model(&model.Message{}).
+		Where("conversation_id = ? AND seq >= ?", conversationID, conv.MinSeq).
+		Select("COALESCE(MAX(seq), 0)").
+		Scan(&maxCompressedSeq).Error; err != nil {
+		return fmt.Errorf("failed to get max seq: %w", err)
 	}
 
 	// 5. Insert summary message
@@ -472,6 +465,8 @@ func (s *CompressionService) CompressMessagesToSummary(
 			msgContent.WriteString(fmt.Sprintf("<user>%s</user>\n", m.Content))
 		case schema.Assistant:
 			msgContent.WriteString(fmt.Sprintf("<assistant>%s</assistant>\n", m.Content))
+		case schema.Tool:
+			msgContent.WriteString(fmt.Sprintf("<tool>%s</tool>\n", m.Content))
 		case schema.System:
 			msgContent.WriteString(fmt.Sprintf("<system>%s</system>\n", m.Content))
 		}
