@@ -24,14 +24,14 @@ paths:
   # ── Users ──
   /users/me:
     get:
-      summary: Get current user
+      summary: Get current user (with embedded settings)
       responses:
         "200":
-          description: Current user
+          description: Current user with settings
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/MeResponse"
 
   /users/me/updates:
     get:
@@ -445,6 +445,23 @@ components:
           type: string
           format: date-time
 
+    MeResponse:
+      type: object
+      required: [id, settings]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        settings:
+          $ref: "#/components/schemas/Settings"
+
     Template:
       type: object
       required: [id, name, description]
@@ -646,7 +663,258 @@ components:
           type: integer
           description: Server's current highest seq for this user.
 
+    # ── Update Payload Types ──
+    # Each Update type has a concrete payload schema.
+    # Backend constructs these as typed maps; frontend reads them via discriminated union.
+
+    EmptyPayload:
+      type: object
+      description: Seq gap filler. No data.
+      properties: {}
+
+    MessageNewPayload:
+      type: object
+      required: [conversation_id, message_id, seq, role, sender_id, addr]
+      properties:
+        conversation_id:
+          type: string
+          description: UUID of the conversation.
+        message_id:
+          type: string
+          description: UUID of the message.
+        seq:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        sender_id:
+          type: string
+        addr:
+          type: string
+          description: Eino callback address string.
+        tool_name:
+          type: string
+          description: Only present when role is "tool".
+
+    MessageDeltaPayload:
+      type: object
+      required: [conversation_id, message_id, delta, addr]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        delta:
+          type: string
+          description: Streaming text chunk.
+        addr:
+          type: string
+
+    MessageDonePayload:
+      type: object
+      required: [conversation_id, message_id, role, sender_id, content, reasoning_content, addr, seq]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        role:
+          type: string
+        sender_id:
+          type: string
+        content:
+          type: string
+          description: Full final content.
+        reasoning_content:
+          type: string
+          description: Full reasoning content.
+        addr:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    MessageToolCallPayload:
+      type: object
+      required: [conversation_id, message_id, tool_name, content, seq, addr]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        tool_name:
+          type: string
+        content:
+          type: string
+          description: Truncated result (max 200 chars).
+        seq:
+          type: integer
+          format: int64
+        addr:
+          type: string
+
+    MessageThinkingPayload:
+      type: object
+      required: [conversation_id, message_id, delta, addr]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        delta:
+          type: string
+          description: Streaming reasoning chunk.
+        addr:
+          type: string
+
+    MessageErrorPayload:
+      type: object
+      required: [conversation_id, error, seq]
+      properties:
+        conversation_id:
+          type: string
+        error:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        message_id:
+          type: string
+          description: UUID of the interrupted message (optional).
+        checkpoint_id:
+          type: string
+          description: Checkpoint ID for interrupt/resume (optional).
+
+    MessageStopPayload:
+      type: object
+      required: [conversation_id, seq]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        message_id:
+          type: string
+          description: UUID of the stopped message (optional).
+
+    ConversationCreatedPayload:
+      type: object
+      required: [id, project_id, seq]
+      properties:
+        id:
+          type: string
+          description: UUID of the conversation.
+        project_id:
+          type: string
+          description: UUID of the project.
+        title:
+          type: string
+        status:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationDeletedPayload:
+      type: object
+      required: [id, project_id, seq]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationCompactingPayload:
+      type: object
+      required: [conversation_id, seq]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationCompactedPayload:
+      type: object
+      required: [old_conv_id, new_conv_id, project_id, seq]
+      properties:
+        old_conv_id:
+          type: string
+        new_conv_id:
+          type: string
+        project_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationArchivedPayload:
+      type: object
+      required: [conversation_id, seq]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ProjectCreatedPayload:
+      type: object
+      required: [id, template_id, name, seq]
+      properties:
+        id:
+          type: string
+          description: UUID of the project.
+        template_id:
+          type: string
+        name:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ProjectDeletedPayload:
+      type: object
+      required: [id, seq]
+      properties:
+        id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    SettingsChangedPayload:
+      type: object
+      required: [seq, model_tier, locale, theme, changed]
+      properties:
+        seq:
+          type: integer
+          format: int64
+        model_tier:
+          type: string
+          enum: [haiku, sonnet, opus]
+        locale:
+          type: string
+          enum: [en, zh]
+        theme:
+          type: string
+          enum: [light, dark]
+        changed:
+          type: array
+          items:
+            type: string
+          description: Fields that were changed.
+
     # ── Update (unified event type) ──
+    # payload is a oneOf of all concrete payload types.
+    # Frontend uses discriminated union: switch on Update.type to narrow payload type.
+    # Backend constructs payloads as map[string]interface{} (JSONMap) — generated types
+    # serve as documentation and frontend type safety.
 
     Update:
       type: object
@@ -681,5 +949,21 @@ components:
             # Technical events
             - empty
         payload:
-          type: object
-          description: Type-specific entity. Frontend extracts conversation_id from payload to derive topic.
+          oneOf:
+            - $ref: "#/components/schemas/MessageNewPayload"
+            - $ref: "#/components/schemas/MessageDeltaPayload"
+            - $ref: "#/components/schemas/MessageDonePayload"
+            - $ref: "#/components/schemas/MessageToolCallPayload"
+            - $ref: "#/components/schemas/MessageThinkingPayload"
+            - $ref: "#/components/schemas/MessageErrorPayload"
+            - $ref: "#/components/schemas/MessageStopPayload"
+            - $ref: "#/components/schemas/ConversationCreatedPayload"
+            - $ref: "#/components/schemas/ConversationDeletedPayload"
+            - $ref: "#/components/schemas/ConversationCompactingPayload"
+            - $ref: "#/components/schemas/ConversationCompactedPayload"
+            - $ref: "#/components/schemas/ConversationArchivedPayload"
+            - $ref: "#/components/schemas/ProjectCreatedPayload"
+            - $ref: "#/components/schemas/ProjectDeletedPayload"
+            - $ref: "#/components/schemas/SettingsChangedPayload"
+            - $ref: "#/components/schemas/EmptyPayload"
+          description: "Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic."

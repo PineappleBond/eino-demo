@@ -35,6 +35,30 @@ func (e MessageSenderRole) Valid() bool {
 	}
 }
 
+// Defines values for MessageNewPayloadRole.
+const (
+	MessageNewPayloadRoleAssistant MessageNewPayloadRole = "assistant"
+	MessageNewPayloadRoleSystem    MessageNewPayloadRole = "system"
+	MessageNewPayloadRoleTool      MessageNewPayloadRole = "tool"
+	MessageNewPayloadRoleUser      MessageNewPayloadRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the MessageNewPayloadRole enum.
+func (e MessageNewPayloadRole) Valid() bool {
+	switch e {
+	case MessageNewPayloadRoleAssistant:
+		return true
+	case MessageNewPayloadRoleSystem:
+		return true
+	case MessageNewPayloadRoleTool:
+		return true
+	case MessageNewPayloadRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SettingsLocale.
 const (
 	SettingsLocaleEn SettingsLocale = "en"
@@ -86,6 +110,63 @@ func (e SettingsTheme) Valid() bool {
 	case SettingsThemeDark:
 		return true
 	case SettingsThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsChangedPayloadLocale.
+const (
+	SettingsChangedPayloadLocaleEn SettingsChangedPayloadLocale = "en"
+	SettingsChangedPayloadLocaleZh SettingsChangedPayloadLocale = "zh"
+)
+
+// Valid indicates whether the value is a known member of the SettingsChangedPayloadLocale enum.
+func (e SettingsChangedPayloadLocale) Valid() bool {
+	switch e {
+	case SettingsChangedPayloadLocaleEn:
+		return true
+	case SettingsChangedPayloadLocaleZh:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsChangedPayloadModelTier.
+const (
+	SettingsChangedPayloadModelTierHaiku  SettingsChangedPayloadModelTier = "haiku"
+	SettingsChangedPayloadModelTierOpus   SettingsChangedPayloadModelTier = "opus"
+	SettingsChangedPayloadModelTierSonnet SettingsChangedPayloadModelTier = "sonnet"
+)
+
+// Valid indicates whether the value is a known member of the SettingsChangedPayloadModelTier enum.
+func (e SettingsChangedPayloadModelTier) Valid() bool {
+	switch e {
+	case SettingsChangedPayloadModelTierHaiku:
+		return true
+	case SettingsChangedPayloadModelTierOpus:
+		return true
+	case SettingsChangedPayloadModelTierSonnet:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsChangedPayloadTheme.
+const (
+	SettingsChangedPayloadThemeDark  SettingsChangedPayloadTheme = "dark"
+	SettingsChangedPayloadThemeLight SettingsChangedPayloadTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the SettingsChangedPayloadTheme enum.
+func (e SettingsChangedPayloadTheme) Valid() bool {
+	switch e {
+	case SettingsChangedPayloadThemeDark:
+		return true
+	case SettingsChangedPayloadThemeLight:
 		return true
 	default:
 		return false
@@ -208,16 +289,16 @@ func (e WSServerFrameType) Valid() bool {
 
 // Defines values for PutSettingsJSONBodyLocale.
 const (
-	PutSettingsJSONBodyLocaleEn PutSettingsJSONBodyLocale = "en"
-	PutSettingsJSONBodyLocaleZh PutSettingsJSONBodyLocale = "zh"
+	En PutSettingsJSONBodyLocale = "en"
+	Zh PutSettingsJSONBodyLocale = "zh"
 )
 
 // Valid indicates whether the value is a known member of the PutSettingsJSONBodyLocale enum.
 func (e PutSettingsJSONBodyLocale) Valid() bool {
 	switch e {
-	case PutSettingsJSONBodyLocaleEn:
+	case En:
 		return true
-	case PutSettingsJSONBodyLocaleZh:
+	case Zh:
 		return true
 	default:
 		return false
@@ -226,19 +307,19 @@ func (e PutSettingsJSONBodyLocale) Valid() bool {
 
 // Defines values for PutSettingsJSONBodyModelTier.
 const (
-	PutSettingsJSONBodyModelTierHaiku  PutSettingsJSONBodyModelTier = "haiku"
-	PutSettingsJSONBodyModelTierOpus   PutSettingsJSONBodyModelTier = "opus"
-	PutSettingsJSONBodyModelTierSonnet PutSettingsJSONBodyModelTier = "sonnet"
+	Haiku  PutSettingsJSONBodyModelTier = "haiku"
+	Opus   PutSettingsJSONBodyModelTier = "opus"
+	Sonnet PutSettingsJSONBodyModelTier = "sonnet"
 )
 
 // Valid indicates whether the value is a known member of the PutSettingsJSONBodyModelTier enum.
 func (e PutSettingsJSONBodyModelTier) Valid() bool {
 	switch e {
-	case PutSettingsJSONBodyModelTierHaiku:
+	case Haiku:
 		return true
-	case PutSettingsJSONBodyModelTierOpus:
+	case Opus:
 		return true
-	case PutSettingsJSONBodyModelTierSonnet:
+	case Sonnet:
 		return true
 	default:
 		return false
@@ -247,16 +328,16 @@ func (e PutSettingsJSONBodyModelTier) Valid() bool {
 
 // Defines values for PutSettingsJSONBodyTheme.
 const (
-	PutSettingsJSONBodyThemeDark  PutSettingsJSONBodyTheme = "dark"
-	PutSettingsJSONBodyThemeLight PutSettingsJSONBodyTheme = "light"
+	Dark  PutSettingsJSONBodyTheme = "dark"
+	Light PutSettingsJSONBodyTheme = "light"
 )
 
 // Valid indicates whether the value is a known member of the PutSettingsJSONBodyTheme enum.
 func (e PutSettingsJSONBodyTheme) Valid() bool {
 	switch e {
-	case PutSettingsJSONBodyThemeDark:
+	case Dark:
 		return true
-	case PutSettingsJSONBodyThemeLight:
+	case Light:
 		return true
 	default:
 		return false
@@ -289,12 +370,62 @@ type Conversation struct {
 	UserId          openapi_types.UUID `json:"user_id"`
 }
 
+// ConversationArchivedPayload defines model for ConversationArchivedPayload.
+type ConversationArchivedPayload struct {
+	ConversationId string `json:"conversation_id"`
+	Seq            int64  `json:"seq"`
+}
+
+// ConversationCompactedPayload defines model for ConversationCompactedPayload.
+type ConversationCompactedPayload struct {
+	NewConvId string `json:"new_conv_id"`
+	OldConvId string `json:"old_conv_id"`
+	ProjectId string `json:"project_id"`
+	Seq       int64  `json:"seq"`
+}
+
+// ConversationCompactingPayload defines model for ConversationCompactingPayload.
+type ConversationCompactingPayload struct {
+	ConversationId string `json:"conversation_id"`
+	Seq            int64  `json:"seq"`
+}
+
+// ConversationCreatedPayload defines model for ConversationCreatedPayload.
+type ConversationCreatedPayload struct {
+	// Id UUID of the conversation.
+	Id string `json:"id"`
+
+	// ProjectId UUID of the project.
+	ProjectId string  `json:"project_id"`
+	Seq       int64   `json:"seq"`
+	Status    *string `json:"status,omitempty"`
+	Title     *string `json:"title,omitempty"`
+}
+
+// ConversationDeletedPayload defines model for ConversationDeletedPayload.
+type ConversationDeletedPayload struct {
+	Id        string `json:"id"`
+	ProjectId string `json:"project_id"`
+	Seq       int64  `json:"seq"`
+}
+
+// EmptyPayload Seq gap filler. No data.
+type EmptyPayload = map[string]interface{}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// MeResponse defines model for MeResponse.
+type MeResponse struct {
+	CreatedAt *time.Time         `json:"created_at,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Name      *string            `json:"name,omitempty"`
+	Settings  Settings           `json:"settings"`
 }
 
 // Message defines model for Message.
@@ -320,6 +451,96 @@ type Message struct {
 // MessageSenderRole defines model for Message.SenderRole.
 type MessageSenderRole string
 
+// MessageDeltaPayload defines model for MessageDeltaPayload.
+type MessageDeltaPayload struct {
+	Addr           string `json:"addr"`
+	ConversationId string `json:"conversation_id"`
+
+	// Delta Streaming text chunk.
+	Delta     string `json:"delta"`
+	MessageId string `json:"message_id"`
+}
+
+// MessageDonePayload defines model for MessageDonePayload.
+type MessageDonePayload struct {
+	Addr string `json:"addr"`
+
+	// Content Full final content.
+	Content        string `json:"content"`
+	ConversationId string `json:"conversation_id"`
+	MessageId      string `json:"message_id"`
+
+	// ReasoningContent Full reasoning content.
+	ReasoningContent string `json:"reasoning_content"`
+	Role             string `json:"role"`
+	SenderId         string `json:"sender_id"`
+	Seq              int64  `json:"seq"`
+}
+
+// MessageErrorPayload defines model for MessageErrorPayload.
+type MessageErrorPayload struct {
+	// CheckpointId Checkpoint ID for interrupt/resume (optional).
+	CheckpointId   *string `json:"checkpoint_id,omitempty"`
+	ConversationId string  `json:"conversation_id"`
+	Error          string  `json:"error"`
+
+	// MessageId UUID of the interrupted message (optional).
+	MessageId *string `json:"message_id,omitempty"`
+	Seq       int64   `json:"seq"`
+}
+
+// MessageNewPayload defines model for MessageNewPayload.
+type MessageNewPayload struct {
+	// Addr Eino callback address string.
+	Addr string `json:"addr"`
+
+	// ConversationId UUID of the conversation.
+	ConversationId string `json:"conversation_id"`
+
+	// MessageId UUID of the message.
+	MessageId string                `json:"message_id"`
+	Role      MessageNewPayloadRole `json:"role"`
+	SenderId  string                `json:"sender_id"`
+	Seq       int64                 `json:"seq"`
+
+	// ToolName Only present when role is "tool".
+	ToolName *string `json:"tool_name,omitempty"`
+}
+
+// MessageNewPayloadRole defines model for MessageNewPayload.Role.
+type MessageNewPayloadRole string
+
+// MessageStopPayload defines model for MessageStopPayload.
+type MessageStopPayload struct {
+	ConversationId string `json:"conversation_id"`
+
+	// MessageId UUID of the stopped message (optional).
+	MessageId *string `json:"message_id,omitempty"`
+	Seq       int64   `json:"seq"`
+}
+
+// MessageThinkingPayload defines model for MessageThinkingPayload.
+type MessageThinkingPayload struct {
+	Addr           string `json:"addr"`
+	ConversationId string `json:"conversation_id"`
+
+	// Delta Streaming reasoning chunk.
+	Delta     string `json:"delta"`
+	MessageId string `json:"message_id"`
+}
+
+// MessageToolCallPayload defines model for MessageToolCallPayload.
+type MessageToolCallPayload struct {
+	Addr string `json:"addr"`
+
+	// Content Truncated result (max 200 chars).
+	Content        string `json:"content"`
+	ConversationId string `json:"conversation_id"`
+	MessageId      string `json:"message_id"`
+	Seq            int64  `json:"seq"`
+	ToolName       string `json:"tool_name"`
+}
+
 // PingPayload Client heartbeat. Sent every 30 seconds.
 type PingPayload = map[string]interface{}
 
@@ -331,6 +552,21 @@ type Project struct {
 	Name       string                  `json:"name"`
 	TemplateId string                  `json:"template_id"`
 	UserId     openapi_types.UUID      `json:"user_id"`
+}
+
+// ProjectCreatedPayload defines model for ProjectCreatedPayload.
+type ProjectCreatedPayload struct {
+	// Id UUID of the project.
+	Id         string `json:"id"`
+	Name       string `json:"name"`
+	Seq        int64  `json:"seq"`
+	TemplateId string `json:"template_id"`
+}
+
+// ProjectDeletedPayload defines model for ProjectDeletedPayload.
+type ProjectDeletedPayload struct {
+	Id  string `json:"id"`
+	Seq int64  `json:"seq"`
 }
 
 // Settings defines model for Settings.
@@ -350,6 +586,25 @@ type SettingsModelTier string
 // SettingsTheme defines model for Settings.Theme.
 type SettingsTheme string
 
+// SettingsChangedPayload defines model for SettingsChangedPayload.
+type SettingsChangedPayload struct {
+	// Changed Fields that were changed.
+	Changed   []string                        `json:"changed"`
+	Locale    SettingsChangedPayloadLocale    `json:"locale"`
+	ModelTier SettingsChangedPayloadModelTier `json:"model_tier"`
+	Seq       int64                           `json:"seq"`
+	Theme     SettingsChangedPayloadTheme     `json:"theme"`
+}
+
+// SettingsChangedPayloadLocale defines model for SettingsChangedPayload.Locale.
+type SettingsChangedPayloadLocale string
+
+// SettingsChangedPayloadModelTier defines model for SettingsChangedPayload.ModelTier.
+type SettingsChangedPayloadModelTier string
+
+// SettingsChangedPayloadTheme defines model for SettingsChangedPayload.Theme.
+type SettingsChangedPayloadTheme string
+
 // Template defines model for Template.
 type Template struct {
 	Description string              `json:"description"`
@@ -364,12 +619,17 @@ type TemplateDifficulty string
 
 // Update defines model for Update.
 type Update struct {
-	// Payload Type-specific entity. Frontend extracts conversation_id from payload to derive topic.
-	Payload map[string]interface{} `json:"payload"`
+	// Payload Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic.
+	Payload Update_Payload `json:"payload"`
 
 	// Seq > 0 = persisted and replayable. 0 = ephemeral (streaming).
 	Seq  int64      `json:"seq"`
 	Type UpdateType `json:"type"`
+}
+
+// Update_Payload Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic.
+type Update_Payload struct {
+	union json.RawMessage
 }
 
 // UpdateType defines model for Update.Type.
@@ -468,6 +728,432 @@ type PutSettingsJSONRequestBody PutSettingsJSONBody
 
 // PostTemplatesIdProjectsJSONRequestBody defines body for PostTemplatesIdProjects for application/json ContentType.
 type PostTemplatesIdProjectsJSONRequestBody = PostTemplatesIdProjectsJSONBody
+
+// AsMessageNewPayload returns the union data inside the Update_Payload as a MessageNewPayload
+func (t Update_Payload) AsMessageNewPayload() (MessageNewPayload, error) {
+	var body MessageNewPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageNewPayload overwrites any union data inside the Update_Payload as the provided MessageNewPayload
+func (t *Update_Payload) FromMessageNewPayload(v MessageNewPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageNewPayload performs a merge with any union data inside the Update_Payload, using the provided MessageNewPayload
+func (t *Update_Payload) MergeMessageNewPayload(v MessageNewPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageDeltaPayload returns the union data inside the Update_Payload as a MessageDeltaPayload
+func (t Update_Payload) AsMessageDeltaPayload() (MessageDeltaPayload, error) {
+	var body MessageDeltaPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageDeltaPayload overwrites any union data inside the Update_Payload as the provided MessageDeltaPayload
+func (t *Update_Payload) FromMessageDeltaPayload(v MessageDeltaPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageDeltaPayload performs a merge with any union data inside the Update_Payload, using the provided MessageDeltaPayload
+func (t *Update_Payload) MergeMessageDeltaPayload(v MessageDeltaPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageDonePayload returns the union data inside the Update_Payload as a MessageDonePayload
+func (t Update_Payload) AsMessageDonePayload() (MessageDonePayload, error) {
+	var body MessageDonePayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageDonePayload overwrites any union data inside the Update_Payload as the provided MessageDonePayload
+func (t *Update_Payload) FromMessageDonePayload(v MessageDonePayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageDonePayload performs a merge with any union data inside the Update_Payload, using the provided MessageDonePayload
+func (t *Update_Payload) MergeMessageDonePayload(v MessageDonePayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageToolCallPayload returns the union data inside the Update_Payload as a MessageToolCallPayload
+func (t Update_Payload) AsMessageToolCallPayload() (MessageToolCallPayload, error) {
+	var body MessageToolCallPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageToolCallPayload overwrites any union data inside the Update_Payload as the provided MessageToolCallPayload
+func (t *Update_Payload) FromMessageToolCallPayload(v MessageToolCallPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageToolCallPayload performs a merge with any union data inside the Update_Payload, using the provided MessageToolCallPayload
+func (t *Update_Payload) MergeMessageToolCallPayload(v MessageToolCallPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageThinkingPayload returns the union data inside the Update_Payload as a MessageThinkingPayload
+func (t Update_Payload) AsMessageThinkingPayload() (MessageThinkingPayload, error) {
+	var body MessageThinkingPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageThinkingPayload overwrites any union data inside the Update_Payload as the provided MessageThinkingPayload
+func (t *Update_Payload) FromMessageThinkingPayload(v MessageThinkingPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageThinkingPayload performs a merge with any union data inside the Update_Payload, using the provided MessageThinkingPayload
+func (t *Update_Payload) MergeMessageThinkingPayload(v MessageThinkingPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageErrorPayload returns the union data inside the Update_Payload as a MessageErrorPayload
+func (t Update_Payload) AsMessageErrorPayload() (MessageErrorPayload, error) {
+	var body MessageErrorPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageErrorPayload overwrites any union data inside the Update_Payload as the provided MessageErrorPayload
+func (t *Update_Payload) FromMessageErrorPayload(v MessageErrorPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageErrorPayload performs a merge with any union data inside the Update_Payload, using the provided MessageErrorPayload
+func (t *Update_Payload) MergeMessageErrorPayload(v MessageErrorPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMessageStopPayload returns the union data inside the Update_Payload as a MessageStopPayload
+func (t Update_Payload) AsMessageStopPayload() (MessageStopPayload, error) {
+	var body MessageStopPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMessageStopPayload overwrites any union data inside the Update_Payload as the provided MessageStopPayload
+func (t *Update_Payload) FromMessageStopPayload(v MessageStopPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMessageStopPayload performs a merge with any union data inside the Update_Payload, using the provided MessageStopPayload
+func (t *Update_Payload) MergeMessageStopPayload(v MessageStopPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConversationCreatedPayload returns the union data inside the Update_Payload as a ConversationCreatedPayload
+func (t Update_Payload) AsConversationCreatedPayload() (ConversationCreatedPayload, error) {
+	var body ConversationCreatedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConversationCreatedPayload overwrites any union data inside the Update_Payload as the provided ConversationCreatedPayload
+func (t *Update_Payload) FromConversationCreatedPayload(v ConversationCreatedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConversationCreatedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCreatedPayload
+func (t *Update_Payload) MergeConversationCreatedPayload(v ConversationCreatedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConversationDeletedPayload returns the union data inside the Update_Payload as a ConversationDeletedPayload
+func (t Update_Payload) AsConversationDeletedPayload() (ConversationDeletedPayload, error) {
+	var body ConversationDeletedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConversationDeletedPayload overwrites any union data inside the Update_Payload as the provided ConversationDeletedPayload
+func (t *Update_Payload) FromConversationDeletedPayload(v ConversationDeletedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConversationDeletedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationDeletedPayload
+func (t *Update_Payload) MergeConversationDeletedPayload(v ConversationDeletedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConversationCompactingPayload returns the union data inside the Update_Payload as a ConversationCompactingPayload
+func (t Update_Payload) AsConversationCompactingPayload() (ConversationCompactingPayload, error) {
+	var body ConversationCompactingPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConversationCompactingPayload overwrites any union data inside the Update_Payload as the provided ConversationCompactingPayload
+func (t *Update_Payload) FromConversationCompactingPayload(v ConversationCompactingPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConversationCompactingPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCompactingPayload
+func (t *Update_Payload) MergeConversationCompactingPayload(v ConversationCompactingPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConversationCompactedPayload returns the union data inside the Update_Payload as a ConversationCompactedPayload
+func (t Update_Payload) AsConversationCompactedPayload() (ConversationCompactedPayload, error) {
+	var body ConversationCompactedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConversationCompactedPayload overwrites any union data inside the Update_Payload as the provided ConversationCompactedPayload
+func (t *Update_Payload) FromConversationCompactedPayload(v ConversationCompactedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConversationCompactedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCompactedPayload
+func (t *Update_Payload) MergeConversationCompactedPayload(v ConversationCompactedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConversationArchivedPayload returns the union data inside the Update_Payload as a ConversationArchivedPayload
+func (t Update_Payload) AsConversationArchivedPayload() (ConversationArchivedPayload, error) {
+	var body ConversationArchivedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConversationArchivedPayload overwrites any union data inside the Update_Payload as the provided ConversationArchivedPayload
+func (t *Update_Payload) FromConversationArchivedPayload(v ConversationArchivedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConversationArchivedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationArchivedPayload
+func (t *Update_Payload) MergeConversationArchivedPayload(v ConversationArchivedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProjectCreatedPayload returns the union data inside the Update_Payload as a ProjectCreatedPayload
+func (t Update_Payload) AsProjectCreatedPayload() (ProjectCreatedPayload, error) {
+	var body ProjectCreatedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProjectCreatedPayload overwrites any union data inside the Update_Payload as the provided ProjectCreatedPayload
+func (t *Update_Payload) FromProjectCreatedPayload(v ProjectCreatedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProjectCreatedPayload performs a merge with any union data inside the Update_Payload, using the provided ProjectCreatedPayload
+func (t *Update_Payload) MergeProjectCreatedPayload(v ProjectCreatedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProjectDeletedPayload returns the union data inside the Update_Payload as a ProjectDeletedPayload
+func (t Update_Payload) AsProjectDeletedPayload() (ProjectDeletedPayload, error) {
+	var body ProjectDeletedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProjectDeletedPayload overwrites any union data inside the Update_Payload as the provided ProjectDeletedPayload
+func (t *Update_Payload) FromProjectDeletedPayload(v ProjectDeletedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProjectDeletedPayload performs a merge with any union data inside the Update_Payload, using the provided ProjectDeletedPayload
+func (t *Update_Payload) MergeProjectDeletedPayload(v ProjectDeletedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSettingsChangedPayload returns the union data inside the Update_Payload as a SettingsChangedPayload
+func (t Update_Payload) AsSettingsChangedPayload() (SettingsChangedPayload, error) {
+	var body SettingsChangedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSettingsChangedPayload overwrites any union data inside the Update_Payload as the provided SettingsChangedPayload
+func (t *Update_Payload) FromSettingsChangedPayload(v SettingsChangedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSettingsChangedPayload performs a merge with any union data inside the Update_Payload, using the provided SettingsChangedPayload
+func (t *Update_Payload) MergeSettingsChangedPayload(v SettingsChangedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEmptyPayload returns the union data inside the Update_Payload as a EmptyPayload
+func (t Update_Payload) AsEmptyPayload() (EmptyPayload, error) {
+	var body EmptyPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEmptyPayload overwrites any union data inside the Update_Payload as the provided EmptyPayload
+func (t *Update_Payload) FromEmptyPayload(v EmptyPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEmptyPayload performs a merge with any union data inside the Update_Payload, using the provided EmptyPayload
+func (t *Update_Payload) MergeEmptyPayload(v EmptyPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Update_Payload) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Update_Payload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsConnectedPayload returns the union data inside the WSServerFrame_Payload as a ConnectedPayload
 func (t WSServerFrame_Payload) AsConnectedPayload() (ConnectedPayload, error) {

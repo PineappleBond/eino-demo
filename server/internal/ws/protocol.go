@@ -1,6 +1,10 @@
 package ws
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
+)
 
 // FrameType identifies WebSocket frame types.
 type FrameType string
@@ -36,9 +40,6 @@ func (f ServerFrame) MarshalJSON() ([]byte, error) {
 	return json.Marshal(Alias(f))
 }
 
-// Update represents a single Update event (matches the OpenAPI Update schema).
-type Update struct {
-	Seq     int64          `json:"seq"`
-	Type    string         `json:"type"`
-	Payload map[string]any `json:"payload"`
-}
+// Update is an alias to the generated types.Update.
+// All Update events use the OpenAPI-generated type for consistency.
+type Update = types.Update

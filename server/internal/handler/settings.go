@@ -43,11 +43,7 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 			svcReq,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
-				wsUpdate := ws.Update{
-					Seq:     update.Seq,
-					Type:    update.Type,
-					Payload: update.Payload,
-				}
+				wsUpdate := convert.ToUpdate(update)
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		)

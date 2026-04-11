@@ -49,7 +49,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get current user */
+        /** Get current user (with embedded settings) */
         get: {
             parameters: {
                 query?: never;
@@ -59,13 +59,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Current user */
+                /** @description Current user with settings */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["User"];
+                        "application/json": components["schemas"]["MeResponse"];
                     };
                 };
             };
@@ -779,6 +779,14 @@ export interface components {
             /** Format: date-time */
             created_at?: string;
         };
+        MeResponse: {
+            /** Format: uuid */
+            id: string;
+            name?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+            settings: components["schemas"]["Settings"];
+        };
         Template: {
             id: string;
             name: string;
@@ -882,6 +890,135 @@ export interface components {
             /** @description Server's current highest seq for this user. */
             max_seq: number;
         };
+        /** @description Seq gap filler. No data. */
+        EmptyPayload: Record<string, never>;
+        MessageNewPayload: {
+            /** @description UUID of the conversation. */
+            conversation_id: string;
+            /** @description UUID of the message. */
+            message_id: string;
+            /** Format: int64 */
+            seq: number;
+            /** @enum {string} */
+            role: "user" | "assistant" | "system" | "tool";
+            sender_id: string;
+            /** @description Eino callback address string. */
+            addr: string;
+            /** @description Only present when role is "tool". */
+            tool_name?: string;
+        };
+        MessageDeltaPayload: {
+            conversation_id: string;
+            message_id: string;
+            /** @description Streaming text chunk. */
+            delta: string;
+            addr: string;
+        };
+        MessageDonePayload: {
+            conversation_id: string;
+            message_id: string;
+            role: string;
+            sender_id: string;
+            /** @description Full final content. */
+            content: string;
+            /** @description Full reasoning content. */
+            reasoning_content: string;
+            addr: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        MessageToolCallPayload: {
+            conversation_id: string;
+            message_id: string;
+            tool_name: string;
+            /** @description Truncated result (max 200 chars). */
+            content: string;
+            /** Format: int64 */
+            seq: number;
+            addr: string;
+        };
+        MessageThinkingPayload: {
+            conversation_id: string;
+            message_id: string;
+            /** @description Streaming reasoning chunk. */
+            delta: string;
+            addr: string;
+        };
+        MessageErrorPayload: {
+            conversation_id: string;
+            error: string;
+            /** Format: int64 */
+            seq: number;
+            /** @description UUID of the interrupted message (optional). */
+            message_id?: string;
+            /** @description Checkpoint ID for interrupt/resume (optional). */
+            checkpoint_id?: string;
+        };
+        MessageStopPayload: {
+            conversation_id: string;
+            /** Format: int64 */
+            seq: number;
+            /** @description UUID of the stopped message (optional). */
+            message_id?: string;
+        };
+        ConversationCreatedPayload: {
+            /** @description UUID of the conversation. */
+            id: string;
+            /** @description UUID of the project. */
+            project_id: string;
+            title?: string;
+            status?: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ConversationDeletedPayload: {
+            id: string;
+            project_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ConversationCompactingPayload: {
+            conversation_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ConversationCompactedPayload: {
+            old_conv_id: string;
+            new_conv_id: string;
+            project_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ConversationArchivedPayload: {
+            conversation_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ProjectCreatedPayload: {
+            /** @description UUID of the project. */
+            id: string;
+            template_id: string;
+            name: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        ProjectDeletedPayload: {
+            id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        SettingsChangedPayload: {
+            /** Format: int64 */
+            seq: number;
+            /** @enum {string} */
+            model_tier: "haiku" | "sonnet" | "opus";
+            /** @enum {string} */
+            locale: "en" | "zh";
+            /** @enum {string} */
+            theme: "light" | "dark";
+            /** @description Fields that were changed. */
+            changed: string[];
+        };
         Update: {
             /**
              * Format: int64
@@ -890,8 +1027,8 @@ export interface components {
             seq: number;
             /** @enum {string} */
             type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.deleted" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
-            /** @description Type-specific entity. Frontend extracts conversation_id from payload to derive topic. */
-            payload: Record<string, never>;
+            /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
+            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
         };
     };
     responses: never;

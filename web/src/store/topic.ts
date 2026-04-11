@@ -1,12 +1,42 @@
+import type { components } from '@/types/api';
+
+/**
+ * Union of all Update payload types.
+ */
+export type UpdatePayload =
+  | components['schemas']['MessageNewPayload']
+  | components['schemas']['MessageDeltaPayload']
+  | components['schemas']['MessageDonePayload']
+  | components['schemas']['MessageToolCallPayload']
+  | components['schemas']['MessageThinkingPayload']
+  | components['schemas']['MessageErrorPayload']
+  | components['schemas']['MessageStopPayload']
+  | components['schemas']['ConversationCreatedPayload']
+  | components['schemas']['ConversationDeletedPayload']
+  | components['schemas']['ConversationCompactingPayload']
+  | components['schemas']['ConversationCompactedPayload']
+  | components['schemas']['ConversationArchivedPayload']
+  | components['schemas']['ProjectCreatedPayload']
+  | components['schemas']['ProjectDeletedPayload']
+  | components['schemas']['SettingsChangedPayload']
+  | components['schemas']['EmptyPayload'];
+
 /**
  * Derive topic from Update payload.
  * Backend has no topic concept — frontend extracts from payload fields.
  */
-export function deriveTopic(payload: Record<string, unknown>): string {
-  if (payload.conversation_id) {
+export function deriveTopic(payload: UpdatePayload): string {
+  if ('conversation_id' in payload && typeof payload.conversation_id === 'string') {
     return `conv:${payload.conversation_id}`;
   }
-  if (payload.project_id) {
+  // conversation.compacted uses old_conv_id / new_conv_id
+  if ('new_conv_id' in payload && typeof payload.new_conv_id === 'string') {
+    return `conv:${payload.new_conv_id}`;
+  }
+  if ('old_conv_id' in payload && typeof payload.old_conv_id === 'string') {
+    return `conv:${payload.old_conv_id}`;
+  }
+  if ('project_id' in payload && typeof payload.project_id === 'string') {
     return `project:${payload.project_id}`;
   }
   return 'system';

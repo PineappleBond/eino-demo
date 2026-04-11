@@ -39,31 +39,25 @@ type RunCallbackConfig struct {
 
 // msgTracker tracks a single message being streamed or written.
 type msgTracker struct {
-	addr         string
-	role         string // "assistant" or "tool"
-	toolName     string // only for tool messages
-	senderID     string // agent name or tool name
-	completed    bool
+	addr      string
+	role      string // "assistant" or "tool"
+	toolName  string // only for tool messages
+	senderID  string // agent name or tool name
+	completed bool
 
 	msgID uuid.UUID
 	seq   int64
 
-	content  strings.Builder
-	reason   strings.Builder
+	content strings.Builder
+	reason  strings.Builder
 }
 
 // RootRunnerCallbacks implements RootRunnerCallback. It bridges Eino callbacks
 // to WebSocket Update events and persists messages/checkpoints to PostgreSQL in real time.
 type RootRunnerCallbacks struct {
 	cfg      RunCallbackConfig
-	mu       sync.Mutex // guards trackers map and DB writes
-	trackers map[string]*msgTracker // keyed by addr string (tool messages only)
-
-	// activeAssistantTracker ensures reasoning and content phases of the same
-	// assistant response share one tracker, even if compose.Address changes
-	// between OnThinking/OnOutputting/OnCompleted callbacks.
-	activeAssistantTracker *msgTracker
-	lastAssistantTracker   *msgTracker // most recent completed tracker (for stop/error)
+	mu       sync.Mutex             // guards trackers map and DB writes
+	trackers map[string]*msgTracker // keyed by addr string (tool messages) or "assistant"
 }
 
 // NewRootRunnerCallbacks creates a callback handler for one agent run.
@@ -108,12 +102,7 @@ func (c *RootRunnerCallbacks) Stop() {
 		}
 	}
 
-	// Push message.stop update for the last active assistant message
-	target := c.lastAssistantTracker
-	if target == nil {
-		target = c.activeAssistantTracker
-	}
-
+	// Push message.stop update for the assistant message
 	seq, err := c.cfg.NextSeq(c.cfg.ParentCtx, c.cfg.UserID)
 	if err != nil {
 		c.cfg.Log.Error("seq assignment failed for stop", zap.Error(err))
@@ -124,8 +113,11 @@ func (c *RootRunnerCallbacks) Stop() {
 		"conversation_id": c.cfg.ConversationID.String(),
 		"seq":             seq,
 	}
-	if target != nil {
-		payload["message_id"] = target.msgID.String()
+	for _, t := range c.trackers {
+		if t.role == "assistant" {
+			payload["message_id"] = t.msgID.String()
+			break
+		}
 	}
 
 	update := model.UserUpdate{
@@ -143,10 +135,9 @@ func (c *RootRunnerCallbacks) Stop() {
 
 // getOrCreateTracker returns the tracker for this addr.
 // If the existing tracker is completed, a new one is created.
-// Used only for tool messages — assistant messages use activeAssistantTracker.
 func (c *RootRunnerCallbacks) getOrCreateTracker(addrStr string, role string, toolName string) *msgTracker {
 	t, ok := c.trackers[addrStr]
-	if ok && !t.completed {
+	if ok {
 		return t
 	}
 
@@ -163,14 +154,11 @@ func (c *RootRunnerCallbacks) getOrCreateTracker(addrStr string, role string, to
 	return t
 }
 
-// getOrCreateAssistantTracker returns the active assistant tracker, creating one if needed.
-// This ensures all phases (thinking, outputting, completed) of the same assistant response
-// share a single tracker and produce a single message row.
+// getOrCreateAssistantTracker returns or creates a tracker for this addr.
+// If the addr's tracker is already completed, a new one is created (for a new response).
 func (c *RootRunnerCallbacks) getOrCreateAssistantTracker(addrStr string) *msgTracker {
-	t := c.activeAssistantTracker
-	if t != nil && !t.completed {
-		// Reuse existing tracker, update addr in case it changed
-		t.addr = addrStr
+	t, ok := c.trackers[addrStr]
+	if ok {
 		return t
 	}
 
@@ -179,8 +167,19 @@ func (c *RootRunnerCallbacks) getOrCreateAssistantTracker(addrStr string) *msgTr
 		role:     "assistant",
 		senderID: "agent:root",
 	}
-	c.activeAssistantTracker = t
+	c.trackers[addrStr] = t
 	return t
+}
+
+// findIncompleteAssistant returns any incomplete assistant tracker, regardless of addr.
+// This prevents creating multiple assistant messages when addr changes between callbacks.
+func (c *RootRunnerCallbacks) findIncompleteAssistant() *msgTracker {
+	for _, t := range c.trackers {
+		if t.role == "assistant" && t.msgID == uuid.Nil {
+			return t
+		}
+	}
+	return nil
 }
 
 // insertMessage creates a message in DB and assigns seq.
@@ -258,7 +257,7 @@ func (c *RootRunnerCallbacks) completeMessage(ctx context.Context, t *msgTracker
 	finishReason := "stop"
 
 	updates := map[string]interface{}{
-		"content":       content,
+		"content":        content,
 		"reason_content": reasonContent,
 		"finish_reason":  finishReason,
 	}
@@ -282,14 +281,14 @@ func (c *RootRunnerCallbacks) completeMessage(ctx context.Context, t *msgTracker
 			Seq:    seq,
 			Type:   "message.done",
 			Payload: model.JSONMap{
-				"conversation_id":  c.cfg.ConversationID.String(),
-				"message_id":       t.msgID.String(),
-				"role":             t.role,
-				"sender_id":        t.senderID,
-				"content":          content,
+				"conversation_id":   c.cfg.ConversationID.String(),
+				"message_id":        t.msgID.String(),
+				"role":              t.role,
+				"sender_id":         t.senderID,
+				"content":           content,
 				"reasoning_content": reasonContent,
-				"addr":             t.addr,
-				"seq":              seq,
+				"addr":              t.addr,
+				"seq":               seq,
 			},
 		}
 		if err := c.cfg.DB.WithContext(ctx).Create(&update).Error; err != nil {
@@ -347,7 +346,7 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 	c.cfg.DB.WithContext(ctx).Model(&model.Message{}).
 		Where("id = ?", t.msgID).
 		Updates(map[string]interface{}{
-			"content":       resultStr,
+			"content":        resultStr,
 			"reason_content": "",
 			"finish_reason":  finishReason,
 		})
@@ -379,6 +378,30 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 	c.cfg.PushUpdate(c.cfg.UserID, update)
 }
 
+// ensureAssistantMessage returns the assistant tracker for this run,
+// creating the tracker and inserting the message in DB if it doesn't exist yet.
+// The tracker's msgID is set before this returns, so callers can include it
+// in streaming delta payloads.
+//
+// It first checks for any existing incomplete assistant tracker (regardless of
+// addr) to avoid creating multiple messages when the callback address changes
+// between OnThinking and OnOutputting.
+func (c *RootRunnerCallbacks) ensureAssistantMessage(ctx context.Context, addrStr string) *msgTracker {
+	// Reuse any incomplete assistant tracker first
+	if existing := c.findIncompleteAssistant(); existing != nil {
+		return existing
+	}
+
+	t := c.getOrCreateAssistantTracker(addrStr)
+	if t.msgID == uuid.Nil {
+		if err := c.insertMessage(ctx, t, "", ""); err != nil {
+			c.cfg.Log.Error("failed to insert assistant message", zap.Error(err))
+			return nil
+		}
+	}
+	return t
+}
+
 func (c *RootRunnerCallbacks) OnThinking(ctx context.Context, role schema.RoleType, addr compose.Address, reasoningContent string) {
 	addrStr := AddrString(addr)
 	c.cfg.Log.Debug("thinking",
@@ -389,32 +412,29 @@ func (c *RootRunnerCallbacks) OnThinking(ctx context.Context, role schema.RoleTy
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Push streaming delta first (real-time, seq=0)
+	// Ensure message exists first so we have a message_id for the delta
+	t := c.ensureAssistantMessage(ctx, addrStr)
+	if t == nil {
+		return
+	}
+
+	// Push streaming delta with message_id for frontend routing
 	update := model.UserUpdate{
 		UserID: c.cfg.UserID,
 		Seq:    0,
 		Type:   "message.thinking",
 		Payload: model.JSONMap{
 			"conversation_id": c.cfg.ConversationID.String(),
+			"message_id":      t.msgID.String(),
 			"delta":           reasoningContent,
 			"addr":            addrStr,
 		},
 	}
 	c.cfg.PushUpdate(c.cfg.UserID, update)
 
-	// Use shared tracker for this assistant response — reasoning and content
-	// phases will share the same tracker/message even if addr changes.
-	t := c.getOrCreateAssistantTracker(addrStr)
-	if t.msgID == uuid.Nil {
-		if err := c.insertMessage(ctx, t, "", reasoningContent); err != nil {
-			c.cfg.Log.Error("failed to insert assistant message", zap.Error(err))
-			return
-		}
-	} else {
-		t.reason.WriteString(reasoningContent)
-		c.updateMessage(ctx, t, "", t.reason.String())
-	}
-	c.lastAssistantTracker = t
+	// Accumulate reasoning on the tracker
+	t.reason.WriteString(reasoningContent)
+	c.updateMessage(ctx, t, "", t.reason.String())
 }
 
 func (c *RootRunnerCallbacks) OnOutputting(ctx context.Context, role schema.RoleType, addr compose.Address, content string) {
@@ -427,31 +447,29 @@ func (c *RootRunnerCallbacks) OnOutputting(ctx context.Context, role schema.Role
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Push streaming delta first (real-time, seq=0)
+	// Ensure message exists first so we have a message_id for the delta
+	t := c.ensureAssistantMessage(ctx, addrStr)
+	if t == nil {
+		return
+	}
+
+	// Push streaming delta with message_id for frontend routing
 	update := model.UserUpdate{
 		UserID: c.cfg.UserID,
 		Seq:    0,
 		Type:   "message.delta",
 		Payload: model.JSONMap{
 			"conversation_id": c.cfg.ConversationID.String(),
+			"message_id":      t.msgID.String(),
 			"delta":           content,
 			"addr":            addrStr,
 		},
 	}
 	c.cfg.PushUpdate(c.cfg.UserID, update)
 
-	// Use shared tracker — same message as OnThinking.
-	t := c.getOrCreateAssistantTracker(addrStr)
-	if t.msgID == uuid.Nil {
-		if err := c.insertMessage(ctx, t, content, ""); err != nil {
-			c.cfg.Log.Error("failed to insert assistant message", zap.Error(err))
-			return
-		}
-	} else {
-		t.content.WriteString(content)
-		c.updateMessage(ctx, t, t.content.String(), "")
-	}
-	c.lastAssistantTracker = t
+	// Accumulate content on the tracker
+	t.content.WriteString(content)
+	c.updateMessage(ctx, t, t.content.String(), "")
 }
 
 func (c *RootRunnerCallbacks) OnCompleted(ctx context.Context, role schema.RoleType, addr compose.Address, reasoningContent string, outputContent string, usage *schema.TokenUsage) {
@@ -474,8 +492,6 @@ func (c *RootRunnerCallbacks) OnCompleted(ctx context.Context, role schema.RoleT
 	}
 
 	c.completeMessage(ctx, t, outputContent, reasoningContent, usage)
-	c.lastAssistantTracker = t
-	c.activeAssistantTracker = nil // next response gets a fresh tracker
 }
 
 // ---- RootRunnerCallback lifecycle methods ----
@@ -499,8 +515,11 @@ func (c *RootRunnerCallbacks) OnError(err error) {
 		"error":           err.Error(),
 		"seq":             seq,
 	}
-	if c.lastAssistantTracker != nil {
-		payload["message_id"] = c.lastAssistantTracker.msgID.String()
+	for _, t := range c.trackers {
+		if t.role == "assistant" {
+			payload["message_id"] = t.msgID.String()
+			break
+		}
 	}
 
 	update := model.UserUpdate{
@@ -574,8 +593,11 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		"checkpoint_id":   checkpointID,
 		"seq":             seq,
 	}
-	if c.lastAssistantTracker != nil {
-		payload["message_id"] = c.lastAssistantTracker.msgID.String()
+	for _, t := range c.trackers {
+		if t.role == "assistant" {
+			payload["message_id"] = t.msgID.String()
+			break
+		}
 	}
 
 	update := model.UserUpdate{

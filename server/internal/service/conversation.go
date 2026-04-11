@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -136,8 +137,14 @@ func (s *ConversationService) GetConversation(userID, conversationID uuid.UUID) 
 	return &conversation, nil
 }
 
-// ListMembers returns all members of a conversation.
-func (s *ConversationService) ListMembers(conversationID uuid.UUID) ([]model.ConversationMember, error) {
+// ListMembers returns all members of a conversation, scoped to user.
+func (s *ConversationService) ListMembers(userID, conversationID uuid.UUID) ([]model.ConversationMember, error) {
+	// Verify the conversation belongs to the user
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found")
+	}
+
 	var members []model.ConversationMember
 	if err := s.db.Where("conversation_id = ?", conversationID).Order("is_owner DESC").Find(&members).Error; err != nil {
 		return nil, err
@@ -145,7 +152,134 @@ func (s *ConversationService) ListMembers(conversationID uuid.UUID) ([]model.Con
 	return members, nil
 }
 
-// DeleteConversation deletes a conversation and its messages (CASCADE).
+// CompactConversation summarizes a conversation and emits compacting/compacted updates.
+// Creates a new conversation with the summary and marks the old one as compacted.
+func (s *ConversationService) CompactConversation(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found")
+	}
+
+	// 2. Allocate seq for compacting event
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	// 3. Emit conversation.compacting
+	compactingUpdate := model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.compacting",
+		Payload: model.JSONMap{
+			"conversation_id": conversationID.String(),
+			"seq":             seq,
+		},
+	}
+	if err := s.db.WithContext(ctx).Create(&compactingUpdate).Error; err != nil {
+		s.log.Error("failed to persist compacting update", zap.Error(err))
+	}
+	pushUpdate(userID, compactingUpdate)
+
+	// 4. Fetch messages for summarization (caller should handle actual LLM summarization)
+	var messages []model.Message
+	if err := s.db.Where("conversation_id = ?", conversationID).
+		Order("seq ASC").Find(&messages).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch messages: %w", err)
+	}
+
+	// Build summary from messages
+	var summary strings.Builder
+	for _, m := range messages {
+		if m.SenderRole == "user" {
+			summary.WriteString("User: " + m.Content + "\n")
+		} else if m.SenderRole == "assistant" {
+			summary.WriteString("Assistant: " + m.Content + "\n")
+		}
+	}
+
+	// 5. Mark old conversation as compacted
+	compactedSeq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	var newConv *model.Conversation
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Update old conversation status
+		if err := tx.Model(&conv).Updates(map[string]interface{}{
+			"status":  "compacted",
+			"summary": summary.String(),
+		}).Error; err != nil {
+			return err
+		}
+
+		// Create new conversation with summary as first message
+		newConv = &model.Conversation{
+			ProjectID: conv.ProjectID,
+			UserID:    userID,
+			Title:     "Continued from: " + conv.Title,
+			Status:    "active",
+		}
+		if err := tx.Create(newConv).Error; err != nil {
+			return err
+		}
+
+		// Add user as member
+		member := model.ConversationMember{
+			ConversationID: newConv.ID,
+			MemberType:     "user",
+			MemberID:       userID.String(),
+			MemberName:     "User",
+			IsOwner:        true,
+		}
+		if err := tx.Create(&member).Error; err != nil {
+			return err
+		}
+
+		// Emit conversation.compacted
+		compactedUpdate := model.UserUpdate{
+			UserID: userID,
+			Seq:    compactedSeq,
+			Type:   "conversation.compacted",
+			Payload: model.JSONMap{
+				"old_conv_id": conversationID.String(),
+				"new_conv_id": newConv.ID.String(),
+				"project_id":  conv.ProjectID.String(),
+				"seq":         compactedSeq,
+			},
+		}
+		if err := tx.Create(&compactedUpdate).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, model.UserUpdate{
+		UserID: userID,
+		Seq:    compactedSeq,
+		Type:   "conversation.compacted",
+		Payload: model.JSONMap{
+			"old_conv_id": conversationID.String(),
+			"new_conv_id": newConv.ID.String(),
+			"project_id":  conv.ProjectID.String(),
+			"seq":         compactedSeq,
+		},
+	})
+
+	return newConv, nil
+}
 func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUID) error {
 	result := s.db.Where("id = ? AND user_id = ?", conversationID, userID).Delete(&model.Conversation{})
 	if result.Error != nil {

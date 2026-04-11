@@ -47,11 +47,13 @@ export function WSProvider({ children }: { children: ReactNode }) {
       );
       if (res.ok) {
         const data = await res.json() as { updates: unknown[]; max_seq?: number };
-        if (data.max_seq !== undefined) {
-          await setLatestSeq(data.max_seq);
-        }
+        // Apply updates FIRST — setLatestSeq happens inside applyUpdates on success
         if (data.updates?.length > 0) {
           dispatcher.applyUpdates(data.updates as never);
+        }
+        // Ensure cursor is set even if applyUpdates skips due to gap
+        if (data.max_seq !== undefined) {
+          await setLatestSeq(data.max_seq);
         }
       }
     } catch (err) {
@@ -94,11 +96,11 @@ export function WSProvider({ children }: { children: ReactNode }) {
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.max_seq !== undefined) {
-            await setLatestSeq(data.max_seq);
-          }
           if (data.updates?.length > 0) {
             dispatcher.applyUpdates(data.updates);
+          }
+          if (data.max_seq !== undefined) {
+            await setLatestSeq(data.max_seq);
           }
           pollBackoffRef.current = 5000;
         } else {
@@ -157,6 +159,12 @@ export function WSProvider({ children }: { children: ReactNode }) {
           const maxSeq = frame.payload?.max_seq as number | undefined;
           if (maxSeq !== undefined) {
             dispatcher.setMaxServerSeq(maxSeq);
+            // If local seq is behind server, trigger gap recovery
+            getLatestSeq().then((localSeq) => {
+              if (maxSeq > localSeq) {
+                pullMissingUpdates(localSeq);
+              }
+            });
           }
         }
       } catch {

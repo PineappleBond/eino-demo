@@ -25,16 +25,15 @@ func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm
 			return
 		}
 		createdAt := user.CreatedAt
-		var name *string
-		if user.Name != "" {
-			name = &user.Name
+		resp := convert.MeResponse{
+			ID:       user.ID,
+			Settings: convert.ToSettings(*settings),
 		}
-		respondJSON(c, http.StatusOK, convert.MeResponse{
-			ID:        user.ID,
-			Name:      name,
-			CreatedAt: &createdAt,
-			Settings:  convert.ToSettings(*settings),
-		})
+		if user.Name != "" {
+			resp.Name = &user.Name
+		}
+		resp.CreatedAt = &createdAt
+		respondJSON(c, http.StatusOK, resp)
 	})
 
 	// Offline polling endpoint: GET /api/v1/users/me/updates?last_seq=N
@@ -68,7 +67,7 @@ func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm
 				result = append(result, types.Update{
 					Seq:     expectedSeq,
 					Type:    types.Empty,
-					Payload: map[string]interface{}{},
+					Payload: convert.ToUpdatePayload(model.JSONMap{}),
 				})
 				expectedSeq++
 			}

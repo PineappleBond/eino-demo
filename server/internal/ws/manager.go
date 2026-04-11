@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -14,10 +15,12 @@ import (
 
 // Manager handles per-user WebSocket connections and seq-based update delivery.
 type Manager struct {
-	mu    sync.RWMutex
-	conns map[uuid.UUID][]*wsConn // user_id → connections
-	rdb   *redis.Client
-	log   *zap.Logger
+	mu            sync.RWMutex
+	conns         map[uuid.UUID][]*wsConn // user_id → connections
+	maxConnsTotal int                     // global connection limit (0 = unlimited)
+	connsTotal    int                     // current total connections across all users
+	rdb           *redis.Client
+	log           *zap.Logger
 }
 
 type wsConn struct {
@@ -26,33 +29,55 @@ type wsConn struct {
 	userID uuid.UUID
 }
 
+// ManagerConfig holds configuration for the WebSocket manager.
+type ManagerConfig struct {
+	// MaxConnsTotal limits the total number of concurrent WebSocket connections.
+	// 0 means no limit. Default is 10000.
+	MaxConnsTotal int
+}
+
 // NewManager creates a connection manager.
 func NewManager(rdb *redis.Client, log *zap.Logger) *Manager {
+	return NewManagerWithConfig(rdb, log, nil)
+}
+
+// NewManagerWithConfig creates a connection manager with custom config.
+func NewManagerWithConfig(rdb *redis.Client, log *zap.Logger, cfg *ManagerConfig) *Manager {
+	maxConns := 10000
+	if cfg != nil && cfg.MaxConnsTotal > 0 {
+		maxConns = cfg.MaxConnsTotal
+	}
 	return &Manager{
-		conns: make(map[uuid.UUID][]*wsConn),
-		rdb:   rdb,
-		log:   log,
+		conns:         make(map[uuid.UUID][]*wsConn),
+		maxConnsTotal: maxConns,
+		rdb:           rdb,
+		log:           log,
 	}
 }
 
 // AddConnection registers a new WebSocket for a user and starts read/write loops.
 // connCtx is a per-connection context. connCancel is called by readLoop on all exit paths
 // to signal ServeHTTP that the connection is done.
-func (m *Manager) AddConnection(connCtx context.Context, userID uuid.UUID, conn *websocket.Conn, connCancel context.CancelFunc) {
+func (m *Manager) AddConnection(connCtx context.Context, userID uuid.UUID, conn *websocket.Conn, connCancel context.CancelFunc) error {
+	m.mu.Lock()
+	if m.maxConnsTotal > 0 && m.connsTotal >= m.maxConnsTotal {
+		m.mu.Unlock()
+		m.log.Warn("ws: connection limit reached", zap.Int("max", m.maxConnsTotal))
+		return fmt.Errorf("connection limit reached")
+	}
+	m.connsTotal++
 	wc := &wsConn{
 		conn:   conn,
 		send:   make(chan []byte, 256),
 		userID: userID,
 	}
-
-	m.mu.Lock()
 	m.conns[userID] = append(m.conns[userID], wc)
 	m.mu.Unlock()
 
 	// Start read/write loops with the per-connection context.
-	// When connCtx is cancelled (reconnect kick or heartbeat timeout), both loops exit cleanly.
 	go m.writeLoop(connCtx, wc)
 	go m.readLoop(connCtx, wc, connCancel)
+	return nil
 }
 
 // PushToUserConnections broadcasts an Update to all connections for a user.
@@ -201,6 +226,7 @@ func (m *Manager) RemoveConnection(userID uuid.UUID, wc *wsConn) {
 			if len(m.conns[userID]) == 0 {
 				delete(m.conns, userID)
 			}
+			m.connsTotal--
 			return
 		}
 	}

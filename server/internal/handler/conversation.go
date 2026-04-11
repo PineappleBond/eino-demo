@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -47,8 +48,13 @@ func RegisterConversationRoutes(
 		}
 		var req types.PostProjectsIdConversationsJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
-			// Allow empty body — use defaults
-			req = types.PostProjectsIdConversationsJSONBody{}
+			if err == io.EOF {
+				// Empty body — use defaults
+				req = types.PostProjectsIdConversationsJSONBody{}
+			} else {
+				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
+				return
+			}
 		}
 		svcReq := service.CreateConversationRequest{
 			Title: valueOrZero(req.Title),
@@ -60,11 +66,7 @@ func RegisterConversationRoutes(
 			svcReq,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
-				wsUpdate := ws.Update{
-					Seq:     update.Seq,
-					Type:    update.Type,
-					Payload: update.Payload,
-				}
+				wsUpdate := convert.ToUpdate(update)
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		)
@@ -88,11 +90,7 @@ func RegisterConversationRoutes(
 			conversationID,
 			wsManager.NextSeq,
 			func(userID uuid.UUID, update model.UserUpdate) {
-				wsUpdate := ws.Update{
-					Seq:     update.Seq,
-					Type:    update.Type,
-					Payload: update.Payload,
-				}
+				wsUpdate := convert.ToUpdate(update)
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		); err != nil {
@@ -104,12 +102,13 @@ func RegisterConversationRoutes(
 
 	// List conversation members
 	api.GET("/conversations/:id/members", func(c *gin.Context) {
+		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
-		members, err := svc.ListMembers(conversationID)
+		members, err := svc.ListMembers(userID, conversationID)
 		if err != nil {
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list members")
 			return

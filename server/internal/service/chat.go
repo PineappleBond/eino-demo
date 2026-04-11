@@ -101,6 +101,7 @@ func (s *ChatService) CompleteSendMessage(
 			SenderID:       userID.String(),
 			Content:        req.Content,
 			Metadata:       model.JSONMap{},
+			Seq:            seq,
 		}
 		if err := tx.Create(&msg).Error; err != nil {
 			return err
@@ -245,18 +246,18 @@ func (s *ChatService) runAgent(
 	checkpointID, hasCheckpoint := s.runSessionMgr.GetCheckpointID(conversationID)
 
 	var iter *adk.AsyncIterator[*adk.AgentEvent]
+	// TODO 加载上下文
+	messages := []*schema.Message{
+		schema.UserMessage(userContent),
+	}
 	if hasCheckpoint {
 		iter, err = rootRunner.Resume(runCtx, checkpointID, handler)
 		if err != nil {
 			s.log.Error("runAgent: resume failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
-			iter = rootRunner.Run(runCtx, []*schema.Message{
-				schema.UserMessage(userContent),
-			}, "", handler)
+			iter = rootRunner.Run(runCtx, messages, "", handler)
 		}
 	} else {
-		iter = rootRunner.Run(runCtx, []*schema.Message{
-			schema.UserMessage(userContent),
-		}, "", handler)
+		iter = rootRunner.Run(runCtx, messages, "", handler)
 	}
 
 	// 8. Consume events in goroutine with timeout protection and panic recovery

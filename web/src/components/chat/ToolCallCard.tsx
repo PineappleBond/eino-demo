@@ -2,6 +2,7 @@
 
 import { Collapse, Typography } from 'antd';
 import { CodeOutlined } from '@ant-design/icons';
+import { useTranslations } from 'next-intl';
 
 const { Text } = Typography;
 
@@ -20,7 +21,10 @@ const statusColors = {
 };
 
 export function ToolCallCard({ name, input, output, status, duration }: ToolCallCardProps) {
+  const t = useTranslations('tools');
   const statusColor = statusColors[status];
+
+  const statusLabel = status === 'running' ? t('running') : status === 'done' ? t('done') : t('error');
 
   return (
     <Collapse
@@ -39,7 +43,7 @@ export function ToolCallCard({ name, input, output, status, duration }: ToolCall
               <CodeOutlined style={{ color: statusColor }} />
               <Text strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{name}</Text>
               <Text style={{ color: statusColor, fontSize: 12, textTransform: 'capitalize' }}>
-                {status}
+                {statusLabel}
               </Text>
               {duration && (
                 <Text style={{ color: 'var(--text-tertiary)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
@@ -51,7 +55,7 @@ export function ToolCallCard({ name, input, output, status, duration }: ToolCall
           children: (
             <div style={{ fontSize: 13 }}>
               <details>
-                <summary style={{ cursor: 'pointer', marginBottom: 4, color: 'var(--text-secondary)' }}>Input</summary>
+                <summary style={{ cursor: 'pointer', marginBottom: 4, color: 'var(--text-secondary)' }}>{t('input')}</summary>
                 <pre style={{
                   background: 'var(--bg-primary)',
                   border: '1px solid var(--border-subtle)',
@@ -67,7 +71,7 @@ export function ToolCallCard({ name, input, output, status, duration }: ToolCall
                 </pre>
               </details>
               <details style={{ marginTop: 8 }}>
-                <summary style={{ cursor: 'pointer', marginBottom: 4, color: 'var(--text-secondary)' }}>Output</summary>
+                <summary style={{ cursor: 'pointer', marginBottom: 4, color: 'var(--text-secondary)' }}>{t('output')}</summary>
                 <pre style={{
                   background: 'var(--bg-primary)',
                   border: '1px solid var(--border-subtle)',

@@ -3,6 +3,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -155,12 +156,25 @@ func ToTemplate(t templates.TemplateInfo) types.Template {
 	return tpl
 }
 
+// ToUpdatePayload converts a model.JSONMap to the generated Update_Payload union type.
+// Used when reading persisted updates from the database.
+func ToUpdatePayload(payload model.JSONMap) types.Update_Payload {
+	var p types.Update_Payload
+	if len(payload) == 0 {
+		p.FromEmptyPayload(model.JSONMap{})
+		return p
+	}
+	b, _ := json.Marshal(payload)
+	_ = json.Unmarshal(b, &p) // safe: JSON was produced from valid Go types
+	return p
+}
+
 // ToUpdate converts a GORM UserUpdate model to the OpenAPI Update type.
 func ToUpdate(m model.UserUpdate) types.Update {
 	return types.Update{
 		Seq:     m.Seq,
 		Type:    types.UpdateType(m.Type),
-		Payload: m.Payload,
+		Payload: ToUpdatePayload(m.Payload),
 	}
 }
 

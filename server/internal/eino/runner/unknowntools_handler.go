@@ -6,5 +6,5 @@ import (
 )
 
 func unknownToolsHandler(ctx context.Context, name string, input string) (string, error) {
-	return fmt.Sprintf("未知的Tool(%s), 请检查你的输入", name), nil
+	return fmt.Sprintf("Unknown tool '%s'. Please check your input or use one of the available tools listed in your system prompt.", name), nil
 }

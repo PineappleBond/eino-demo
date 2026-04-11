@@ -1,20 +1,9 @@
 import { getLatestSeq, setLatestSeq } from '../store/indexedDB';
 import { deriveTopic } from '../store/topic';
+import type { components } from '@/types/api';
 
-type UpdateType =
-  | 'message.new' | 'message.delta' | 'message.done'
-  | 'message.tool_call' | 'message.thinking' | 'message.error' | 'message.stop'
-  | 'conversation.created' | 'conversation.deleted'
-  | 'conversation.compacting' | 'conversation.compacted' | 'conversation.archived'
-  | 'project.created' | 'project.deleted'
-  | 'settings.changed'
-  | 'empty';
-
-interface Update {
-  seq: number;
-  type: UpdateType;
-  payload: Record<string, unknown>;
-}
+type Update = components['schemas']['Update'];
+type UpdateType = Update['type'];
 
 type Subscriber = (update: Update) => void;
 type GapCallback = (localMaxSeq: number, incomingMinSeq: number) => void;
@@ -87,12 +76,17 @@ class UpdateDispatcher {
       const minPersistable = Math.min(...persistable.map((u) => u.seq));
 
       if (minPersistable !== localMaxSeq + 1) {
-        // Seq gap detected — notify callback to trigger HTTP pull, then skip this batch.
-        // The missing updates will arrive via HTTP pull and be processed in a subsequent batch.
+        // Seq gap detected — trigger HTTP pull for missing range, but still
+        // process ephemeral (streaming) updates so the UI stays responsive.
         console.warn(
           `[UpdateDispatcher] seq gap: local=${localMaxSeq}, incoming min=${minPersistable}`
         );
         this.onGapDetected?.(localMaxSeq, minPersistable - 1);
+
+        // Skip persistable updates but still notify subscribers for ephemeral ones
+        for (const update of ephemeral) {
+          this._notifySubscribers(update);
+        }
         return;
       }
 
@@ -100,25 +94,29 @@ class UpdateDispatcher {
       await setLatestSeq(maxSeq);
     }
 
-    // Notify subscribers by topic, skipping empty updates (seq gap fillers).
+    // Notify all subscribers
     for (const update of updates) {
-      if (update.type === 'empty') {
-        continue; // seq gap filler — no payload, no subscriber interest
+      this._notifySubscribers(update);
+    }
+  }
+
+  private _notifySubscribers(update: Update): void {
+    if (update.type === 'empty') {
+      return;
+    }
+    const topic = deriveTopic(update.payload);
+    const subs = this.subscribers.get(topic);
+    if (subs) {
+      for (const fn of subs) {
+        fn(update);
       }
-      const topic = deriveTopic(update.payload);
-      const subs = this.subscribers.get(topic);
-      if (subs) {
-        for (const fn of subs) {
+    }
+    // Also broadcast settings changes to system topic
+    if (update.type === 'settings.changed') {
+      const systemSubs = this.subscribers.get('system');
+      if (systemSubs) {
+        for (const fn of systemSubs) {
           fn(update);
-        }
-      }
-      // Also broadcast settings changes to system topic
-      if (update.type === 'settings.changed') {
-        const systemSubs = this.subscribers.get('system');
-        if (systemSubs) {
-          for (const fn of systemSubs) {
-            fn(update);
-          }
         }
       }
     }

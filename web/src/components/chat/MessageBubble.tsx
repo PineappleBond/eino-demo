@@ -5,12 +5,14 @@ import { UserOutlined, RobotOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { useTranslations } from 'next-intl';
 import { Message } from '@/lib/api';
 import { ToolCallCard } from './ToolCallCard';
 
 const { Text } = Typography;
 
 export function MessageBubble({ message }: { message: Message }) {
+  const t = useTranslations('chat');
   const isUser = message.sender_role === 'user';
 
   return (
@@ -29,7 +31,7 @@ export function MessageBubble({ message }: { message: Message }) {
           }}
         />
         <span className="message-name">
-          {isUser ? 'You' : 'Assistant'}
+          {isUser ? t('you') : t('assistant')}
         </span>
         {message.created_at && (
           <span className="message-time">

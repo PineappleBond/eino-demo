@@ -70,9 +70,8 @@ func authMiddleware(db *gorm.DB) gin.HandlerFunc {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		userID, err := auth.ResolveTokenToUser(db, token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{"code": "UNAUTHORIZED", "message": "missing or invalid Authorization header"},
-			})
+			respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
+			c.Abort()
 			return
 		}
 
@@ -109,9 +108,8 @@ func zapRecovery(log *zap.Logger) gin.HandlerFunc {
 					zap.String("method", c.Request.Method),
 					zap.String("path", c.Request.URL.Path),
 				)
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": gin.H{"code": "INTERNAL_ERROR", "message": "an internal error occurred"},
-				})
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "an internal error occurred")
+				c.Abort()
 			}
 		}()
 		c.Next()

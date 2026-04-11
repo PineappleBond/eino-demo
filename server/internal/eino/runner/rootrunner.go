@@ -255,22 +255,23 @@ func AddrString(addr compose.Address) string {
 	if len(addr) == 0 {
 		return ""
 	}
-	segs := make([]string, len(addr))
-	for i, seg := range addr {
-		if seg.SubID != "" {
-			segs[i] = string(seg.Type) + ":" + seg.ID + ":" + seg.SubID
-		} else {
-			segs[i] = string(seg.Type) + ":" + seg.ID
-		}
-	}
-	result := ""
-	for i, s := range segs {
-		if i > 0 {
-			result += ";"
-		}
-		result += s
-	}
-	return result
+	return addr[0].ID
+	//segs := make([]string, len(addr))
+	//for i, seg := range addr {
+	//	if seg.SubID != "" {
+	//		segs[i] = string(seg.Type) + ":" + seg.ID + ":" + seg.SubID
+	//	} else {
+	//		segs[i] = string(seg.Type) + ":" + seg.ID
+	//	}
+	//}
+	//result := ""
+	//for i, s := range segs {
+	//	if i > 0 {
+	//		result += ";"
+	//	}
+	//	result += s
+	//}
+	//return result
 }
 
 // NowFunc returns current time. Exposed for testing.

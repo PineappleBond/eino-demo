@@ -36,7 +36,12 @@
     "cancel": "取消",
     "failedArchive": "归档失败",
     "failedDelete": "删除失败",
-    "failedCreate": "创建对话失败"
+    "failedCreate": "创建对话失败",
+    "copy": "Copy",
+    "reply": "Reply",
+    "createBranch": "Create Branch Conversation",
+    "you": "You",
+    "assistant": "Assistant"
   },
   "settings": {
     "title": "设置",
@@ -75,6 +80,13 @@
     "activeModel": "当前模型",
     "template": "模板",
     "members": "成员"
+  },
+  "tools": {
+    "input": "Input",
+    "output": "Output",
+    "running": "运行中",
+    "done": "完成",
+    "error": "错误"
   },
   "auth": {
     "tokenLabel": "认证令牌",

@@ -36,7 +36,12 @@
     "cancel": "Cancel",
     "failedArchive": "Failed to archive",
     "failedDelete": "Failed to delete",
-    "failedCreate": "Failed to create conversation"
+    "failedCreate": "Failed to create conversation",
+    "copy": "复制",
+    "reply": "回复",
+    "createBranch": "创建分支对话",
+    "you": "You",
+    "assistant": "Assistant"
   },
   "settings": {
     "title": "Settings",
@@ -75,6 +80,13 @@
     "activeModel": "Active model",
     "template": "Template",
     "members": "Members"
+  },
+  "tools": {
+    "input": "Input",
+    "output": "Output",
+    "running": "Running",
+    "done": "Done",
+    "error": "Error"
   },
   "auth": {
     "tokenLabel": "Auth Token",

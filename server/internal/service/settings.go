@@ -44,29 +44,36 @@ type UpdateSettingsRequest struct {
 	Theme     *string `json:"theme,omitempty"`
 }
 
-// UpdateSettings updates only the provided fields.
-func (s *SettingsService) UpdateSettings(userID uuid.UUID, req UpdateSettingsRequest) (*model.Settings, error) {
-	// Validate enum values before updating.
+// validateSettingsRequest checks enum values for all settings fields.
+func validateSettingsRequest(req UpdateSettingsRequest) error {
 	if req.ModelTier != nil {
 		switch *req.ModelTier {
 		case "haiku", "sonnet", "opus":
 		default:
-			return nil, fmt.Errorf("invalid model_tier: %q (must be haiku, sonnet, or opus)", *req.ModelTier)
+			return fmt.Errorf("invalid model_tier: %q (must be haiku, sonnet, or opus)", *req.ModelTier)
 		}
 	}
 	if req.Locale != nil {
 		switch *req.Locale {
 		case "en", "zh":
 		default:
-			return nil, fmt.Errorf("invalid locale: %q (must be en or zh)", *req.Locale)
+			return fmt.Errorf("invalid locale: %q (must be en or zh)", *req.Locale)
 		}
 	}
 	if req.Theme != nil {
 		switch *req.Theme {
 		case "light", "dark":
 		default:
-			return nil, fmt.Errorf("invalid theme: %q (must be light or dark)", *req.Theme)
+			return fmt.Errorf("invalid theme: %q (must be light or dark)", *req.Theme)
 		}
+	}
+	return nil
+}
+
+// UpdateSettings updates only the provided fields.
+func (s *SettingsService) UpdateSettings(userID uuid.UUID, req UpdateSettingsRequest) (*model.Settings, error) {
+	if err := validateSettingsRequest(req); err != nil {
+		return nil, err
 	}
 
 	var settings model.Settings
@@ -105,27 +112,9 @@ func (s *SettingsService) CompleteUpdateSettings(
 	nextSeq NextSeqFunc,
 	pushUpdate PushUpdateFunc,
 ) (*model.Settings, error) {
-	// 1. Validate enum values (same as UpdateSettings)
-	if req.ModelTier != nil {
-		switch *req.ModelTier {
-		case "haiku", "sonnet", "opus":
-		default:
-			return nil, fmt.Errorf("invalid model_tier: %q (must be haiku, sonnet, or opus)", *req.ModelTier)
-		}
-	}
-	if req.Locale != nil {
-		switch *req.Locale {
-		case "en", "zh":
-		default:
-			return nil, fmt.Errorf("invalid locale: %q (must be en or zh)", *req.Locale)
-		}
-	}
-	if req.Theme != nil {
-		switch *req.Theme {
-		case "light", "dark":
-		default:
-			return nil, fmt.Errorf("invalid theme: %q (must be light or dark)", *req.Theme)
-		}
+	// 1. Validate enum values
+	if err := validateSettingsRequest(req); err != nil {
+		return nil, err
 	}
 
 	// 2. Allocate seq

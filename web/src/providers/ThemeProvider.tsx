@@ -1,12 +1,14 @@
 'use client';
 
 import { ConfigProvider, theme as antdTheme, App } from 'antd';
-import { ReactNode, useState, useEffect } from 'react';
+import { StyleProvider, createCache } from '@ant-design/cssinjs';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { getLatestTheme, setTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
+  const cacheRef = useRef(createCache());
 
   // Sync theme from API on mount (server is source of truth), fall back to localStorage.
   useEffect(() => {
@@ -34,16 +36,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [themeMode]);
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: themeMode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#6c5ce7',
-          borderRadius: 6,
-        },
-      }}
-    >
-      <App>{children}</App>
-    </ConfigProvider>
+    <StyleProvider cache={cacheRef.current}>
+      <ConfigProvider
+        theme={{
+          algorithm: themeMode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+          token: {
+            colorPrimary: '#6c5ce7',
+            borderRadius: 6,
+          },
+        }}
+      >
+        <App>{children}</App>
+      </ConfigProvider>
+    </StyleProvider>
   );
 }

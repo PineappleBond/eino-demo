@@ -49,7 +49,7 @@ services:
       - "6379:6379"
     volumes:
       - eino-demo-redis:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --appendfsync always
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
