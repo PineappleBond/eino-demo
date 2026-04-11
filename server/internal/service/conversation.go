@@ -280,6 +280,72 @@ func (s *ConversationService) CompactConversation(
 
 	return newConv, nil
 }
+// RenameConversationRequest holds the fields for renaming a conversation.
+type RenameConversationRequest struct {
+	Title string `json:"title"`
+}
+
+// CompleteRenameConversation handles conversation rename with seq assignment, user_update, and WS push.
+func (s *ConversationService) CompleteRenameConversation(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req RenameConversationRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found")
+	}
+
+	// 2. Allocate seq
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	// 3. Update title + create user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&conv).Update("title", req.Title).Error; err != nil {
+			return err
+		}
+		conv.Title = req.Title
+
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "conversation.updated",
+			Payload: model.JSONMap{
+				"id":         conversationID.String(),
+				"project_id": conv.ProjectID.String(),
+				"title":      conv.Title,
+				"seq":        seq,
+			},
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pushUpdate(userID, model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.updated",
+		Payload: model.JSONMap{
+			"id":         conversationID.String(),
+			"project_id": conv.ProjectID.String(),
+			"title":      conv.Title,
+			"seq":        seq,
+		},
+	})
+	return &conv, nil
+}
+
 func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUID) error {
 	result := s.db.Where("id = ? AND user_id = ?", conversationID, userID).Delete(&model.Conversation{})
 	if result.Error != nil {

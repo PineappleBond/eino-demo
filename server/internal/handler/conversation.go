@@ -18,6 +18,7 @@ import (
 func RegisterConversationRoutes(
 	api *gin.RouterGroup,
 	svc *service.ConversationService,
+	chatSvc *service.ChatService,
 	wsManager *ws.Manager,
 ) {
 	api.GET("/projects/:id/conversations", func(c *gin.Context) {
@@ -100,6 +101,40 @@ func RegisterConversationRoutes(
 		c.JSON(http.StatusNoContent, nil)
 	})
 
+	// Update conversation title
+	api.PATCH("/conversations/:id", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		var req types.PatchConversationsIdJSONBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
+			return
+		}
+		svcReq := service.RenameConversationRequest{
+			Title: req.Title,
+		}
+		conv, err := svc.CompleteRenameConversation(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			svcReq,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := convert.ToUpdate(update)
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		)
+		if err != nil {
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			return
+		}
+		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
+	})
+
 	// List conversation members
 	api.GET("/conversations/:id/members", func(c *gin.Context) {
 		userID := getUserID(c)
@@ -125,6 +160,31 @@ func RegisterConversationRoutes(
 			}
 		}
 		respondJSON(c, http.StatusOK, result)
+	})
+
+	// Compact conversation — starts async compaction
+	api.POST("/conversations/:id/compact", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		if err := chatSvc.StartCompaction(c.Request.Context(), userID, conversationID, wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
+			wsUpdate := convert.ToUpdate(update)
+			wsManager.PushToUserConnections(userID, wsUpdate)
+		}); err != nil {
+			if err.Error() == "conversation not found" {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			} else {
+				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			}
+			return
+		}
+		respondJSON(c, http.StatusOK, gin.H{
+			"conversation_id": conversationID.String(),
+			"status":          "compacting",
+		})
 	})
 }
 

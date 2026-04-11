@@ -504,7 +504,50 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update a conversation (title only) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description New conversation title */
+                        title: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated conversation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Conversation"];
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conversation not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         trace?: never;
     };
     "/conversations/{id}/members": {
@@ -848,6 +891,16 @@ export interface components {
             created_at?: string;
             reply_to_seq?: number;
             mentioned_members?: string[];
+            tool_calling?: {
+                /** @description Tool call input arguments */
+                input?: {
+                    [key: string]: unknown;
+                };
+                /** @description Tool call output result */
+                output?: string;
+            } | null;
+            /** Format: date-time */
+            updated_at?: string;
         };
         Settings: {
             /** @enum {string} */
@@ -983,9 +1036,12 @@ export interface components {
             seq: number;
         };
         ConversationCompactedPayload: {
+            /** @description The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber. */
+            conversation_id: string;
             old_conv_id: string;
             new_conv_id: string;
             project_id: string;
+            title?: string;
             /** Format: int64 */
             seq: number;
         };
@@ -1026,7 +1082,7 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.deleted" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
+            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
             /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
             payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
         };

@@ -252,6 +252,36 @@ paths:
                     format: date-time
 
   /conversations/{id}:
+    patch:
+      summary: Update a conversation (title only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  description: New conversation title
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          description: Invalid request
+        "404":
+          description: Conversation not found
     delete:
       summary: Delete a conversation
       parameters:
@@ -582,6 +612,20 @@ components:
           type: array
           items:
             type: string
+        tool_calling:
+          type: object
+          nullable: true
+          properties:
+            input:
+              type: object
+              additionalProperties: true
+              description: Tool call input arguments
+            output:
+              type: string
+              description: Tool call output result
+        updated_at:
+          type: string
+          format: date-time
 
     Settings:
       type: object
@@ -841,13 +885,18 @@ components:
 
     ConversationCompactedPayload:
       type: object
-      required: [old_conv_id, new_conv_id, project_id, seq]
+      required: [conversation_id, old_conv_id, new_conv_id, project_id, seq]
       properties:
+        conversation_id:
+          type: string
+          description: "The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber."
         old_conv_id:
           type: string
         new_conv_id:
           type: string
         project_id:
+          type: string
+        title:
           type: string
         seq:
           type: integer
@@ -937,6 +986,7 @@ components:
             - message.stop
             # Conversation-level events
             - conversation.created
+            - conversation.updated
             - conversation.deleted
             - conversation.compacting
             - conversation.compacted

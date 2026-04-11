@@ -37,6 +37,8 @@
     "failedArchive": "归档失败",
     "failedDelete": "删除失败",
     "failedCreate": "创建对话失败",
+    "renameEmpty": "Title cannot be empty",
+    "save": "Save",
     "copy": "Copy",
     "reply": "Reply",
     "createBranch": "Create Branch Conversation",
@@ -44,7 +46,8 @@
     "assistant": "Assistant",
     "expandAll": "Expand all",
     "collapse": "Collapse",
-    "backToMessage": "Back to message"
+    "backToMessage": "Back to message",
+    "thinking": "Thinking"
   },
   "settings": {
     "title": "设置",

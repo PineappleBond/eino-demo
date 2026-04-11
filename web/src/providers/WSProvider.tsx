@@ -51,8 +51,12 @@ export function WSProvider({ children }: { children: ReactNode }) {
         if (data.updates?.length > 0) {
           dispatcher.applyUpdates(data.updates as never);
         }
-        // Ensure cursor is set even if applyUpdates skips due to gap
-        if (data.max_seq !== undefined) {
+        // Always advance cursor to server's max_seq on success, even when
+        // there are no updates to apply (e.g. server is idle, all streaming
+        // updates are seq=0 and ephemeral). Without this, the cursor stays
+        // at its previous value and every reconnect/poll re-requests from
+        // the same stale last_seq.
+        if (data.max_seq !== undefined && data.max_seq > localMaxSeq) {
           await setLatestSeq(data.max_seq);
         }
       }
@@ -99,7 +103,8 @@ export function WSProvider({ children }: { children: ReactNode }) {
           if (data.updates?.length > 0) {
             dispatcher.applyUpdates(data.updates);
           }
-          if (data.max_seq !== undefined) {
+          // Always advance cursor to server's max_seq on success
+          if (data.max_seq !== undefined && data.max_seq > (await getLatestSeq())) {
             await setLatestSeq(data.max_seq);
           }
           pollBackoffRef.current = 5000;

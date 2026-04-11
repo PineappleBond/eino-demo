@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
@@ -50,21 +52,25 @@ type msgTracker struct {
 
 	content strings.Builder
 	reason  strings.Builder
+
+	// tool_calling: only for tool messages
+	toolInput  map[string]any // parsed from ArgumentsInJSON
+	toolOutput string         // tool result
 }
 
 // RootRunnerCallbacks implements RootRunnerCallback. It bridges Eino callbacks
 // to WebSocket Update events and persists messages/checkpoints to PostgreSQL in real time.
 type RootRunnerCallbacks struct {
 	cfg      RunCallbackConfig
-	mu       sync.Mutex             // guards trackers map and DB writes
-	trackers map[string]*msgTracker // keyed by addr string (tool messages) or "assistant"
+	mu       sync.Mutex                // guards trackers map and DB writes
+	trackers map[[2]string]*msgTracker // keyed by [2]string{addrStr, role}
 }
 
 // NewRootRunnerCallbacks creates a callback handler for one agent run.
 func NewRootRunnerCallbacks(cfg RunCallbackConfig) *RootRunnerCallbacks {
 	return &RootRunnerCallbacks{
 		cfg:      cfg,
-		trackers: make(map[string]*msgTracker),
+		trackers: make(map[[2]string]*msgTracker),
 	}
 }
 
@@ -136,7 +142,8 @@ func (c *RootRunnerCallbacks) Stop() {
 // getOrCreateTracker returns the tracker for this addr.
 // If the existing tracker is completed, a new one is created.
 func (c *RootRunnerCallbacks) getOrCreateTracker(addrStr string, role string, toolName string) *msgTracker {
-	t, ok := c.trackers[addrStr]
+	key := [2]string{addrStr, role}
+	t, ok := c.trackers[key]
 	if ok {
 		return t
 	}
@@ -150,14 +157,15 @@ func (c *RootRunnerCallbacks) getOrCreateTracker(addrStr string, role string, to
 		toolName: toolName,
 		senderID: senderID,
 	}
-	c.trackers[addrStr] = t
+	c.trackers[key] = t
 	return t
 }
 
 // getOrCreateAssistantTracker returns or creates a tracker for this addr.
 // If the addr's tracker is already completed, a new one is created (for a new response).
 func (c *RootRunnerCallbacks) getOrCreateAssistantTracker(addrStr string) *msgTracker {
-	t, ok := c.trackers[addrStr]
+	key := [2]string{addrStr, "assistant"}
+	t, ok := c.trackers[key]
 	if ok {
 		return t
 	}
@@ -167,8 +175,15 @@ func (c *RootRunnerCallbacks) getOrCreateAssistantTracker(addrStr string) *msgTr
 		role:     "assistant",
 		senderID: "agent:root",
 	}
-	c.trackers[addrStr] = t
+	c.trackers[key] = t
 	return t
+}
+
+// getOrCreateAssistantTracker returns or creates a tracker for this addr.
+// If the addr's tracker is already completed, a new one is created (for a new response).
+func (c *RootRunnerCallbacks) deleteTracker(addrStr string, role string) {
+	key := [2]string{addrStr, role}
+	delete(c.trackers, key)
 }
 
 // findIncompleteAssistant returns any incomplete assistant tracker, regardless of addr.
@@ -206,6 +221,12 @@ func (c *RootRunnerCallbacks) insertMessage(ctx context.Context, t *msgTracker, 
 			"tool_name": t.toolName,
 			"addr":      t.addr,
 		}
+		if t.toolInput != nil {
+			msg.ToolCalling = model.JSONMap{
+				"input":  t.toolInput,
+				"output": t.toolOutput,
+			}
+		}
 	}
 	if err := c.cfg.DB.WithContext(ctx).Create(&msg).Error; err != nil {
 		return fmt.Errorf("failed to create message: %w", err)
@@ -227,6 +248,12 @@ func (c *RootRunnerCallbacks) insertMessage(ctx context.Context, t *msgTracker, 
 	}
 	if t.role == "tool" {
 		update.Payload["tool_name"] = t.toolName
+		if t.toolInput != nil {
+			update.Payload["tool_calling"] = model.JSONMap{
+				"input":  t.toolInput,
+				"output": t.toolOutput,
+			}
+		}
 	}
 	if err := c.cfg.DB.WithContext(ctx).Create(&update).Error; err != nil {
 		c.cfg.Log.Error("failed to persist message.new update", zap.Error(err))
@@ -253,6 +280,12 @@ func (c *RootRunnerCallbacks) updateMessage(ctx context.Context, t *msgTracker, 
 
 // completeMessage marks a message as finished with final content.
 func (c *RootRunnerCallbacks) completeMessage(ctx context.Context, t *msgTracker, content string, reasonContent string, usage *schema.TokenUsage) error {
+	if content == "" {
+		content = t.content.String()
+	}
+	if reasonContent == "" {
+		reasonContent = t.reason.String()
+	}
 	t.completed = true
 	finishReason := "stop"
 
@@ -312,13 +345,38 @@ func (c *RootRunnerCallbacks) OnInputToolCalling(ctx context.Context, info *call
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	{
+		t := c.getOrCreateAssistantTracker(addrStr)
+		if t.msgID != uuid.Nil {
+		}
+	}
+
 	// Create a tool message immediately
 	t := c.getOrCreateTracker(addrStr, "tool", info.Name)
 	if t.msgID == uuid.Nil {
 		t.senderID = info.Name
+
+		// Parse tool input from callback input
+		toolInput := tool.ConvCallbackInput(input)
+		if toolInput != nil && toolInput.ArgumentsInJSON != "" {
+			var args map[string]any
+			if err := json.Unmarshal([]byte(toolInput.ArgumentsInJSON), &args); err == nil {
+				t.toolInput = args
+			}
+		}
+
 		if err := c.insertMessage(ctx, t, "", ""); err != nil {
 			c.cfg.Log.Error("failed to insert tool message", zap.Error(err))
 			return
+		}
+	} else {
+		// Update tool input on existing tracker (e.g. re-entry)
+		toolInput := tool.ConvCallbackInput(input)
+		if toolInput != nil && toolInput.ArgumentsInJSON != "" {
+			var args map[string]any
+			if err := json.Unmarshal([]byte(toolInput.ArgumentsInJSON), &args); err == nil {
+				t.toolInput = args
+			}
 		}
 	}
 }
@@ -328,7 +386,13 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	t, ok := c.trackers[addrStr]
+	t := c.getOrCreateAssistantTracker(addrStr)
+	if t.msgID != uuid.Nil {
+		c.completeMessage(ctx, t, "", "", nil)
+		c.deleteTracker(addrStr, "assistant")
+	}
+
+	t, ok := c.trackers[[2]string{addrStr, "tool"}]
 	if !ok {
 		c.cfg.Log.Warn("no tracker for tool output", zap.String("addr", addrStr))
 		return
@@ -337,11 +401,23 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 	// Extract tool result from output
 	var resultStr string
 	if output != nil {
-		resultStr = fmt.Sprintf("%v", output)
+		toolOutput := tool.ConvCallbackOutput(output)
+		if toolOutput != nil {
+			resultStr = toolOutput.Response
+		}
+		if resultStr == "" {
+			resultStr = fmt.Sprintf("%v", output)
+		}
 	}
 
-	// Complete the tool message with final result
+	t.toolOutput = resultStr
 	t.completed = true
+
+	// Save tool_calling to DB
+	toolCalling := model.JSONMap{
+		"input":  t.toolInput,
+		"output": resultStr,
+	}
 	finishReason := "stop"
 	c.cfg.DB.WithContext(ctx).Model(&model.Message{}).
 		Where("id = ?", t.msgID).
@@ -349,6 +425,7 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 			"content":        resultStr,
 			"reason_content": "",
 			"finish_reason":  finishReason,
+			"tool_calling":   toolCalling,
 		})
 
 	// Push message.done update
@@ -369,6 +446,7 @@ func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *cal
 			"content":         TruncatedContent(resultStr, 200),
 			"seq":             seq,
 			"addr":            addrStr,
+			"tool_calling":    toolCalling,
 		},
 	}
 	if dbErr := c.cfg.DB.WithContext(ctx).Create(&update).Error; dbErr != nil {

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Button, Input, App, Empty, Divider, Dropdown, Popconfirm } from 'antd';
+import { Button, Input, App, Empty, Divider, Dropdown, Popconfirm, Modal } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
@@ -18,6 +18,8 @@ import {
 import Link from 'next/link';
 import { api, Conversation } from '@/lib/api';
 import { useTranslations } from 'next-intl';
+import { useSubscribe } from '@/providers/UpdateProvider';
+import type { Update } from '@/lib/updateDispatcher';
 
 interface ChatSiderProps {
   selectedKey: string;
@@ -35,6 +37,9 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenuConv, setContextMenuConv] = useState<Conversation | null>(null);
+  const [renameConv, setRenameConv] = useState<Conversation | null>(null);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     api.get<Conversation[]>(`/projects/${projectId}/conversations`)
@@ -42,6 +47,25 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
       .catch((err) => message.error(err.message))
       .finally(() => setLoading(false));
   }, [projectId, message]);
+
+  // ─── Subscribe to conversation lifecycle events ───
+
+  const fetchRef = useRef(() => {
+    api.get<Conversation[]>(`/projects/${projectId}/conversations`)
+      .then(setConversations)
+      .catch((err) => message.error(err.message));
+  });
+
+  useSubscribe(`project:${projectId}`, (update: Update) => {
+    switch (update.type) {
+      case 'conversation.created':
+      case 'conversation.deleted':
+      case 'conversation.archived':
+      case 'conversation.compacted':
+        fetchRef.current();
+        break;
+    }
+  });
 
   const handleNew = async () => {
     try {
@@ -80,6 +104,32 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
     }
   };
 
+  const openRenameModal = (conv: Conversation) => {
+    setRenameConv(conv);
+    setRenameValue(conv.title || t('untitled'));
+    setRenameModalOpen(true);
+    closeContextMenu();
+  };
+
+  const handleRename = async () => {
+    if (!renameConv) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      message.error(t('renameEmpty') || 'Title cannot be empty');
+      return;
+    }
+    try {
+      await api.patch(`/conversations/${renameConv.id}`, { title: trimmed });
+      setConversations((prev) =>
+        prev.map((c) => c.id === renameConv.id ? { ...c, title: trimmed } : c)
+      );
+      setRenameModalOpen(false);
+      setRenameConv(null);
+    } catch (err: any) {
+      message.error(err.message || 'Failed to rename');
+    }
+  };
+
   const handleContextMenu = useCallback((e: React.MouseEvent, conv: Conversation) => {
     e.preventDefault();
     e.stopPropagation();
@@ -96,8 +146,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
         icon: <EditOutlined />,
         label: t('rename'),
         onClick: () => {
-          // TODO: Rename via modal
-          closeContextMenu();
+          openRenameModal(contextMenuConv);
         },
       },
       {
@@ -363,6 +412,24 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
           {tApp('settings')}
         </div>
       </div>
+
+      {/* Rename Modal */}
+      <Modal
+        title={t('rename')}
+        open={renameModalOpen}
+        onOk={handleRename}
+        onCancel={() => { setRenameModalOpen(false); setRenameConv(null); }}
+        okText={t('save') || 'Save'}
+        cancelText={t('cancel')}
+      >
+        <Input
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onPressEnter={handleRename}
+          autoFocus
+          style={{ marginTop: 8 }}
+        />
+      </Modal>
     </div>
   );
 }

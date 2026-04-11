@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"time"
 
-	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/templates"
@@ -98,17 +98,17 @@ func ToConversation(m model.Conversation) types.Conversation {
 // ToMessage converts a GORM Message model to the OpenAPI Message type.
 func ToMessage(m model.Message) types.Message {
 	msg := types.Message{
-		Id:               m.ID.String(),
-		ConversationId:   m.ConversationID.String(),
-		Seq:              int(m.Seq),
-		SenderRole:       types.MessageSenderRole(m.SenderRole),
-		SenderId:         strPtr(m.SenderID),
-		Content:          m.Content,
-		ReasonContent:    strPtr(m.ReasonContent),
-		TokenPrompt:      intPtr(int(m.TokenPrompt)),
-		TokenCompletion:  intPtr(int(m.TokenCompletion)),
-		CreatedAt:        timePtr(m.CreatedAt),
-		Metadata:         toMapPtr(m.Metadata),
+		Id:              m.ID.String(),
+		ConversationId:  m.ConversationID.String(),
+		Seq:             int(m.Seq),
+		SenderRole:      types.MessageSenderRole(m.SenderRole),
+		SenderId:        strPtr(m.SenderID),
+		Content:         m.Content,
+		ReasonContent:   strPtr(m.ReasonContent),
+		TokenPrompt:     intPtr(int(m.TokenPrompt)),
+		TokenCompletion: intPtr(int(m.TokenCompletion)),
+		CreatedAt:       timePtr(m.CreatedAt),
+		Metadata:        toMapPtr(m.Metadata),
 	}
 	if m.ReplyToSeq != nil {
 		v := int(*m.ReplyToSeq)
@@ -125,6 +125,22 @@ func ToMessage(m model.Message) types.Message {
 	}
 	if m.DurationMs != nil {
 		msg.DurationMs = m.DurationMs
+	}
+	if len(m.ToolCalling) > 0 {
+		toolCalling := &struct {
+			Input  *map[string]interface{} `json:"input,omitempty"`
+			Output *string                 `json:"output,omitempty"`
+		}{}
+		if input, ok := m.ToolCalling["input"].(map[string]interface{}); ok {
+			toolCalling.Input = toMapPtr(input)
+		}
+		if output, ok := m.ToolCalling["output"].(string); ok {
+			toolCalling.Output = strPtr(output)
+		}
+		msg.ToolCalling = toolCalling
+	}
+	if !m.UpdatedAt.IsZero() {
+		msg.UpdatedAt = &m.UpdatedAt
 	}
 	return msg
 }
@@ -182,10 +198,10 @@ func ToUpdate(m model.UserUpdate) types.Update {
 
 // MeResponse is the body returned by GET /users/me.
 type MeResponse struct {
-	ID       openapi_types.UUID `json:"id"`
-	Name     *string            `json:"name,omitempty"`
-	CreatedAt *time.Time        `json:"created_at,omitempty"`
-	Settings types.Settings     `json:"settings"`
+	ID        openapi_types.UUID `json:"id"`
+	Name      *string            `json:"name,omitempty"`
+	CreatedAt *time.Time         `json:"created_at,omitempty"`
+	Settings  types.Settings     `json:"settings"`
 }
 
 // ModelsResponse is the body returned by GET /models.

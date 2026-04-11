@@ -37,6 +37,8 @@
     "failedArchive": "Failed to archive",
     "failedDelete": "Failed to delete",
     "failedCreate": "Failed to create conversation",
+    "renameEmpty": "标题不能为空",
+    "save": "保存",
     "copy": "复制",
     "reply": "回复",
     "createBranch": "创建分支对话",
@@ -44,7 +46,8 @@
     "assistant": "助手",
     "expandAll": "展开全部",
     "collapse": "折叠",
-    "backToMessage": "查看原消息"
+    "backToMessage": "查看原消息",
+    "thinking": "思考过程"
   },
   "settings": {
     "title": "Settings",

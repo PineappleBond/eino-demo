@@ -75,7 +75,7 @@ func RegisterRoutes(
 	handler.RegisterSettingsRoutes(api, settingsSvc, wsManager)
 	handler.RegisterTemplateRoutes(api, tplSvc, wsManager)
 	handler.RegisterProjectRoutes(api, projectSvc, wsManager)
-	handler.RegisterConversationRoutes(api, convSvc, wsManager)
+	handler.RegisterConversationRoutes(api, convSvc, chatSvc, wsManager)
 	handler.RegisterChatRoutes(api, chatSvc, wsManager)
 	handler.RegisterModelRoutes(api, cfg)
 

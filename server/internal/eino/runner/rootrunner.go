@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/adk/middlewares/reduction"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
@@ -158,6 +159,9 @@ type RootRunnerConfig struct {
 	SubAgents []adk.Agent
 	// MaxIteration limits reasoning loops. 0 means default (100).
 	MaxIteration int
+	// ReductionEnabled enables the reduction middleware, which proactively
+	// clears old tool results from context when it grows too large.
+	ReductionEnabled bool
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.

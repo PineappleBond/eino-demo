@@ -201,6 +201,7 @@ const (
 	ConversationCompacting UpdateType = "conversation.compacting"
 	ConversationCreated    UpdateType = "conversation.created"
 	ConversationDeleted    UpdateType = "conversation.deleted"
+	ConversationUpdated    UpdateType = "conversation.updated"
 	Empty                  UpdateType = "empty"
 	MessageDelta           UpdateType = "message.delta"
 	MessageDone            UpdateType = "message.done"
@@ -226,6 +227,8 @@ func (e UpdateType) Valid() bool {
 	case ConversationCreated:
 		return true
 	case ConversationDeleted:
+		return true
+	case ConversationUpdated:
 		return true
 	case Empty:
 		return true
@@ -378,10 +381,13 @@ type ConversationArchivedPayload struct {
 
 // ConversationCompactedPayload defines model for ConversationCompactedPayload.
 type ConversationCompactedPayload struct {
-	NewConvId string `json:"new_conv_id"`
-	OldConvId string `json:"old_conv_id"`
-	ProjectId string `json:"project_id"`
-	Seq       int64  `json:"seq"`
+	// ConversationId The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber.
+	ConversationId string  `json:"conversation_id"`
+	NewConvId      string  `json:"new_conv_id"`
+	OldConvId      string  `json:"old_conv_id"`
+	ProjectId      string  `json:"project_id"`
+	Seq            int64   `json:"seq"`
+	Title          *string `json:"title,omitempty"`
 }
 
 // ConversationCompactingPayload defines model for ConversationCompactingPayload.
@@ -446,6 +452,14 @@ type Message struct {
 	Seq              int                     `json:"seq"`
 	TokenCompletion  *int                    `json:"token_completion,omitempty"`
 	TokenPrompt      *int                    `json:"token_prompt,omitempty"`
+	ToolCalling      *struct {
+		// Input Tool call input arguments
+		Input *map[string]interface{} `json:"input,omitempty"`
+
+		// Output Tool call output result
+		Output *string `json:"output,omitempty"`
+	} `json:"tool_calling,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // MessageSenderRole defines model for Message.SenderRole.
@@ -674,6 +688,12 @@ type WSServerFrame_Payload struct {
 // WSServerFrameType Server→Client frame types.
 type WSServerFrameType string
 
+// PatchConversationsIdJSONBody defines parameters for PatchConversationsId.
+type PatchConversationsIdJSONBody struct {
+	// Title New conversation title
+	Title string `json:"title"`
+}
+
 // PostConversationsIdMessagesJSONBody defines parameters for PostConversationsIdMessages.
 type PostConversationsIdMessagesJSONBody struct {
 	Content string `json:"content"`
@@ -713,6 +733,9 @@ type PostTemplatesIdProjectsJSONBody = map[string]interface{}
 type GetUsersMeUpdatesParams struct {
 	LastSeq *int64 `form:"last_seq,omitempty" json:"last_seq,omitempty"`
 }
+
+// PatchConversationsIdJSONRequestBody defines body for PatchConversationsId for application/json ContentType.
+type PatchConversationsIdJSONRequestBody PatchConversationsIdJSONBody
 
 // PostConversationsIdMessagesJSONRequestBody defines body for PostConversationsIdMessages for application/json ContentType.
 type PostConversationsIdMessagesJSONRequestBody PostConversationsIdMessagesJSONBody

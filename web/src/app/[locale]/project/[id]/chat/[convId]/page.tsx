@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useReducer, useCallback } from 'react';
+import { useEffect, useReducer, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { Spin, Result, App } from 'antd';
 import type { MenuProps } from 'antd';
@@ -35,6 +35,9 @@ interface ChatState {
     is_owner: boolean;
   }>;
   mentions: Array<{ id: string; name: string }>;
+  // Conversation-level token stats from backend updates
+  convTokenPrompt: number;
+  convTokenCompletion: number;
 }
 
 type ChatAction =
@@ -55,14 +58,15 @@ type ChatAction =
   | { type: 'ADD_MENTION'; payload: { id: string; name: string } }
   | { type: 'REMOVE_MENTION'; payload: string }
   | { type: 'CLEAR_MENTIONS' }
-  | { type: 'STOP_STREAMING' };
+  | { type: 'STOP_STREAMING' }
+  | { type: 'SET_CONV_TOKENS'; payload: { tokenPrompt?: number; tokenCompletion?: number } };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
     case 'SET_MESSAGES':
-      return { ...state, messages: action.payload };
+      return { ...state, messages: [...action.payload].sort((a, b) => (a.seq || 0) - (b.seq || 0)) };
     case 'ADD_MESSAGE':
       if (state.messages.some((m) => m.id === action.payload.id)) return state;
       return { ...state, messages: [...state.messages, action.payload] };
@@ -123,6 +127,14 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, mentions: [] };
     case 'STOP_STREAMING':
       return { ...state, isStreaming: false, streamingMessageId: null, sending: false };
+    case 'SET_CONV_TOKENS': {
+      const p = action.payload;
+      return {
+        ...state,
+        convTokenPrompt: p.tokenPrompt !== undefined ? p.tokenPrompt : state.convTokenPrompt,
+        convTokenCompletion: p.tokenCompletion !== undefined ? p.tokenCompletion : state.convTokenCompletion,
+      };
+    }
     default:
       return state;
   }
@@ -137,6 +149,8 @@ const initialState: ChatState = {
   showConvInfo: false,
   members: [],
   mentions: [],
+  convTokenPrompt: 0,
+  convTokenCompletion: 0,
 };
 
 export default function ConvChatPage() {
@@ -146,6 +160,11 @@ export default function ConvChatPage() {
   const t = useTranslations('chat');
 
   const [state, dispatch] = useReducer(chatReducer, initialState);
+
+  // Keep a ref to the latest messages so the streaming handler can check
+  // for duplicates without relying on a stale closure over `state.messages`.
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
 
   // ─── Streaming update handler ───
 
@@ -186,7 +205,7 @@ export default function ConvChatPage() {
 
         // Assistant message.new — start streaming
         const msgId = payload.message_id || `stream-${Date.now()}`;
-        const alreadyExists = state.messages.some((m) => m.id === msgId);
+        const alreadyExists = messagesRef.current.some((m) => m.id === msgId);
 
         if (!alreadyExists) {
           const newMsg: MessageType = {
@@ -255,16 +274,34 @@ export default function ConvChatPage() {
         dispatch({ type: 'STOP_STREAMING' });
         break;
       }
-      case 'conversation.compacting':
-        message.loading('Compacting conversation...', 0);
+      case 'conversation.compacting': {
+        const destroy = message.loading('Compacting conversation...', 0);
+        (window as any).__compactDestroy = destroy;
         break;
+      }
       case 'conversation.compacted': {
-        message.destroy();
+        const destroy = (window as any).__compactDestroy;
+        if (destroy) {
+          destroy();
+          delete (window as any).__compactDestroy;
+        }
+        message.destroy(); // fallback
         const payload = update.payload as components['schemas']['ConversationCompactedPayload'];
         const newConvId = payload.new_conv_id as string | undefined;
         if (newConvId) {
           window.location.href = window.location.pathname.replace(/\/chat\/[^/]+$/, `/chat/${newConvId}`);
         }
+        break;
+      }
+      case 'conversation.updated': {
+        const payload = update.payload as Record<string, unknown>;
+        dispatch({
+          type: 'SET_CONV_TOKENS',
+          payload: {
+            tokenPrompt: (payload.token_prompt as number | undefined) ?? undefined,
+            tokenCompletion: (payload.token_completion as number | undefined) ?? undefined,
+          },
+        });
         break;
       }
     }
@@ -467,12 +504,21 @@ export default function ConvChatPage() {
   const displayMessages = state.messages;
 
   // Stats for ConvInfoPanel
-  const stats = state.messages.reduce((acc, m) => ({
+  const msgStats = state.messages.reduce((acc, m) => ({
     messages: acc.messages + 1,
     tokenPrompt: acc.tokenPrompt + (m.token_prompt || 0),
     tokenCompletion: acc.tokenCompletion + (m.token_completion || 0),
     toolCalls: acc.toolCalls + (((m.metadata as Record<string, unknown> | undefined)?.tool_calls as Array<unknown> | undefined)?.length || 0),
   }), { messages: 0, tokenPrompt: 0, tokenCompletion: 0, toolCalls: 0 });
+
+  // Use conversation-level token stats from backend when available
+  // (tiktoken-estimated prompt size is more accurate than SUM of individual API calls)
+  const stats = {
+    messages: msgStats.messages,
+    tokenPrompt: state.convTokenPrompt || msgStats.tokenPrompt,
+    tokenCompletion: state.convTokenCompletion || msgStats.tokenCompletion,
+    toolCalls: msgStats.toolCalls,
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', flex: 1, minWidth: 0, overflow: 'hidden' }}>

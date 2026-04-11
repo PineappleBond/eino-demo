@@ -41,7 +41,7 @@ export function ToolCallCard({ name, input, output, status, duration }: ToolCall
           label: (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <CodeOutlined style={{ color: statusColor }} />
-              <Text strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{name}</Text>
+              <Text strong style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)' }}>{name}</Text>
               <Text style={{ color: statusColor, fontSize: 12, textTransform: 'capitalize' }}>
                 {statusLabel}
               </Text>
