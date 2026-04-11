@@ -41,7 +41,10 @@
     "reply": "Reply",
     "createBranch": "Create Branch Conversation",
     "you": "You",
-    "assistant": "Assistant"
+    "assistant": "Assistant",
+    "expandAll": "Expand all",
+    "collapse": "Collapse",
+    "backToMessage": "Back to message"
   },
   "settings": {
     "title": "设置",

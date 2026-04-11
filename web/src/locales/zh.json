@@ -41,7 +41,10 @@
     "reply": "回复",
     "createBranch": "创建分支对话",
     "you": "You",
-    "assistant": "Assistant"
+    "assistant": "Assistant",
+    "expandAll": "展开全部",
+    "collapse": "折叠",
+    "backToMessage": "回到消息"
   },
   "settings": {
     "title": "Settings",
