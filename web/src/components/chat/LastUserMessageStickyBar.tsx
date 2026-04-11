@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { UserOutlined, ArrowDownOutlined, ArrowUpOutlined, CloseOutlined, RollbackOutlined } from '@ant-design/icons';
 import { Message } from '@/lib/api';
 
 interface LastUserMessageStickyBarProps {
@@ -83,7 +84,7 @@ export function LastUserMessageStickyBar({
             {!isExpanded && needsExpand && (
               <div className="message-sticky-gradient">
                 <button className="message-sticky-expand-btn" type="button" onClick={handleToggleExpand}>
-                  {t('expandAll')} ▼
+                  {t('expandAll')} <ArrowDownOutlined style={{ fontSize: 10 }} />
                 </button>
               </div>
             )}
@@ -92,18 +93,18 @@ export function LastUserMessageStickyBar({
         {isExpanded && needsExpand && (
           <div style={{ textAlign: 'right', marginTop: 4 }}>
             <button className="message-sticky-close-btn" type="button" onClick={handleToggleExpand} style={{ fontSize: 10 }}>
-              ▲ {t('collapse')}
+              <ArrowUpOutlined style={{ fontSize: 10 }} /> {t('collapse')}
             </button>
           </div>
         )}
         <div className="message-sticky-action-row">
-          <span>👤 {t('you')}{timeStr && ` · ${timeStr}`}</span>
+          <span><UserOutlined /> {t('you')}{timeStr && ` · ${timeStr}`}</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="message-sticky-back-btn" type="button" onClick={handleBackToMessage}>
-              ↩ {t('backToMessage')}
+              <RollbackOutlined style={{ marginRight: 2 }} /> {t('backToMessage')}
             </button>
             <button className="message-sticky-close-btn" type="button" onClick={handleClose}>
-              ✕
+              <CloseOutlined />
             </button>
           </div>
         </div>
