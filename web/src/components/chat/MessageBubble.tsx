@@ -17,12 +17,12 @@ export function MessageBubble({ message }: { message: Message }) {
     ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
 
-  const toolCalls = (message.metadata?.tool_calls as Array<{
+  const toolCalls = message.metadata?.tool_calls as Array<{
     name: string;
     input: Record<string, unknown>;
     output: string;
     status: string;
-  }> | undefined);
+  }> | undefined;
   const hasToolCalls = toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0;
 
   if (isUser) {
