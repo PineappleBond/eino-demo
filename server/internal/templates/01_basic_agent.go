@@ -14,7 +14,7 @@ func init() {
 				AgentKey:     "basic",
 				AgentName:    "Basic Agent",
 				Description:  "A chat agent with tool support and ReAct loop.",
-				SystemPrompt: "You are a helpful assistant. Use tools when appropriate to answer questions.",
+				SystemPrompt: "你是一个乐于助人的助手。在适当的时候使用工具来回答问题。",
 			},
 		},
 		Tools: []TemplateToolInfo{

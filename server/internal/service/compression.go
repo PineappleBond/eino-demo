@@ -17,6 +17,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/prompts"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
 
@@ -56,6 +57,11 @@ type compressToolInput struct {
 type compressToolOutput struct {
 	Success      bool   `json:"success"`
 	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// compressionPromptData is the template data for compression prompts.
+type compressionPromptData struct {
+	Conversation string
 }
 
 // CompressConversation compresses a conversation in-place:
@@ -120,17 +126,15 @@ func (s *CompressionService) CompressConversation(
 		return nil, fmt.Errorf("failed to create compress tool: %w", err)
 	}
 
-	// 6. Create agent
+	// 6. Create agent — render prompt template with conversation content.
+	instruction, err := prompts.Render("compression", compressionPromptData{Conversation: msgContent.String()})
+	if err != nil {
+		return nil, fmt.Errorf("failed to render compression prompt: %w", err)
+	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "compression",
 		Description: "Analyzes a conversation and generates a concise summary",
-		Instruction: "你是一个对话压缩助手。分析下面的对话历史，提取关键信息，然后调用 compress_conversation 工具生成摘要。\n\n" +
-			"<instructions>\n" +
-			"1. 阅读对话历史，理解用户的意图和讨论的主题\n" +
-			"2. 生成一个简洁的对话摘要（保留关键信息、决定、待办事项）\n" +
-			"3. 调用 compress_conversation 工具，传入 summary\n" +
-			"</instructions>\n\n" +
-			"<conversation>\n" + msgContent.String() + "\n</conversation>",
+		Instruction: instruction,
 		Model: chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
@@ -483,12 +487,14 @@ func (s *CompressionService) CompressMessagesToSummary(
 		return "", fmt.Errorf("failed to create chat model: %w", err)
 	}
 
+	instruction, err := prompts.Render("compression_summary", compressionPromptData{Conversation: msgContent.String()})
+	if err != nil {
+		return "", fmt.Errorf("failed to render compression_summary prompt: %w", err)
+	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "compression",
 		Description: "Generates a concise summary of a conversation",
-		Instruction: "你是一个对话压缩助手。分析下面的对话历史，生成一个简洁但完整的摘要，保留关键信息、决定和待办事项。\n\n" +
-			"<conversation>\n" + msgContent.String() + "\n</conversation>\n\n" +
-			"请直接返回摘要内容，不要使用工具。",
+		Instruction: instruction,
 		Model:         chatModel,
 		MaxIterations: 5,
 	})

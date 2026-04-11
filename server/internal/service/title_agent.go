@@ -16,6 +16,7 @@ import (
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/prompts"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
 
@@ -81,6 +82,11 @@ type updateTitleOutput struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// titlePromptData is the template data for the title generation prompt.
+type titlePromptData struct {
+	Message string
+}
+
 // runTitleAgent launches a lightweight agent that analyzes the user's first message
 // and generates a suitable conversation title.
 func (s *ChatService) runTitleAgent(
@@ -115,11 +121,16 @@ func (s *ChatService) runTitleAgent(
 		return
 	}
 
-	// 3. Create ChatModelAgent
+	// 3. Create ChatModelAgent — render title prompt template.
+	instruction, err := prompts.Render("title", titlePromptData{Message: firstMessage})
+	if err != nil {
+		s.log.Error("runTitleAgent: failed to render title prompt", zap.Error(err))
+		return
+	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "title_generator",
 		Description: "Analyzes the user's first message and generates a concise conversation title",
-		Instruction: "Analyze the user's message below and generate a concise, descriptive title for this conversation. The title should be under 20 characters and capture the main topic or intent.\n\nCall the update_title tool with your generated title.\n\n<message>\n" + firstMessage + "\n</message>",
+		Instruction: instruction,
 		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{

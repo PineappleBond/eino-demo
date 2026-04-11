@@ -5,7 +5,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/cloudwego/eino/adk"
@@ -20,53 +19,8 @@ import (
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/prompts"
 )
-
-// RootRunnerPromptTmpl is the Go text/template for the root agent system prompt.
-// Syntax: Go text/template ({{range}}, {{.Field}}) — no external dependencies.
-const RootRunnerPromptTmpl = `
-# 角色
-
-你是一个专业的 AI 助手，擅长利用可用工具解决问题。
-
-## 你的特点
-
-- **善于利用工具**：你拥有丰富的工具集，能够灵活组合使用它们来解决复杂问题
-- **全力以赴**：你不惜一切成本为人类解决问题，不轻言放弃
-- **系统性思维**：面对复杂任务时，你会将其拆解为多个步骤，逐步使用工具推进
-
-## 行为准则
-
-1. 充分理解用户的需求和意图
-2. 优先使用工具获取准确信息，而非凭空猜测
-3. 遇到复杂问题时，分步骤逐步解决
-4. 每次工具调用后，仔细分析返回结果，决定下一步行动
-5. 如果一次尝试未能解决问题，换一种方法继续尝试
-
-# 可用工具
-
-以下是你可以使用的工具列表：
-
-| 工具名称 | 简介 |
-| :--- | :--- |
-{{ range .Tools }}| {{ .Name }} | {{ .Desc }} |
-{{ end }}
-# 可用子代理
-
-以下是你可以调用的子代理列表：
-
-**注意⚠️：调用子代理时你必须把你润色过的提示词写入description字段**
-
-| 代理名称 | 简介 |
-| :--- | :--- |
-{{ range .Agents }}| {{ .Name }} | {{ .Desc }} |
-{{ end }}
-# 运行环境
-
-- 操作系统: {{ .OSInfo }}
-- 时区: {{ .Timezone }}
-- 语言: {{ .Language }}
-`
 
 // toolContext holds rendered tool metadata for template interpolation.
 type toolContext struct {
@@ -80,13 +34,14 @@ type agentContext struct {
 	Desc string
 }
 
-// promptData holds all data passed to the RootRunnerPromptTmpl.
+// promptData holds all data passed to the root prompt template.
 type promptData struct {
-	Tools    []toolContext
-	Agents   []agentContext
-	OSInfo   string
-	Timezone string
-	Language string
+	Tools        []toolContext
+	Agents       []agentContext
+	OSInfo       string
+	Timezone     string
+	Language     string
+	SystemPrompt string
 }
 
 // toolsToContext converts tool instances to template context data for rendering.
@@ -105,8 +60,8 @@ func toolsToContext(toolList []tool.BaseTool) ([]toolContext, error) {
 	return toolsData, nil
 }
 
-// renderRootPrompt renders the RootRunnerPromptTmpl with tool and agent metadata.
-func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent) (string, error) {
+// renderRootPrompt renders the root prompt template with tool/agent metadata.
+func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent, systemPrompt string) (string, error) {
 	tz, _ := time.Now().Local().Zone()
 	lang := os.Getenv("LANG")
 	if lang == "" {
@@ -126,25 +81,14 @@ func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent) (string, 
 		})
 	}
 
-	osInfo := runtime.GOOS + "/" + runtime.GOARCH
-
-	tpl, err := template.New("root_prompt").Parse(RootRunnerPromptTmpl)
-	if err != nil {
-		return "", err
-	}
-
-	var buf strings.Builder
-	if err := tpl.Execute(&buf, promptData{
-		Tools:    toolsData,
-		Agents:   agentsData,
-		OSInfo:   osInfo,
-		Timezone: tz,
-		Language: lang,
-	}); err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(buf.String()), nil
+	return prompts.Render("root", promptData{
+		Tools:        toolsData,
+		Agents:       agentsData,
+		OSInfo:       runtime.GOOS + "/" + runtime.GOARCH,
+		Timezone:     tz,
+		Language:     lang,
+		SystemPrompt: systemPrompt,
+	})
 }
 
 // RootRunnerConfig holds all inputs needed to build a RootRunner for one conversation.
@@ -210,12 +154,11 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		maxIter = 100
 	}
 
-	// 2. Render instruction with tool/agent metadata, then append template system prompt.
-	rendered, err := renderRootPrompt(cfg.Tools, cfg.SubAgents)
+	// 2. Render instruction — template includes SystemPrompt via {{ .SystemPrompt }}.
+	instruction, err := renderRootPrompt(cfg.Tools, cfg.SubAgents, cfg.SystemPrompt)
 	if err != nil {
 		return nil, err
 	}
-	instruction := rendered + "\n\n" + cfg.SystemPrompt
 
 	// 3. Build handlers (middleware chain).
 	// Order: Summarization → Context injection → Reduction
