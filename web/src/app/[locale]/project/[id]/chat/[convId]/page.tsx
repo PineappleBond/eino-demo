@@ -274,6 +274,17 @@ export default function ConvChatPage() {
         dispatch({ type: 'STOP_STREAMING' });
         break;
       }
+      case 'conversation.compressed': {
+        // Messages have been compressed in DB with a new summary message.
+        // Refetch and persist to IndexedDB.
+        api.get<MessageType[]>(`/conversations/${convId}/messages`)
+          .then((msgs) => {
+            dispatch({ type: 'SET_MESSAGES', payload: msgs });
+            saveMessages(msgs.map((m) => ({ id: m.id, data: m as Record<string, unknown> }))).catch(() => {});
+          })
+          .catch((err) => console.error('[Chat] conversation.compressed refetch failed', err));
+        break;
+      }
       case 'conversation.compacting': {
         const destroy = message.loading('Compacting conversation...', 0);
         (window as any).__compactDestroy = destroy;

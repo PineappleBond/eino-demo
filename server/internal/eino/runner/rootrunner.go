@@ -10,10 +10,12 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/middlewares/reduction"
+	"github.com/cloudwego/eino/adk/middlewares/summarization"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
@@ -162,6 +164,18 @@ type RootRunnerConfig struct {
 	// ReductionEnabled enables the reduction middleware, which proactively
 	// clears old tool results from context when it grows too large.
 	ReductionEnabled bool
+	// ConversationID identifies the conversation for message injection.
+	ConversationID uuid.UUID
+	// MessageQueue holds pending messages to inject at model call boundaries.
+	// Nil means no message injection.
+	MessageQueue *MessageQueue
+	// TokenCheck configures token overflow detection before each model call.
+	// Nil means no token checking.
+	TokenCheck *TokenCheckConfig
+	// SummarizationCallback is called when the Summarization middleware compresses context.
+	// Args: (ctx, compressedMsgCount). The caller queries DB to determine the new min_seq.
+	// Nil disables summarization sync.
+	SummarizationCallback func(ctx context.Context, compressedMsgCount int)
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.
@@ -203,7 +217,61 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 	}
 	instruction := rendered + "\n\n" + cfg.SystemPrompt
 
-	// 3. Build DeepAgent.
+	// 3. Build handlers (middleware chain).
+	// Order: Summarization → Context injection → Reduction
+	var handlers []adk.ChatModelAgentMiddleware
+
+	// 3a. Summarization middleware — auto-compresses conversation history when tokens
+	// exceed threshold. Syncs compressed state to DB via callback.
+	if cfg.SummarizationCallback != nil {
+		summarizationMW, err := summarization.New(ctx, &summarization.Config{
+			Model: chatModel,
+			Trigger: &summarization.TriggerCondition{
+				ContextTokens: 80000, // Sync with maxPromptTokens in chat.go
+			},
+			Callback: func(cbCtx context.Context, before, after adk.ChatModelAgentState) error {
+				// Calculate min_seq: find the last non-system message in before.Messages
+				// and use its seq as the boundary. The callback in chat.go handles
+				// the DB write.
+				lastNonSystemIdx := -1
+				for i, m := range before.Messages {
+					if m != nil && m.Role != schema.System {
+						lastNonSystemIdx = i
+					}
+				}
+				if lastNonSystemIdx >= 0 {
+					cfg.SummarizationCallback(cbCtx, lastNonSystemIdx+1)
+				}
+				return nil
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		handlers = append(handlers, summarizationMW)
+	}
+
+	// 3b. Context injection middleware (message injection from queue + token check).
+	if cfg.MessageQueue != nil && cfg.ConversationID != uuid.Nil {
+		handlers = append(handlers, NewContextInjectionMiddleware(cfg.MessageQueue, cfg.ConversationID, cfg.TokenCheck))
+	}
+
+	// 3c. Reduction middleware (proactively clears old tool results).
+	if cfg.ReductionEnabled {
+		reductionMW, err := reduction.New(ctx, &reduction.Config{
+			SkipTruncation:            true, // token overflow check is the primary defense; reduction only clears old tool results
+			MaxTokensForClear:         100000,
+			ClearRetentionSuffixLimit: 2,
+			RootDir:                   "/tmp/eino-reduction",
+			ReadFileToolName:          "read_file",
+		})
+		if err != nil {
+			return nil, err
+		}
+		handlers = append(handlers, reductionMW)
+	}
+
+	// 4. Build DeepAgent.
 	deepAgent, err := deep.New(ctx, &deep.Config{
 		Name:        "root",
 		Description: "Root agent for the chat flow",
@@ -218,6 +286,7 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 			EmitInternalEvents: true,
 		},
 		MaxIteration: maxIter,
+		Handlers:     handlers,
 	})
 	if err != nil {
 		return nil, err

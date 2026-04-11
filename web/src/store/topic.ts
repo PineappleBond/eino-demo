@@ -13,6 +13,7 @@ export type UpdatePayload =
   | components['schemas']['MessageStopPayload']
   | components['schemas']['ConversationCreatedPayload']
   | components['schemas']['ConversationDeletedPayload']
+  | components['schemas']['ConversationCompressedPayload']
   | components['schemas']['ConversationCompactingPayload']
   | components['schemas']['ConversationCompactedPayload']
   | components['schemas']['ConversationArchivedPayload']

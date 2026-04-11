@@ -64,6 +64,10 @@ type RootRunnerCallbacks struct {
 	cfg      RunCallbackConfig
 	mu       sync.Mutex                // guards trackers map and DB writes
 	trackers map[[2]string]*msgTracker // keyed by [2]string{addrStr, role}
+
+	// Accumulated token counts across all LLM calls in this run.
+	totalPromptTokens     int
+	totalCompletionTokens int
 }
 
 // NewRootRunnerCallbacks creates a callback handler for one agent run.
@@ -93,6 +97,7 @@ func (c *RootRunnerCallbacks) markTrackerStopped(t *msgTracker) error {
 }
 
 // Stop marks all in-progress trackers as stopped and pushes a message.stop update.
+// If all trackers is already complete, no update is pushed (no-op).
 func (c *RootRunnerCallbacks) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -102,10 +107,17 @@ func (c *RootRunnerCallbacks) Stop() {
 	}
 
 	// Mark all in-progress messages as stopped
+	stoppedAny := false
 	for _, t := range c.trackers {
 		if !t.completed {
 			c.markTrackerStopped(t)
+			stoppedAny = true
 		}
+	}
+
+	// If all trackers were already complete, skip — nothing to stop.
+	if !stoppedAny {
+		return
 	}
 
 	// Push message.stop update for the assistant message
@@ -297,6 +309,9 @@ func (c *RootRunnerCallbacks) completeMessage(ctx context.Context, t *msgTracker
 	if usage != nil {
 		updates["token_prompt"] = usage.PromptTokens
 		updates["token_completion"] = usage.CompletionTokens
+		// Accumulate across all LLM calls in this run
+		c.totalPromptTokens += usage.PromptTokens
+		c.totalCompletionTokens += usage.CompletionTokens
 	}
 
 	if err := c.cfg.DB.WithContext(ctx).Model(&model.Message{}).Where("id = ?", t.msgID).Updates(updates).Error; err != nil {
@@ -344,12 +359,6 @@ func (c *RootRunnerCallbacks) OnInputToolCalling(ctx context.Context, info *call
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	{
-		t := c.getOrCreateAssistantTracker(addrStr)
-		if t.msgID != uuid.Nil {
-		}
-	}
 
 	// Create a tool message immediately
 	t := c.getOrCreateTracker(addrStr, "tool", info.Name)
@@ -636,7 +645,11 @@ func (c *RootRunnerCallbacks) OnEnd() {
 	}
 	c.cfg.DB.WithContext(c.cfg.ParentCtx).Model(&model.Conversation{}).
 		Where("id = ?", c.cfg.ConversationID).
-		Update("updated_at", NowFunc())
+		Updates(map[string]interface{}{
+			"updated_at":       NowFunc(),
+			"token_prompt":     c.totalPromptTokens,
+			"token_completion": c.totalCompletionTokens,
+		})
 }
 
 func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {

@@ -42,6 +42,24 @@ func (m *RunSessionManager) Start(conversationID uuid.UUID, cancel context.Cance
 	}
 }
 
+// TryStart registers a new agent run only if no active session exists.
+// Returns true if the session was registered, false if one already exists.
+// This prevents concurrent agent runs for the same conversation.
+func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.sessions[conversationID]; ok {
+		return false
+	}
+	m.sessions[conversationID] = &AgentRunSession{
+		CancelFunc: cancel,
+		IsRunning:  true,
+		StopFunc:   stopFunc,
+		done:       make(chan struct{}),
+	}
+	return true
+}
+
 // Done signals that the event loop goroutine has fully drained.
 func (m *RunSessionManager) Done(conversationID uuid.UUID) {
 	m.mu.Lock()
@@ -62,6 +80,16 @@ func (m *RunSessionManager) SetCheckpointID(conversationID uuid.UUID, checkpoint
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[conversationID]; ok {
 		s.CheckpointID = checkpointID
+	}
+}
+
+// ClearCheckpointID removes the stored checkpoint ID. Called before a fresh run
+// after compression to prevent resuming from stale state.
+func (m *RunSessionManager) ClearCheckpointID(conversationID uuid.UUID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[conversationID]; ok {
+		s.CheckpointID = ""
 	}
 }
 
@@ -110,6 +138,15 @@ func (m *RunSessionManager) IsRunning(conversationID uuid.UUID) bool {
 		return s.IsRunning
 	}
 	return false
+}
+
+// IsActive returns true if the conversation has a registered session
+// (i.e. an agent run is in progress or has not yet been cleaned up).
+func (m *RunSessionManager) IsActive(conversationID uuid.UUID) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.sessions[conversationID]
+	return ok
 }
 
 // Cleanup removes a session when the run is fully complete.

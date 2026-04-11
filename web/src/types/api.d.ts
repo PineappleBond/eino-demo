@@ -1030,18 +1030,18 @@ export interface components {
             /** Format: int64 */
             seq: number;
         };
-        ConversationCompactingPayload: {
+        ConversationCompressedPayload: {
+            /** @description Conversation that was compressed */
             conversation_id: string;
-            /** Format: int64 */
-            seq: number;
-        };
-        ConversationCompactedPayload: {
-            /** @description The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber. */
-            conversation_id: string;
-            old_conv_id: string;
-            new_conv_id: string;
-            project_id: string;
-            title?: string;
+            /**
+             * Format: int64
+             * @description New compression cursor. Messages below this seq have been compressed.
+             */
+            min_seq: number;
+            /** @description LLM-generated summary of compressed messages */
+            summary?: string;
+            /** @description ID of the inserted summary message (optional) */
+            message_id?: string;
             /** Format: int64 */
             seq: number;
         };
@@ -1082,9 +1082,9 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
+            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
             /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
-            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
+            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
         };
     };
     responses: never;

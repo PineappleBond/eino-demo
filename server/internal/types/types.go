@@ -197,8 +197,7 @@ func (e TemplateDifficulty) Valid() bool {
 // Defines values for UpdateType.
 const (
 	ConversationArchived   UpdateType = "conversation.archived"
-	ConversationCompacted  UpdateType = "conversation.compacted"
-	ConversationCompacting UpdateType = "conversation.compacting"
+	ConversationCompressed UpdateType = "conversation.compressed"
 	ConversationCreated    UpdateType = "conversation.created"
 	ConversationDeleted    UpdateType = "conversation.deleted"
 	ConversationUpdated    UpdateType = "conversation.updated"
@@ -220,9 +219,7 @@ func (e UpdateType) Valid() bool {
 	switch e {
 	case ConversationArchived:
 		return true
-	case ConversationCompacted:
-		return true
-	case ConversationCompacting:
+	case ConversationCompressed:
 		return true
 	case ConversationCreated:
 		return true
@@ -379,21 +376,20 @@ type ConversationArchivedPayload struct {
 	Seq            int64  `json:"seq"`
 }
 
-// ConversationCompactedPayload defines model for ConversationCompactedPayload.
-type ConversationCompactedPayload struct {
-	// ConversationId The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber.
-	ConversationId string  `json:"conversation_id"`
-	NewConvId      string  `json:"new_conv_id"`
-	OldConvId      string  `json:"old_conv_id"`
-	ProjectId      string  `json:"project_id"`
-	Seq            int64   `json:"seq"`
-	Title          *string `json:"title,omitempty"`
-}
-
-// ConversationCompactingPayload defines model for ConversationCompactingPayload.
-type ConversationCompactingPayload struct {
+// ConversationCompressedPayload defines model for ConversationCompressedPayload.
+type ConversationCompressedPayload struct {
+	// ConversationId Conversation that was compressed
 	ConversationId string `json:"conversation_id"`
-	Seq            int64  `json:"seq"`
+
+	// MessageId ID of the inserted summary message (optional)
+	MessageId *string `json:"message_id,omitempty"`
+
+	// MinSeq New compression cursor. Messages below this seq have been compressed.
+	MinSeq int64 `json:"min_seq"`
+	Seq    int64 `json:"seq"`
+
+	// Summary LLM-generated summary of compressed messages
+	Summary *string `json:"summary,omitempty"`
 }
 
 // ConversationCreatedPayload defines model for ConversationCreatedPayload.
@@ -986,48 +982,22 @@ func (t *Update_Payload) MergeConversationDeletedPayload(v ConversationDeletedPa
 	return err
 }
 
-// AsConversationCompactingPayload returns the union data inside the Update_Payload as a ConversationCompactingPayload
-func (t Update_Payload) AsConversationCompactingPayload() (ConversationCompactingPayload, error) {
-	var body ConversationCompactingPayload
+// AsConversationCompressedPayload returns the union data inside the Update_Payload as a ConversationCompressedPayload
+func (t Update_Payload) AsConversationCompressedPayload() (ConversationCompressedPayload, error) {
+	var body ConversationCompressedPayload
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromConversationCompactingPayload overwrites any union data inside the Update_Payload as the provided ConversationCompactingPayload
-func (t *Update_Payload) FromConversationCompactingPayload(v ConversationCompactingPayload) error {
+// FromConversationCompressedPayload overwrites any union data inside the Update_Payload as the provided ConversationCompressedPayload
+func (t *Update_Payload) FromConversationCompressedPayload(v ConversationCompressedPayload) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeConversationCompactingPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCompactingPayload
-func (t *Update_Payload) MergeConversationCompactingPayload(v ConversationCompactingPayload) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsConversationCompactedPayload returns the union data inside the Update_Payload as a ConversationCompactedPayload
-func (t Update_Payload) AsConversationCompactedPayload() (ConversationCompactedPayload, error) {
-	var body ConversationCompactedPayload
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromConversationCompactedPayload overwrites any union data inside the Update_Payload as the provided ConversationCompactedPayload
-func (t *Update_Payload) FromConversationCompactedPayload(v ConversationCompactedPayload) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeConversationCompactedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCompactedPayload
-func (t *Update_Payload) MergeConversationCompactedPayload(v ConversationCompactedPayload) error {
+// MergeConversationCompressedPayload performs a merge with any union data inside the Update_Payload, using the provided ConversationCompressedPayload
+func (t *Update_Payload) MergeConversationCompressedPayload(v ConversationCompressedPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

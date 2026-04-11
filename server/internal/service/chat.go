@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,12 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/cloudwego/eino/adk"
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/components/tool/utils"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-
-	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner"
@@ -31,11 +27,13 @@ const agentRunTimeout = 10 * time.Minute
 
 // ChatService handles sending messages and streaming AI responses.
 type ChatService struct {
-	db            *gorm.DB
-	log           *zap.Logger
-	modelProvider *eino.ModelProvider
-	toolRegistry  *tools.ToolRegistry
-	runSessionMgr *runner.RunSessionManager
+	db             *gorm.DB
+	log            *zap.Logger
+	modelProvider  *eino.ModelProvider
+	toolRegistry   *tools.ToolRegistry
+	runSessionMgr  *runner.RunSessionManager
+	messageQueue   *runner.MessageQueue
+	compressionSvc *CompressionService
 }
 
 // NewChatService creates a ChatService.
@@ -45,13 +43,17 @@ func NewChatService(
 	modelProvider *eino.ModelProvider,
 	toolRegistry *tools.ToolRegistry,
 	runSessionMgr *runner.RunSessionManager,
+	messageQueue *runner.MessageQueue,
+	compressionSvc *CompressionService,
 ) *ChatService {
 	return &ChatService{
-		db:            db,
-		log:           log,
-		modelProvider: modelProvider,
-		toolRegistry:  toolRegistry,
-		runSessionMgr: runSessionMgr,
+		db:             db,
+		log:            log,
+		modelProvider:  modelProvider,
+		toolRegistry:   toolRegistry,
+		runSessionMgr:  runSessionMgr,
+		messageQueue:   messageQueue,
+		compressionSvc: compressionSvc,
 	}
 }
 
@@ -86,11 +88,6 @@ func (s *ChatService) CompleteSendMessage(
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
 		return nil, fmt.Errorf("conversation not found")
-	}
-
-	// Reject if conversation is compacting or compacted
-	if conv.Status == "compacting" || conv.Status == "compacted" {
-		return nil, fmt.Errorf("conversation is %s, cannot send messages", conv.Status)
 	}
 
 	if req.Content == "" {
@@ -164,14 +161,26 @@ func (s *ChatService) CompleteSendMessage(
 	})
 
 	// --- Run the AI agent asynchronously ---
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				s.log.Error("runAgent panic recovered", zap.Any("recover", r))
-			}
+	// If the conversation already has an active agent running, enqueue the message
+	// instead of starting a new run. The agent's contextInjectionMiddleware will
+	// drain pending messages at the next model call boundary.
+	// Use IsRunning (not IsActive) to avoid enqueuing to a session that is
+	// stopping but not yet cleaned up.
+	if s.runSessionMgr.IsRunning(conversationID) {
+		s.messageQueue.Enqueue(conversationID, req.Content)
+		s.log.Info("CompleteSendMessage: enqueued message for active agent",
+			zap.String("conv", conversationID.String()),
+		)
+	} else {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.log.Error("runAgent panic recovered", zap.Any("recover", r))
+				}
+			}()
+			s.runAgent(context.WithoutCancel(ctx), userID, conversationID, req.Content, nextSeq, pushUpdate)
 		}()
-		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, req.Content, nextSeq, pushUpdate)
-	}()
+	}
 
 	// --- Generate title for first message asynchronously ---
 	if isFirstMessage {
@@ -251,15 +260,67 @@ func (s *ChatService) runAgent(
 	callbacks := runner.NewRootRunnerCallbacks(callbackCfg)
 
 	// 4. Register session (stop func marks in-progress messages as stopped in DB)
-	s.runSessionMgr.Start(conversationID, cancel, callbacks.Stop)
+	// TryStart is atomic: if another runAgent already registered, this returns false
+	// and we exit gracefully to prevent concurrent agent runs.
+	if !s.runSessionMgr.TryStart(conversationID, cancel, callbacks.Stop) {
+		s.log.Info("runAgent: another agent run already registered, skipping",
+			zap.String("conv", conversationID.String()),
+		)
+		cancel()
+		return
+	}
 
-	// 5. Build run config
+	// 5. Token counter — created once, reused for both pre-execution check and runtime overflow detection.
+	// Limit: 80K tokens — beyond this, compaction is recommended.
+	const maxPromptTokens = 80000
+	var tokenCounter *svcutils.TokenCounter
+	if tc, err := svcutils.NewTokenCounter(modelTier); err != nil {
+		s.log.Warn("runAgent: failed to create token counter, disabling token checks", zap.Error(err))
+	} else {
+		tokenCounter = tc
+	}
+
 	runCfg := runner.RootRunnerConfig{
-		ModelProvider: s.modelProvider,
-		ModelTier:     modelTier,
-		SystemPrompt:  systemPrompt,
-		Tools:         s.toolRegistry.GetBaseTools(),
-		MaxIteration:  100,
+		ModelProvider:    s.modelProvider,
+		ModelTier:        modelTier,
+		SystemPrompt:     systemPrompt,
+		Tools:            s.toolRegistry.GetBaseTools(),
+		MaxIteration:     100,
+		ConversationID:   conversationID,
+		MessageQueue:     s.messageQueue,
+		ReductionEnabled: true,
+		TokenCheck: &runner.TokenCheckConfig{
+			Counter:   tokenCounter,
+			MaxTokens: maxPromptTokens,
+			OnOverflow: func(tokenCount int) {
+				s.log.Warn("runAgent: token overflow detected during agent run",
+					zap.Int("tokens", tokenCount),
+					zap.Int("limit", maxPromptTokens),
+					zap.String("conv", conversationID.String()),
+				)
+				// Do NOT call callbacks.Stop() here — the event loop handles
+				// stopping after catching TokenOverflowError. Calling Stop()
+				// here would emit a duplicate message.stop update.
+			},
+		},
+		SummarizationCallback: func(cbCtx context.Context, compressedMsgCount int) {
+			s.log.Info("runAgent: summarization callback triggered",
+				zap.Int("compressed_count", compressedMsgCount),
+				zap.String("conv", conversationID.String()),
+			)
+			// The summarization middleware already compressed state.Messages in memory.
+			// We need to sync the compression to DB: insert summary message, update min_seq.
+			// This is done asynchronously to not block the agent.
+			go func() {
+				if err := s.compressionSvc.SyncSummarizationToDB(
+					context.WithoutCancel(cbCtx),
+					userID, conversationID, compressedMsgCount,
+					nextSeq, pushUpdate,
+				); err != nil {
+					s.log.Error("runAgent: failed to sync summarization to DB", zap.Error(err))
+				}
+			}()
+		},
 	}
 
 	rootRunner, err := runner.NewRootRunner(runCtx, runCfg, callbacks)
@@ -278,10 +339,12 @@ func (s *ChatService) runAgent(
 
 	var iter *adk.AsyncIterator[*adk.AgentEvent]
 	// Load conversation history as context: user, assistant, and system messages
+	// Only load messages from min_seq onwards (earlier messages have been compressed)
 	var historyMessages []model.Message
 	if err := s.db.
 		Select("sender_role", "content").
-		Where("conversation_id = ? AND sender_role IN ?", conversationID, []string{"user", "assistant", "system"}).
+		Where("conversation_id = ? AND seq >= ? AND sender_role IN ?",
+			conversationID, conv.MinSeq, []string{"user", "assistant", "system"}).
 		Order("seq ASC").
 		Find(&historyMessages).Error; err != nil {
 		s.log.Error("runAgent: failed to load conversation history", zap.Error(err))
@@ -299,86 +362,78 @@ func (s *ChatService) runAgent(
 			messages = append(messages, schema.SystemMessage(msg.Content))
 		}
 	}
-	//messages = append(messages, schema.UserMessage(userContent))
 
 	// Check prompt token count before running agent to prevent context overflow.
-	// Limit: 80K tokens — beyond this, compaction is recommended.
-	const maxPromptTokens = 80000
-	if len(messages) > 0 {
-		counter, cerr := svcutils.NewTokenCounter(modelTier)
-		if cerr != nil {
-			s.log.Warn("runAgent: failed to create token counter, skipping check", zap.Error(cerr))
+	if len(messages) > 0 && tokenCounter != nil {
+		roles := make([]string, 0, len(messages))
+		contents := make([]string, 0, len(messages))
+		for _, m := range messages {
+			roles = append(roles, string(m.Role))
+			contents = append(contents, m.Content)
+		}
+		promptTokens := tokenCounter.CountMessages(roles, contents)
+		s.log.Info("runAgent: prompt token estimate",
+			zap.Int("tokens", promptTokens),
+			zap.Int("limit", maxPromptTokens),
+			zap.Int("messages", len(messages)),
+		)
+
+		// Update conversation token_prompt field and push notification
+		seq, seqErr := nextSeq(ctx, userID)
+		if seqErr != nil {
+			s.log.Error("runAgent: seq assignment failed for token update", zap.Error(seqErr))
 		} else {
-			roles := make([]string, 0, len(messages))
-			contents := make([]string, 0, len(messages))
-			for _, m := range messages {
-				roles = append(roles, string(m.Role))
-				contents = append(contents, m.Content)
+			if err := s.db.WithContext(ctx).Model(&model.Conversation{}).
+				Where("id = ?", conversationID).
+				Updates(map[string]interface{}{
+					"token_prompt": promptTokens,
+				}).Error; err != nil {
+				s.log.Error("runAgent: failed to update conversation token_prompt", zap.Error(err))
 			}
-			promptTokens := counter.CountMessages(roles, contents)
-			s.log.Info("runAgent: prompt token estimate",
+
+			update := model.UserUpdate{
+				UserID: userID,
+				Seq:    seq,
+				Type:   "conversation.updated",
+				Payload: model.JSONMap{
+					"conversation_id": conversationID.String(),
+					"token_prompt":    promptTokens,
+					"seq":             seq,
+				},
+			}
+			if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
+				s.log.Error("failed to persist token update", zap.Error(dbErr))
+			}
+			pushUpdate(userID, update)
+		}
+
+		if promptTokens > maxPromptTokens {
+			s.log.Warn("runAgent: prompt exceeds token limit, suggesting compaction",
 				zap.Int("tokens", promptTokens),
 				zap.Int("limit", maxPromptTokens),
-				zap.Int("messages", len(messages)),
 			)
-
-			// Update conversation token_prompt field and push notification
-			seq, seqErr := nextSeq(ctx, userID)
-			if seqErr != nil {
-				s.log.Error("runAgent: seq assignment failed for token update", zap.Error(seqErr))
+			// Push error update instead of running agent
+			errSeq, err := nextSeq(ctx, userID)
+			if err != nil {
+				s.log.Error("runAgent: seq assignment failed", zap.Error(err))
 			} else {
-				if err := s.db.WithContext(ctx).Model(&model.Conversation{}).
-					Where("id = ?", conversationID).
-					Updates(map[string]interface{}{
-						"token_prompt": promptTokens,
-					}).Error; err != nil {
-					s.log.Error("runAgent: failed to update conversation token_prompt", zap.Error(err))
-				}
-
-				update := model.UserUpdate{
+				errUpdate := model.UserUpdate{
 					UserID: userID,
-					Seq:    seq,
-					Type:   "conversation.updated",
+					Seq:    errSeq,
+					Type:   "message.error",
 					Payload: model.JSONMap{
 						"conversation_id": conversationID.String(),
-						"token_prompt":    promptTokens,
-						"seq":             seq,
+						"error":           fmt.Sprintf("对话历史过长（约 %d tokens），超出限制 %d tokens。请先压缩后再发送。", promptTokens, maxPromptTokens),
 					},
 				}
-				if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
-					s.log.Error("failed to persist token update", zap.Error(dbErr))
+				if dbErr := s.db.WithContext(ctx).Create(&errUpdate).Error; dbErr != nil {
+					s.log.Error("failed to persist token-limit error update", zap.Error(dbErr))
 				}
-				pushUpdate(userID, update)
+				pushUpdate(userID, errUpdate)
 			}
-
-			if promptTokens > maxPromptTokens {
-				s.log.Warn("runAgent: prompt exceeds token limit, suggesting compaction",
-					zap.Int("tokens", promptTokens),
-					zap.Int("limit", maxPromptTokens),
-				)
-				// Push error update instead of running agent
-				errSeq, err := nextSeq(ctx, userID)
-				if err != nil {
-					s.log.Error("runAgent: seq assignment failed", zap.Error(err))
-				} else {
-					errUpdate := model.UserUpdate{
-						UserID: userID,
-						Seq:    errSeq,
-						Type:   "message.error",
-						Payload: model.JSONMap{
-							"conversation_id": conversationID.String(),
-							"error":           fmt.Sprintf("对话历史过长（约 %d tokens），超出限制 %d tokens。请先压缩后再发送。", promptTokens, maxPromptTokens),
-						},
-					}
-					if dbErr := s.db.WithContext(ctx).Create(&errUpdate).Error; dbErr != nil {
-						s.log.Error("failed to persist token-limit error update", zap.Error(dbErr))
-					}
-					pushUpdate(userID, errUpdate)
-				}
-				cancel()
-				s.runSessionMgr.Cleanup(conversationID)
-				return
-			}
+			cancel()
+			s.runSessionMgr.Cleanup(conversationID)
+			return
 		}
 	}
 
@@ -397,13 +452,37 @@ func (s *ChatService) runAgent(
 		defer func() {
 			if r := recover(); r != nil {
 				s.log.Error("runAgent event loop panic recovered", zap.Any("recover", r))
+				callbacks.Stop()
 				s.runSessionMgr.Cleanup(conversationID)
+				s.messageQueue.Cleanup(conversationID)
 				s.runSessionMgr.Done(conversationID)
 				cancel()
 			}
 		}()
 		defer func() {
+			// Before cleaning up, check for pending messages that were enqueued
+			// after the last Drain. This happens when the agent finishes
+			// naturally before consuming all queued messages.
+			if s.messageQueue.HasPending(conversationID) {
+				s.log.Info("runAgent: pending messages remain after agent end, spawning new run",
+					zap.String("conv", conversationID.String()),
+				)
+				s.runSessionMgr.Cleanup(conversationID)
+				s.messageQueue.Cleanup(conversationID)
+				s.runSessionMgr.Done(conversationID)
+				cancel()
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							s.log.Error("runAgent (defer spawn) panic recovered", zap.Any("recover", r))
+						}
+					}()
+					s.runAgent(context.WithoutCancel(ctx), userID, conversationID, userContent, nextSeq, pushUpdate)
+				}()
+				return
+			}
 			s.runSessionMgr.Cleanup(conversationID)
+			s.messageQueue.Cleanup(conversationID)
 			s.runSessionMgr.Done(conversationID)
 		}()
 		defer cancel()
@@ -423,7 +502,78 @@ func (s *ChatService) runAgent(
 					continue
 				}
 				if event.Err != nil {
-					callbacks.OnError(event.Err)
+					// Check for our TokenOverflowError first (carries drained messages).
+					var overflowErr *runner.TokenOverflowError
+					if errors.As(event.Err, &overflowErr) {
+						s.log.Warn("runAgent: token overflow detected, compressing and restarting",
+							zap.Int("tokens", overflowErr.TokenCount),
+							zap.Int("limit", overflowErr.MaxTokens),
+							zap.String("conv", conversationID.String()),
+							zap.Int("drained_messages", len(overflowErr.DrainedMessages)),
+						)
+						callbacks.Stop()
+
+						// Re-enqueue drained messages before compression, so they survive
+						// the fresh run after the event loop exits.
+						for _, content := range overflowErr.DrainedMessages {
+							s.messageQueue.Enqueue(conversationID, content)
+						}
+
+						// Compress in-place. After compression, the DB has updated min_seq
+						// and a summary message. The fresh runAgent will load from DB
+						// with seq >= min_seq.
+						if err := s.compressionSvc.CompressAndResume(
+							context.WithoutCancel(ctx), userID, conversationID, nextSeq, pushUpdate,
+						); err != nil {
+							s.log.Error("runAgent: compress failed before restart", zap.Error(err))
+							// Fall through to error push below
+						} else {
+							s.log.Info("runAgent: compression complete, restarting agent",
+								zap.String("conv", conversationID.String()),
+							)
+							// Restart agent with same params. The event loop defer will
+							// cleanup the old session; the new runAgent will create a fresh one.
+							// Clear stale checkpoint to force a fresh Run (not Resume).
+							s.runSessionMgr.ClearCheckpointID(conversationID)
+							go func() {
+								defer func() {
+									if r := recover(); r != nil {
+										s.log.Error("runAgent (post-compress) panic recovered", zap.Any("recover", r))
+									}
+								}()
+								s.runAgent(context.WithoutCancel(ctx), userID, conversationID, userContent, nextSeq, pushUpdate)
+							}()
+							return
+						}
+					} else if isContextOverflowError(event.Err) {
+						s.log.Warn("runAgent: context overflow detected (API-level), stopping agent",
+							zap.Error(event.Err),
+							zap.String("conv", conversationID.String()),
+						)
+						callbacks.Stop()
+					} else {
+						callbacks.OnError(event.Err)
+						break
+					}
+					// Push user-friendly error message (for both overflow types)
+					errSeq, err := nextSeq(ctx, userID)
+					if err != nil {
+						s.log.Error("runAgent: seq assignment failed for overflow error", zap.Error(err))
+					} else {
+						errUpdate := model.UserUpdate{
+							UserID: userID,
+							Seq:    errSeq,
+							Type:   "message.error",
+							Payload: model.JSONMap{
+								"conversation_id": conversationID.String(),
+								"error":           "对话上下文超出限制，请先压缩对话历史后再继续。",
+							},
+						}
+						if dbErr := s.db.WithContext(ctx).Create(&errUpdate).Error; dbErr != nil {
+							s.log.Error("failed to persist overflow error update", zap.Error(dbErr))
+						}
+						pushUpdate(userID, errUpdate)
+					}
 					break
 				}
 				if event.Action != nil && event.Action.Interrupted != nil {
@@ -514,13 +664,8 @@ func (s *ChatService) GetConversationMessages(userID, conversationID uuid.UUID, 
 	return messages, nil
 }
 
-// CompactConversationResponse holds the response for starting compaction.
-type CompactConversationResponse struct {
-	ConversationID string `json:"conversation_id"`
-}
-
-// StartCompaction sets the conversation status to "compacting",
-// emits a conversation.compacting update, and launches the compact agent asynchronously.
+// StartCompaction compresses the conversation in-place.
+// If an agent is actively running, it stops it first.
 func (s *ChatService) StartCompaction(
 	ctx context.Context,
 	userID, conversationID uuid.UUID,
@@ -533,322 +678,37 @@ func (s *ChatService) StartCompaction(
 		return fmt.Errorf("conversation not found")
 	}
 
-	// 2. Check current status
-	if conv.Status == "compacting" || conv.Status == "compacted" {
-		return fmt.Errorf("conversation is already %s", conv.Status)
+	// 2. Stop running agent if any
+	if s.runSessionMgr.IsRunning(conversationID) {
+		s.runSessionMgr.Stop(conversationID)
 	}
 
-	// 3. Allocate seq
-	seq, err := nextSeq(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("seq assignment failed: %w", err)
+	// 3. Compress in-place
+	if _, err := s.compressionSvc.CompressConversation(ctx, userID, conversationID, nextSeq, pushUpdate); err != nil {
+		return fmt.Errorf("failed to compress conversation: %w", err)
 	}
-
-	// 4. Set status to compacting + create user_update in a single transaction
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.Conversation{}).
-			Where("id = ? AND user_id = ?", conversationID, userID).
-			Update("status", "compacting").Error; err != nil {
-			return fmt.Errorf("failed to set compacting status: %w", err)
-		}
-
-		update := model.UserUpdate{
-			UserID: userID,
-			Seq:    seq,
-			Type:   "conversation.compacting",
-			Payload: model.JSONMap{
-				"conversation_id": conversationID.String(),
-				"seq":             seq,
-			},
-		}
-		if err := tx.Create(&update).Error; err != nil {
-			return fmt.Errorf("failed to create user_update: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	// 5. Push update
-	pushUpdate(userID, model.UserUpdate{
-		UserID: userID,
-		Seq:    seq,
-		Type:   "conversation.compacting",
-		Payload: model.JSONMap{
-			"conversation_id": conversationID.String(),
-			"seq":             seq,
-		},
-	})
-
-	// 6. Load messages for the agent
-	var historyMessages []model.Message
-	if err := s.db.
-		Select("sender_role", "content").
-		Where("conversation_id = ? AND sender_role IN ?", conversationID, []string{"user", "assistant", "system"}).
-		Order("seq ASC").
-		Find(&historyMessages).Error; err != nil {
-		s.log.Error("runAgent: failed to load conversation history", zap.Error(err))
-	}
-	// 7. Launch the compact agent asynchronously
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				s.log.Error("runCompactAgent panic recovered", zap.Any("recover", r))
-			}
-		}()
-		s.runCompactAgent(context.WithoutCancel(ctx), userID, conversationID, conv.ProjectID, historyMessages, nextSeq, pushUpdate)
-	}()
 
 	return nil
 }
 
-// compactAgentTimeout is the maximum duration for the compact agent.
-const compactAgentTimeout = 2 * time.Minute
-
-// runCompactAgent launches an agent that analyzes a conversation, generates a summary,
-// and calls the complete_compaction tool to archive the old conversation and create a new one.
-func (s *ChatService) runCompactAgent(
-	ctx context.Context,
-	userID, conversationID, projectID uuid.UUID,
-	messages []model.Message,
-	nextSeq NextSeqFunc,
-	pushUpdate PushUpdateFunc,
-) {
-	defer func() {
-		if r := recover(); r != nil {
-			s.log.Error("runCompactAgent panic recovered", zap.Any("recover", r))
-		}
-	}()
-
-	// 1. Resolve haiku model config
-	mc := s.modelProvider.GetModel("haiku")
-	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		BaseURL: mc.BaseURL,
-		APIKey:  mc.APIKey,
-		Model:   mc.Model,
-	})
-	if err != nil {
-		s.log.Error("runCompactAgent: failed to create chat model", zap.Error(err))
-		return
+// isContextOverflowError checks if an error indicates context length exceeded.
+func isContextOverflowError(err error) bool {
+	if err == nil {
+		return false
 	}
-
-	// 2. Build message content for the agent
-	var msgContent strings.Builder
-	for _, m := range messages {
-		if m.SenderRole == "user" {
-			msgContent.WriteString(fmt.Sprintf("<user>%s</user>\n", m.Content))
-		} else if m.SenderRole == "assistant" {
-			msgContent.WriteString(fmt.Sprintf("<assistant>%s</assistant>\n", m.Content))
-		} else if m.SenderRole == "system" {
-			msgContent.WriteString(fmt.Sprintf("<system>%s</system>\n", m.Content))
+	msg := strings.ToLower(err.Error())
+	for _, p := range []string{
+		"context_length_exceeded",
+		"prompt_too_long",
+		"context_overflow",
+		"maximum context length",
+		"input is too long",
+		"too many tokens",
+		"token overflow", // TokenOverflowError from contextInjectionMiddleware
+	} {
+		if strings.Contains(msg, p) {
+			return true
 		}
 	}
-
-	// 3. Create the complete_compaction tool — scoped to this conversation
-	compactionTool, err := completeCompactionTool(userID, conversationID, projectID, s.db, nextSeq, pushUpdate)
-	if err != nil {
-		s.log.Error("runCompactAgent: failed to create compaction tool", zap.Error(err))
-		return
-	}
-
-	// 4. Create ChatModelAgent
-	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        "compact_agent",
-		Description: "Analyzes a conversation and compresses it into a new conversation with preserved context",
-		Instruction: "你是一个对话压缩助手。分析下面的对话历史，提取关键信息，然后调用 complete_compaction 工具来完成压缩。\n\n" +
-			"<instructions>\n" +
-			"1. 阅读对话历史，理解用户的意图和讨论的主题\n" +
-			"2. 生成一个简洁的对话摘要（保留关键信息、决定、待办事项）\n" +
-			"3. 为新对话生成一个合适的标题\n" +
-			"4. 调用 complete_compaction 工具，传入 summary 和 title\n" +
-			"</instructions>\n\n" +
-			"<conversation>\n" + msgContent.String() + "\n</conversation>",
-		Model: chatModel,
-		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{
-				Tools: []tool.BaseTool{compactionTool},
-			},
-		},
-		MaxIterations: 10,
-	})
-	if err != nil {
-		s.log.Error("runCompactAgent: failed to create agent", zap.Error(err))
-		return
-	}
-
-	// 5. Create runner
-	runner := adk.NewRunner(ctx, adk.RunnerConfig{
-		Agent:           agent,
-		EnableStreaming: false,
-	})
-
-	// 6. Run agent with timeout
-	runCtx, cancel := context.WithTimeout(ctx, compactAgentTimeout)
-	defer cancel()
-
-	iter := runner.Query(runCtx, "请压缩以上对话历史")
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		for {
-			event, ok := iter.Next()
-			if !ok {
-				break
-			}
-			if event == nil {
-				continue
-			}
-			if event.Err != nil {
-				s.log.Warn("runCompactAgent: agent error", zap.Error(event.Err))
-				return
-			}
-		}
-	}()
-
-	select {
-	case <-done:
-		s.log.Info("runCompactAgent: completed", zap.String("conv", conversationID.String()))
-	case <-runCtx.Done():
-		s.log.Warn("runCompactAgent: timed out", zap.Duration("timeout", compactAgentTimeout))
-	}
-}
-
-// complete_compaction tool input/output
-type completeCompactionInput struct {
-	Summary string `json:"summary" jsonschema_description:"A concise summary of the conversation, preserving key information, decisions, and action items"`
-	Title   string `json:"title" jsonschema_description:"A concise, descriptive title for the new conversation"`
-}
-
-type completeCompactionOutput struct {
-	Success      bool   `json:"success"`
-	NewConvID    string `json:"new_conversation_id,omitempty"`
-	OldConvID    string `json:"old_conversation_id,omitempty"`
-	Title        string `json:"title,omitempty"`
-	ErrorMessage string `json:"error_message,omitempty"`
-}
-
-// completeCompactionTool creates a tool that archives the old conversation and creates a new one.
-// The tool captures conversationID, userID, projectID via closure so it can only operate on the correct conversation.
-func completeCompactionTool(userID, conversationID, projectID uuid.UUID, db *gorm.DB, nextSeq NextSeqFunc, pushUpdate PushUpdateFunc) (tool.BaseTool, error) {
-	t, err := utils.InferTool("complete_compaction", "Archive the old conversation and create a new conversation with preserved context. Call this with a summary and title.",
-		func(ctx context.Context, input completeCompactionInput) (completeCompactionOutput, error) {
-			if input.Summary == "" {
-				return completeCompactionOutput{ErrorMessage: "summary is required"}, fmt.Errorf("summary is required")
-			}
-			title := input.Title
-			if title == "" {
-				title = "Continued from previous conversation"
-			}
-			if len(title) > 100 {
-				title = title[:100]
-			}
-
-			compactedSeq, err := nextSeq(ctx, userID)
-			if err != nil {
-				return completeCompactionOutput{ErrorMessage: "seq assignment failed"}, fmt.Errorf("seq assignment failed: %w", err)
-			}
-
-			var newConvID uuid.UUID
-
-			err = db.Transaction(func(tx *gorm.DB) error {
-				// 1. Archive old conversation
-				if err := tx.Model(&model.Conversation{}).
-					Where("id = ? AND user_id = ?", conversationID, userID).
-					Updates(map[string]interface{}{
-						"status":  "compacted",
-						"summary": input.Summary,
-					}).Error; err != nil {
-					return fmt.Errorf("failed to archive old conversation: %w", err)
-				}
-
-				// 2. Create new conversation
-				newConv := model.Conversation{
-					ProjectID:            projectID,
-					UserID:               userID,
-					Title:                title,
-					Status:               "active",
-					ParentConversationID: &conversationID,
-				}
-				if err := tx.Create(&newConv).Error; err != nil {
-					return fmt.Errorf("failed to create new conversation: %w", err)
-				}
-				newConvID = newConv.ID
-
-				// 3. Add user as member
-				member := model.ConversationMember{
-					ConversationID: newConv.ID,
-					MemberType:     "user",
-					MemberID:       userID.String(),
-					MemberName:     "User",
-					IsOwner:        true,
-				}
-				if err := tx.Create(&member).Error; err != nil {
-					return fmt.Errorf("failed to add conversation member: %w", err)
-				}
-
-				// 4. Insert system message with compressed context
-				systemMsg := model.Message{
-					ConversationID: newConv.ID,
-					SenderRole:     "system",
-					SenderID:       "system",
-					Content:        input.Summary,
-					Metadata:       model.JSONMap{"compressed": true},
-					Seq:            0, // First message, seq will be assigned below
-				}
-				if err := tx.Create(&systemMsg).Error; err != nil {
-					return fmt.Errorf("failed to insert system message: %w", err)
-				}
-
-				// 5. Create user_update for the new conversation
-				update := model.UserUpdate{
-					UserID: userID,
-					Seq:    compactedSeq,
-					Type:   "conversation.compacted",
-					Payload: model.JSONMap{
-						"conversation_id": conversationID.String(),
-						"old_conv_id":     conversationID.String(),
-						"new_conv_id":     newConv.ID.String(),
-						"project_id":      projectID.String(),
-						"title":           title,
-						"seq":             compactedSeq,
-					},
-				}
-				if err := tx.Create(&update).Error; err != nil {
-					return fmt.Errorf("failed to create user_update: %w", err)
-				}
-
-				return nil
-			})
-			if err != nil {
-				return completeCompactionOutput{ErrorMessage: "failed to complete compaction"}, err
-			}
-
-			// 6. Push update to WebSocket
-			pushUpdate(userID, model.UserUpdate{
-				UserID: userID,
-				Seq:    compactedSeq,
-				Type:   "conversation.compacted",
-				Payload: model.JSONMap{
-					"conversation_id": conversationID.String(),
-					"old_conv_id":     conversationID.String(),
-					"new_conv_id":     newConvID.String(),
-					"project_id":      projectID.String(),
-					"title":           title,
-					"seq":             compactedSeq,
-				},
-			})
-
-			return completeCompactionOutput{
-				Success:   true,
-				NewConvID: newConvID.String(),
-				OldConvID: conversationID.String(),
-				Title:     title,
-			}, nil
-		})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create complete_compaction tool: %w", err)
-	}
-	return t, nil
+	return false
 }

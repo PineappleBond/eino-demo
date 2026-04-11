@@ -19,6 +19,7 @@ type Conversation struct {
 	LatestMessageSeq     int64      `gorm:"not null;default:0"`
 	TokenPrompt          int64      `gorm:"not null;default:0"`
 	TokenCompletion      int64      `gorm:"not null;default:0"`
+	MinSeq               int64      `gorm:"not null;default:0"` // Messages below this seq have been compressed
 	MemberCount          int        `gorm:"not null;default:0"`
 	ParentConversationID *uuid.UUID `gorm:"type:uuid"`
 	UpdatedAt            time.Time  `gorm:"not null;autoUpdateTime;index"`

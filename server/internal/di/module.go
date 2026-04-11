@@ -34,6 +34,8 @@ var Module = fx.Options(
 		eino.NewModelProvider,
 		tools.NewToolRegistry,
 		runner.NewRunSessionManager,
+		runner.NewMessageQueue,
+		service.NewCompressionService,
 		service.NewUserService,
 		service.NewSettingsService,
 		service.NewTemplateService,

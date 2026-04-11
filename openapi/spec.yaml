@@ -873,31 +873,23 @@ components:
           type: integer
           format: int64
 
-    ConversationCompactingPayload:
+    ConversationCompressedPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [conversation_id, min_seq, seq]
       properties:
         conversation_id:
           type: string
-        seq:
+          description: "Conversation that was compressed"
+        min_seq:
           type: integer
           format: int64
-
-    ConversationCompactedPayload:
-      type: object
-      required: [conversation_id, old_conv_id, new_conv_id, project_id, seq]
-      properties:
-        conversation_id:
+          description: "New compression cursor. Messages below this seq have been compressed."
+        summary:
           type: string
-          description: "The old conversation ID (same as old_conv_id). Used by frontend deriveTopic to route to the correct subscriber."
-        old_conv_id:
+          description: "LLM-generated summary of compressed messages"
+        message_id:
           type: string
-        new_conv_id:
-          type: string
-        project_id:
-          type: string
-        title:
-          type: string
+          description: "ID of the inserted summary message (optional)"
         seq:
           type: integer
           format: int64
@@ -988,8 +980,7 @@ components:
             - conversation.created
             - conversation.updated
             - conversation.deleted
-            - conversation.compacting
-            - conversation.compacted
+            - conversation.compressed
             - conversation.archived
             # Project-level events
             - project.created
@@ -1009,8 +1000,7 @@ components:
             - $ref: "#/components/schemas/MessageStopPayload"
             - $ref: "#/components/schemas/ConversationCreatedPayload"
             - $ref: "#/components/schemas/ConversationDeletedPayload"
-            - $ref: "#/components/schemas/ConversationCompactingPayload"
-            - $ref: "#/components/schemas/ConversationCompactedPayload"
+            - $ref: "#/components/schemas/ConversationCompressedPayload"
             - $ref: "#/components/schemas/ConversationArchivedPayload"
             - $ref: "#/components/schemas/ProjectCreatedPayload"
             - $ref: "#/components/schemas/ProjectDeletedPayload"
