@@ -41,7 +41,7 @@ export function LastUserMessageStickyBar({
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [messageRef, containerRef]);
+  }, [messageRef, containerRef, lastUserMessage.id]);
 
   // Detect if content overflows the collapsed height
   const contentRef = useRef<HTMLDivElement>(null);
