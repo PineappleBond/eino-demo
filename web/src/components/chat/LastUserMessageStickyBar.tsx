@@ -63,8 +63,8 @@ export function LastUserMessageStickyBar({
     setIsExpanded((prev) => !prev);
   }, []);
 
-  // Don't render if message is visible or manually closed
-  if (isIntersecting || isManuallyClosed) return null;
+  // Don't render if message is visible, manually closed, or has no content
+  if (isIntersecting || isManuallyClosed || !lastUserMessage.content?.trim()) return null;
 
   const timeStr = lastUserMessage.created_at
     ? new Date(lastUserMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -82,7 +82,7 @@ export function LastUserMessageStickyBar({
             {lastUserMessage.content}
             {!isExpanded && needsExpand && (
               <div className="message-sticky-gradient">
-                <button className="message-sticky-expand-btn" onClick={handleToggleExpand}>
+                <button className="message-sticky-expand-btn" type="button" onClick={handleToggleExpand}>
                   {t('expandAll')} ▼
                 </button>
               </div>
@@ -91,18 +91,18 @@ export function LastUserMessageStickyBar({
         </div>
         {isExpanded && needsExpand && (
           <div style={{ textAlign: 'right', marginTop: 4 }}>
-            <button className="message-sticky-close-btn" onClick={handleToggleExpand} style={{ fontSize: 10 }}>
+            <button className="message-sticky-close-btn" type="button" onClick={handleToggleExpand} style={{ fontSize: 10 }}>
               ▲ {t('collapse')}
             </button>
           </div>
         )}
         <div className="message-sticky-action-row">
-          <span>👤 {t('you')} · {timeStr}</span>
+          <span>👤 {t('you')}{timeStr && ` · ${timeStr}`}</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="message-sticky-back-btn" onClick={handleBackToMessage}>
+            <button className="message-sticky-back-btn" type="button" onClick={handleBackToMessage}>
               ↩ {t('backToMessage')}
             </button>
-            <button className="message-sticky-close-btn" onClick={handleClose}>
+            <button className="message-sticky-close-btn" type="button" onClick={handleClose}>
               ✕
             </button>
           </div>
