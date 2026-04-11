@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
 	"text/template"
@@ -28,25 +29,17 @@ func LoadTemplate(name string) (*template.Template, error) {
 		return tmpl, nil
 	}
 
-	// ParseFS returns a template set keyed by the file path (e.g. "templates/root.tmpl").
-	// We extract the named template so callers can Execute it by the short name.
-	tmplSet, err := template.ParseFS(TemplatesFS, "templates/"+name+".tmpl")
+	path := "templates/" + name + ".tmpl"
+	content, err := fs.ReadFile(TemplatesFS, path)
 	if err != nil {
-		return nil, fmt.Errorf("load prompt template %q: %w", name, err)
+		return nil, fmt.Errorf("read prompt template %q: %w", path, err)
 	}
 
-	// The template is stored under the file path; clone it with the short name
-	// so that tmpl.Execute(data) finds it correctly.
-	tmpl = tmplSet.Lookup("templates/" + name + ".tmpl")
-	if tmpl == nil {
-		return nil, fmt.Errorf("load prompt template %q: template not found in file", name)
-	}
-	// Clone and rename: create a new template with the short name and copy the tree.
-	tmpl, err = tmpl.Clone()
+	tmpl, err = template.New(name).Parse(string(content))
 	if err != nil {
-		return nil, fmt.Errorf("load prompt template %q: clone failed: %w", name, err)
+		return nil, fmt.Errorf("parse prompt template %q: %w", name, err)
 	}
-	// The cloned template's name is still the file path. ExecuteTemplate works though.
+
 	templateCache[name] = tmpl
 	return tmpl, nil
 }
@@ -58,9 +51,8 @@ func Render(name string, data any) (string, error) {
 		return "", err
 	}
 
-	// tmpl's internal name is the file path; use ExecuteTemplate to be safe.
 	var buf strings.Builder
-	if err := tmpl.ExecuteTemplate(&buf, "templates/"+name+".tmpl", data); err != nil {
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("render prompt template %q: %w", name, err)
 	}
 	return strings.TrimSpace(buf.String()), nil
