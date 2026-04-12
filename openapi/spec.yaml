@@ -449,6 +449,56 @@ paths:
         "404":
           description: Conversation not found
 
+  /conversations/{id}/permissions:
+    get:
+      summary: List permission requests for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, answered] }
+      responses:
+        "200":
+          description: List of permission requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInPermission" }
+        "404": { description: Conversation not found }
+
+  /conversations/{id}/permissions/{permId}/answer:
+    post:
+      summary: Answer a permission request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: permId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkpoint_id, interrupt_id, decision]
+              properties:
+                checkpoint_id: { type: string }
+                interrupt_id: { type: string }
+                decision: { type: string, enum: [approved, approved_exact, approved_wildcard, denied] }
+      responses:
+        "200": { description: Permission answered, agent resumed }
+        "404": { description: Permission request not found }
+        "400": { description: Already answered or invalid request }
+
   /conversations/{id}/todos:
     get:
       summary: List todos for a conversation
@@ -1210,6 +1260,47 @@ components:
           type: string
           format: date-time
 
+    HumanInPermission:
+      type: object
+      required: [id, conversation_id, tool_name, action, content, safety_level, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+        tool_name:
+          type: string
+        action:
+          type: string
+        content:
+          type: string
+        tool_desc:
+          type: string
+        args_summary:
+          type: string
+        safety_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        safety_reason:
+          type: string
+        decision:
+          type: string
+          nullable: true
+          enum: [approved, approved_exact, approved_wildcard, denied]
+        status:
+          type: string
+          enum: [pending, answered]
+        created_at:
+          type: string
+          format: date-time
+
     HumanInTheLoopCreatedPayload:
       type: object
       required: [conversation_id, id, question, choices, answer_type, seq]
@@ -1256,6 +1347,32 @@ components:
         seq:
           type: integer
           format: int64
+
+    PermissionPendingPayload:
+      type: object
+      required: [conversation_id, permission_id, tool_name, action, content, safety_level, safety_reason, seq]
+      properties:
+        conversation_id: { type: string }
+        permission_id: { type: string }
+        tool_name: { type: string }
+        action: { type: string }
+        content: { type: string }
+        tool_desc: { type: string }
+        args_summary: { type: string }
+        safety_level: { type: integer }
+        safety_reason: { type: string }
+        checkpoint_id: { type: string }
+        interrupt_id: { type: string }
+        seq: { type: integer, format: int64 }
+
+    PermissionDecidedPayload:
+      type: object
+      required: [conversation_id, permission_id, decision, seq]
+      properties:
+        conversation_id: { type: string }
+        permission_id: { type: string }
+        decision: { type: string, enum: [approved, approved_exact, approved_wildcard, denied] }
+        seq: { type: integer, format: int64 }
 
     TodoSyncPayload:
       type: object
@@ -1312,6 +1429,9 @@ components:
             - settings.changed
             # Technical events
             - empty
+            # Permission events
+            - permission.pending
+            - permission.decided
         payload:
           oneOf:
             - $ref: "#/components/schemas/MessageNewPayload"
@@ -1335,4 +1455,6 @@ components:
             - $ref: "#/components/schemas/ProjectDeletedPayload"
             - $ref: "#/components/schemas/SettingsChangedPayload"
             - $ref: "#/components/schemas/EmptyPayload"
+            - $ref: "#/components/schemas/PermissionPendingPayload"
+            - $ref: "#/components/schemas/PermissionDecidedPayload"
           description: "Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic."

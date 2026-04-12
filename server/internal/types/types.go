@@ -11,6 +11,48 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for HumanInPermissionDecision.
+const (
+	HumanInPermissionDecisionApproved         HumanInPermissionDecision = "approved"
+	HumanInPermissionDecisionApprovedExact    HumanInPermissionDecision = "approved_exact"
+	HumanInPermissionDecisionApprovedWildcard HumanInPermissionDecision = "approved_wildcard"
+	HumanInPermissionDecisionDenied           HumanInPermissionDecision = "denied"
+)
+
+// Valid indicates whether the value is a known member of the HumanInPermissionDecision enum.
+func (e HumanInPermissionDecision) Valid() bool {
+	switch e {
+	case HumanInPermissionDecisionApproved:
+		return true
+	case HumanInPermissionDecisionApprovedExact:
+		return true
+	case HumanInPermissionDecisionApprovedWildcard:
+		return true
+	case HumanInPermissionDecisionDenied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HumanInPermissionStatus.
+const (
+	HumanInPermissionStatusAnswered HumanInPermissionStatus = "answered"
+	HumanInPermissionStatusPending  HumanInPermissionStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the HumanInPermissionStatus enum.
+func (e HumanInPermissionStatus) Valid() bool {
+	switch e {
+	case HumanInPermissionStatusAnswered:
+		return true
+	case HumanInPermissionStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HumanInTheLoopAnswerType.
 const (
 	Multi  HumanInTheLoopAnswerType = "multi"
@@ -34,19 +76,19 @@ func (e HumanInTheLoopAnswerType) Valid() bool {
 
 // Defines values for HumanInTheLoopStatus.
 const (
-	Answered HumanInTheLoopStatus = "answered"
-	Expired  HumanInTheLoopStatus = "expired"
-	Pending  HumanInTheLoopStatus = "pending"
+	HumanInTheLoopStatusAnswered HumanInTheLoopStatus = "answered"
+	HumanInTheLoopStatusExpired  HumanInTheLoopStatus = "expired"
+	HumanInTheLoopStatusPending  HumanInTheLoopStatus = "pending"
 )
 
 // Valid indicates whether the value is a known member of the HumanInTheLoopStatus enum.
 func (e HumanInTheLoopStatus) Valid() bool {
 	switch e {
-	case Answered:
+	case HumanInTheLoopStatusAnswered:
 		return true
-	case Expired:
+	case HumanInTheLoopStatusExpired:
 		return true
-	case Pending:
+	case HumanInTheLoopStatusPending:
 		return true
 	default:
 		return false
@@ -95,6 +137,30 @@ func (e MessageNewPayloadRole) Valid() bool {
 	case MessageNewPayloadRoleTool:
 		return true
 	case MessageNewPayloadRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PermissionDecidedPayloadDecision.
+const (
+	PermissionDecidedPayloadDecisionApproved         PermissionDecidedPayloadDecision = "approved"
+	PermissionDecidedPayloadDecisionApprovedExact    PermissionDecidedPayloadDecision = "approved_exact"
+	PermissionDecidedPayloadDecisionApprovedWildcard PermissionDecidedPayloadDecision = "approved_wildcard"
+	PermissionDecidedPayloadDecisionDenied           PermissionDecidedPayloadDecision = "denied"
+)
+
+// Valid indicates whether the value is a known member of the PermissionDecidedPayloadDecision enum.
+func (e PermissionDecidedPayloadDecision) Valid() bool {
+	switch e {
+	case PermissionDecidedPayloadDecisionApproved:
+		return true
+	case PermissionDecidedPayloadDecisionApprovedExact:
+		return true
+	case PermissionDecidedPayloadDecisionApprovedWildcard:
+		return true
+	case PermissionDecidedPayloadDecisionDenied:
 		return true
 	default:
 		return false
@@ -255,6 +321,8 @@ const (
 	MessageStop            UpdateType = "message.stop"
 	MessageThinking        UpdateType = "message.thinking"
 	MessageToolCall        UpdateType = "message.tool_call"
+	PermissionDecided      UpdateType = "permission.decided"
+	PermissionPending      UpdateType = "permission.pending"
 	ProjectCreated         UpdateType = "project.created"
 	ProjectDeleted         UpdateType = "project.deleted"
 	SettingsChanged        UpdateType = "settings.changed"
@@ -298,6 +366,10 @@ func (e UpdateType) Valid() bool {
 		return true
 	case MessageToolCall:
 		return true
+	case PermissionDecided:
+		return true
+	case PermissionPending:
+		return true
 	case ProjectCreated:
 		return true
 	case ProjectDeleted:
@@ -338,6 +410,48 @@ func (e WSServerFrameType) Valid() bool {
 	case Connected:
 		return true
 	case Updates:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetConversationsIdPermissionsParamsStatus.
+const (
+	Answered GetConversationsIdPermissionsParamsStatus = "answered"
+	Pending  GetConversationsIdPermissionsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetConversationsIdPermissionsParamsStatus enum.
+func (e GetConversationsIdPermissionsParamsStatus) Valid() bool {
+	switch e {
+	case Answered:
+		return true
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision.
+const (
+	Approved         PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision = "approved"
+	ApprovedExact    PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision = "approved_exact"
+	ApprovedWildcard PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision = "approved_wildcard"
+	Denied           PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision = "denied"
+)
+
+// Valid indicates whether the value is a known member of the PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision enum.
+func (e PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision) Valid() bool {
+	switch e {
+	case Approved:
+		return true
+	case ApprovedExact:
+		return true
+	case ApprovedWildcard:
+		return true
+	case Denied:
 		return true
 	default:
 		return false
@@ -514,6 +628,30 @@ type ErrorResponse struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
+
+// HumanInPermission defines model for HumanInPermission.
+type HumanInPermission struct {
+	Action         string                     `json:"action"`
+	ArgsSummary    *string                    `json:"args_summary,omitempty"`
+	CheckpointId   *string                    `json:"checkpoint_id,omitempty"`
+	Content        string                     `json:"content"`
+	ConversationId openapi_types.UUID         `json:"conversation_id"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	Decision       *HumanInPermissionDecision `json:"decision,omitempty"`
+	Id             openapi_types.UUID         `json:"id"`
+	InterruptId    *string                    `json:"interrupt_id,omitempty"`
+	SafetyLevel    int                        `json:"safety_level"`
+	SafetyReason   *string                    `json:"safety_reason,omitempty"`
+	Status         HumanInPermissionStatus    `json:"status"`
+	ToolDesc       *string                    `json:"tool_desc,omitempty"`
+	ToolName       string                     `json:"tool_name"`
+}
+
+// HumanInPermissionDecision defines model for HumanInPermission.Decision.
+type HumanInPermissionDecision string
+
+// HumanInPermissionStatus defines model for HumanInPermission.Status.
+type HumanInPermissionStatus string
 
 // HumanInTheLoop defines model for HumanInTheLoop.
 type HumanInTheLoop struct {
@@ -699,6 +837,33 @@ type MessageToolCallPayload struct {
 	ToolName       string `json:"tool_name"`
 }
 
+// PermissionDecidedPayload defines model for PermissionDecidedPayload.
+type PermissionDecidedPayload struct {
+	ConversationId string                           `json:"conversation_id"`
+	Decision       PermissionDecidedPayloadDecision `json:"decision"`
+	PermissionId   string                           `json:"permission_id"`
+	Seq            int64                            `json:"seq"`
+}
+
+// PermissionDecidedPayloadDecision defines model for PermissionDecidedPayload.Decision.
+type PermissionDecidedPayloadDecision string
+
+// PermissionPendingPayload defines model for PermissionPendingPayload.
+type PermissionPendingPayload struct {
+	Action         string  `json:"action"`
+	ArgsSummary    *string `json:"args_summary,omitempty"`
+	CheckpointId   *string `json:"checkpoint_id,omitempty"`
+	Content        string  `json:"content"`
+	ConversationId string  `json:"conversation_id"`
+	InterruptId    *string `json:"interrupt_id,omitempty"`
+	PermissionId   string  `json:"permission_id"`
+	SafetyLevel    int     `json:"safety_level"`
+	SafetyReason   string  `json:"safety_reason"`
+	Seq            int64   `json:"seq"`
+	ToolDesc       *string `json:"tool_desc,omitempty"`
+	ToolName       string  `json:"tool_name"`
+}
+
 // PingPayload Client heartbeat. Sent every 30 seconds.
 type PingPayload = map[string]interface{}
 
@@ -872,6 +1037,24 @@ type PostConversationsIdMessagesJSONBody struct {
 	Content string `json:"content"`
 }
 
+// GetConversationsIdPermissionsParams defines parameters for GetConversationsIdPermissions.
+type GetConversationsIdPermissionsParams struct {
+	Status *GetConversationsIdPermissionsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetConversationsIdPermissionsParamsStatus defines parameters for GetConversationsIdPermissions.
+type GetConversationsIdPermissionsParamsStatus string
+
+// PostConversationsIdPermissionsPermIdAnswerJSONBody defines parameters for PostConversationsIdPermissionsPermIdAnswer.
+type PostConversationsIdPermissionsPermIdAnswerJSONBody struct {
+	CheckpointId string                                                     `json:"checkpoint_id"`
+	Decision     PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision `json:"decision"`
+	InterruptId  string                                                     `json:"interrupt_id"`
+}
+
+// PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision defines parameters for PostConversationsIdPermissionsPermIdAnswer.
+type PostConversationsIdPermissionsPermIdAnswerJSONBodyDecision string
+
 // PostConversationsIdTodosJSONBody defines parameters for PostConversationsIdTodos.
 type PostConversationsIdTodosJSONBody struct {
 	Content string `json:"content"`
@@ -926,6 +1109,9 @@ type PostConversationsIdAnswerJSONRequestBody PostConversationsIdAnswerJSONBody
 
 // PostConversationsIdMessagesJSONRequestBody defines body for PostConversationsIdMessages for application/json ContentType.
 type PostConversationsIdMessagesJSONRequestBody PostConversationsIdMessagesJSONBody
+
+// PostConversationsIdPermissionsPermIdAnswerJSONRequestBody defines body for PostConversationsIdPermissionsPermIdAnswer for application/json ContentType.
+type PostConversationsIdPermissionsPermIdAnswerJSONRequestBody PostConversationsIdPermissionsPermIdAnswerJSONBody
 
 // PostConversationsIdTodosJSONRequestBody defines body for PostConversationsIdTodos for application/json ContentType.
 type PostConversationsIdTodosJSONRequestBody PostConversationsIdTodosJSONBody
@@ -1481,6 +1667,58 @@ func (t *Update_Payload) FromEmptyPayload(v EmptyPayload) error {
 
 // MergeEmptyPayload performs a merge with any union data inside the Update_Payload, using the provided EmptyPayload
 func (t *Update_Payload) MergeEmptyPayload(v EmptyPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPermissionPendingPayload returns the union data inside the Update_Payload as a PermissionPendingPayload
+func (t Update_Payload) AsPermissionPendingPayload() (PermissionPendingPayload, error) {
+	var body PermissionPendingPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPermissionPendingPayload overwrites any union data inside the Update_Payload as the provided PermissionPendingPayload
+func (t *Update_Payload) FromPermissionPendingPayload(v PermissionPendingPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePermissionPendingPayload performs a merge with any union data inside the Update_Payload, using the provided PermissionPendingPayload
+func (t *Update_Payload) MergePermissionPendingPayload(v PermissionPendingPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPermissionDecidedPayload returns the union data inside the Update_Payload as a PermissionDecidedPayload
+func (t Update_Payload) AsPermissionDecidedPayload() (PermissionDecidedPayload, error) {
+	var body PermissionDecidedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPermissionDecidedPayload overwrites any union data inside the Update_Payload as the provided PermissionDecidedPayload
+func (t *Update_Payload) FromPermissionDecidedPayload(v PermissionDecidedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergePermissionDecidedPayload performs a merge with any union data inside the Update_Payload, using the provided PermissionDecidedPayload
+func (t *Update_Payload) MergePermissionDecidedPayload(v PermissionDecidedPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

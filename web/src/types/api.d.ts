@@ -807,6 +807,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List permission requests for a conversation */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "pending" | "answered";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of permission requests */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HumanInPermission"][];
+                    };
+                };
+                /** @description Conversation not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{id}/permissions/{permId}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer a permission request */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    permId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        checkpoint_id: string;
+                        interrupt_id: string;
+                        /** @enum {string} */
+                        decision: "approved" | "approved_exact" | "approved_wildcard" | "denied";
+                    };
+                };
+            };
+            responses: {
+                /** @description Permission answered */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Already answered or invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Permission request not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{id}/todos": {
         parameters: {
             query?: never;
@@ -1397,6 +1504,27 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        HumanInPermission: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            checkpoint_id?: string;
+            interrupt_id?: string;
+            tool_name: string;
+            action: string;
+            content: string;
+            tool_desc?: string;
+            args_summary?: string;
+            safety_level: number;
+            safety_reason?: string;
+            /** @enum {string|null} */
+            decision?: "approved" | "approved_exact" | "approved_wildcard" | "denied" | null;
+            /** @enum {string} */
+            status: "pending" | "answered";
+            /** Format: date-time */
+            created_at: string;
+        };
         HumanInTheLoopCreatedPayload: {
             conversation_id: string;
             /** @description HITL request ID */
@@ -1421,6 +1549,29 @@ export interface components {
             /** Format: int64 */
             seq: number;
         };
+        PermissionPendingPayload: {
+            conversation_id: string;
+            permission_id: string;
+            tool_name: string;
+            action: string;
+            content: string;
+            tool_desc?: string;
+            args_summary?: string;
+            safety_level: number;
+            safety_reason: string;
+            checkpoint_id?: string;
+            interrupt_id?: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        PermissionDecidedPayload: {
+            conversation_id: string;
+            permission_id: string;
+            /** @enum {string} */
+            decision: "approved" | "approved_exact" | "approved_wildcard" | "denied";
+            /** Format: int64 */
+            seq: number;
+        };
         TodoSyncPayload: {
             conversation_id: string;
             /** Format: int64 */
@@ -1433,9 +1584,9 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "human_in_the_loop.created" | "human_in_the_loop.answered" | "todo.sync" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
+            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "human_in_the_loop.created" | "human_in_the_loop.answered" | "todo.sync" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty" | "permission.pending" | "permission.decided";
             /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
-            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["HumanInTheLoopCreatedPayload"] | components["schemas"]["HumanInTheLoopAnsweredPayload"] | components["schemas"]["TodoSyncPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
+            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["HumanInTheLoopCreatedPayload"] | components["schemas"]["HumanInTheLoopAnsweredPayload"] | components["schemas"]["TodoSyncPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"] | components["schemas"]["PermissionPendingPayload"] | components["schemas"]["PermissionDecidedPayload"];
         };
     };
     responses: never;
