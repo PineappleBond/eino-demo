@@ -771,6 +771,145 @@ func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model
 	return hitls, nil
 }
 
+// AnswerPermissionRequest holds the fields for answering a permission request.
+type AnswerPermissionRequest struct {
+	CheckpointID string `json:"checkpoint_id"`
+	InterruptID  string `json:"interrupt_id"`
+	Decision     string `json:"decision"` // approved|approved_exact|approved_wildcard|denied
+}
+
+// AnswerPermission handles a user's decision on a permission request.
+func (s *ChatService) AnswerPermission(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req AnswerPermissionRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) error {
+	// 1. Verify conversation ownership and get project ID.
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found")
+	}
+
+	var project model.Project
+	if err := s.db.Where("id = ?", conv.ProjectID).First(&project).Error; err != nil {
+		return fmt.Errorf("project not found")
+	}
+
+	// 2. Find the pending permission record.
+	var perm model.HumanInPermission
+	if err := s.db.Where(
+		"conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
+		conversationID, req.CheckpointID, req.InterruptID,
+	).First(&perm).Error; err != nil {
+		return fmt.Errorf("pending permission request not found")
+	}
+
+	// 3. Validate decision.
+	validDecisions := map[string]bool{
+		"approved": true, "approved_exact": true,
+		"approved_wildcard": true, "denied": true,
+	}
+	if !validDecisions[req.Decision] {
+		return fmt.Errorf("invalid decision: %s", req.Decision)
+	}
+
+	// 4. Update record.
+	if err := s.db.Model(&perm).Updates(map[string]interface{}{
+		"status": "answered", "decision": req.Decision,
+	}).Error; err != nil {
+		return fmt.Errorf("update permission: %w", err)
+	}
+
+	// 5. Write whitelist if applicable.
+	if req.Decision == "approved_exact" || req.Decision == "approved_wildcard" {
+		level := "exact"
+		if req.Decision == "approved_wildcard" {
+			level = "wildcard"
+		}
+
+		var count int64
+		s.db.Table("project_tool_permissions").
+			Where("project_id = ? AND tool_name = ? AND action = ? AND pattern = ?",
+				project.ID, perm.ToolName, perm.Action, perm.Content).
+			Count(&count)
+
+		if count == 0 {
+			wp := model.ProjectToolPermission{
+				ProjectID: project.ID,
+				ToolName:  perm.ToolName,
+				Action:    perm.Action,
+				Pattern:   perm.Content,
+				GrantedBy: userID,
+				Level:     level,
+			}
+			if err := s.db.Create(&wp).Error; err != nil {
+				s.log.Error("write whitelist", zap.Error(err))
+			}
+		}
+	}
+
+	// 6. Push permission.decided Update.
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		s.log.Error("seq assignment failed", zap.Error(err))
+	} else if seq > 0 {
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "permission.decided",
+			Payload: model.JSONMap{
+				"conversation_id": conversationID.String(),
+				"permission_id":   perm.ID.String(),
+				"decision":        req.Decision,
+				"seq":             seq,
+			},
+		}
+		if dbErr := s.db.Create(&update).Error; dbErr != nil {
+			s.log.Error("persist permission.decided update", zap.Error(dbErr))
+		} else {
+			pushUpdate(userID, update)
+		}
+	}
+
+	// 7. Set ResumeParams and restart agent.
+	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
+		Targets: map[string]any{
+			req.InterruptID: req.Decision,
+		},
+	})
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.log.Error("AnswerPermission runAgent panic recovered", zap.Any("recover", r))
+			}
+		}()
+		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, "", nextSeq, pushUpdate)
+	}()
+
+	return nil
+}
+
+// ListPendingPermissions returns permission requests for a conversation.
+func (s *ChatService) ListPendingPermissions(userID, conversationID uuid.UUID, status string) ([]model.HumanInPermission, error) {
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found")
+	}
+
+	var perms []model.HumanInPermission
+	query := s.db.Where("conversation_id = ?", conversationID).Order("created_at ASC")
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if err := query.Find(&perms).Error; err != nil {
+		return nil, fmt.Errorf("list permissions: %w", err)
+	}
+	return perms, nil
+}
+
 // GetConversationMessagesRequest holds the query params for listing messages.
 type GetConversationMessagesRequest struct {
 	AfterSeq int64 `form:"after_seq"`
