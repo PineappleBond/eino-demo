@@ -28,6 +28,11 @@ func (s *ConversationService) ListConversations(userID, projectID uuid.UUID) ([]
 	var conversations []model.Conversation
 	if err := s.db.Where("user_id = ? AND project_id = ?", userID, projectID).
 		Order("updated_at DESC").Find(&conversations).Error; err != nil {
+		s.log.Error("list conversations: query failed",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	return conversations, nil
@@ -60,6 +65,10 @@ func (s *ConversationService) CompleteCreateConversation(
 		// Verify project exists and belongs to user
 		var project model.Project
 		if err := tx.Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+			s.log.Error("create conversation: project not found",
+				zap.String("user_id", userID.String()),
+				zap.String("project_id", projectID.String()),
+			)
 			return fmt.Errorf("project not found")
 		}
 
@@ -296,6 +305,10 @@ func (s *ConversationService) CompleteRenameConversation(
 	// 1. Verify ownership
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		s.log.Error("rename conversation: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
 		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
@@ -329,9 +342,18 @@ func (s *ConversationService) CompleteRenameConversation(
 		return nil
 	})
 	if err != nil {
+		s.log.Error("rename conversation: transaction failed",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
-
+	s.log.Info("conversation renamed",
+		zap.String("user_id", userID.String()),
+		zap.String("conv_id", conversationID.String()),
+		zap.String("title", conv.Title),
+	)
 	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,
@@ -363,6 +385,10 @@ func (s *ConversationService) UpdateStatus(
 	// 1. Verify ownership
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		s.log.Error("update conversation status: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
 		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
@@ -421,6 +447,13 @@ func (s *ConversationService) UpdateStatus(
 		return nil, err
 	}
 
+	s.log.Info("conversation status updated",
+		zap.String("user_id", userID.String()),
+		zap.String("conv_id", conversationID.String()),
+		zap.String("old_status", conv.Status),
+		zap.String("new_status", req.Status),
+	)
+
 	// 4. Push conversation.updated
 	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
@@ -478,12 +511,21 @@ func (s *ConversationService) CompleteDeleteConversation(
 	// 1. Verify ownership first — before allocating seq
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		s.log.Error("delete conversation: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
 		return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Allocate seq after ownership confirmed
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
+		s.log.Error("delete conversation: seq assignment failed",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.Error(err),
+		)
 		return fmt.Errorf("seq assignment failed: %w", err)
 	}
 
@@ -516,6 +558,10 @@ func (s *ConversationService) CompleteDeleteConversation(
 		return err
 	}
 
+	s.log.Info("conversation deleted",
+		zap.String("user_id", userID.String()),
+		zap.String("conv_id", conversationID.String()),
+	)
 	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,
