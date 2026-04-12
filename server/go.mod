@@ -21,6 +21,7 @@ require (
 	go.uber.org/zap v1.27.0
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
+	mvdan.cc/sh/v3 v3.13.1
 )
 
 require (
@@ -87,7 +88,6 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
 replace github.com/cloudwego/eino-ext/components/tool/httprequest => ../downloads/eino-ext/components/tool/httprequest

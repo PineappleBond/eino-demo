@@ -16,10 +16,11 @@ type ModelConfig struct {
 
 // Config holds all startup configuration.
 type Config struct {
-	ServerPort  string
-	DatabaseURL string
-	RedisAddr   string
-	Models      map[string]ModelConfig // "haiku", "sonnet", "opus"
+	ServerPort    string
+	DatabaseURL   string
+	RedisAddr     string
+	TavilyAPIKey  string
+	Models        map[string]ModelConfig // "haiku", "sonnet", "opus"
 }
 
 // Load reads configuration from flags and environment variables.
@@ -34,9 +35,10 @@ func Load() *Config {
 	}
 
 	return &Config{
-		ServerPort:  *port,
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		RedisAddr:   envOr("REDIS_ADDR", "localhost:6379"),
+		ServerPort:   *port,
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		RedisAddr:    envOr("REDIS_ADDR", "localhost:6379"),
+		TavilyAPIKey: os.Getenv("TAVILY_API_KEY"),
 		Models: map[string]ModelConfig{
 			"haiku": {
 				BaseURL: envOr("MODEL_HAIKU_BASE_URL", "https://api.openai.com/v1"),

@@ -42,6 +42,16 @@ func (r *ToolRegistry) buildBaseTools() {
 	}
 
 	r.baseTools = []tool.BaseTool{weather, askUser}
+
+	if tavily := NewTavilySearchTool(r.cfg.TavilyAPIKey); tavily != nil {
+		tavilyTool, err := utils.InferTool("tavily_search", "Search the web for current information using Tavily API", func(ctx context.Context, input TavilySearchInput) (string, error) {
+			return tavily.Run(input), nil
+		})
+		if err != nil {
+			panic("failed to create tavily_search tool: " + err.Error())
+		}
+		r.baseTools = append(r.baseTools, tavilyTool)
+	}
 }
 
 // SetConversationID sets the conversation ID for context-aware tools (todo_read, todo_write).
@@ -87,9 +97,9 @@ func (r *ToolRegistry) GetWeatherTool() *WeatherTool {
 // ListToolNames returns all registered tool names for agent config.
 func (r *ToolRegistry) ListToolNames() []string {
 	if r.conversationID != uuid.Nil {
-		return []string{"weather", "ask_user_question", "todo_read", "todo_write"}
+		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write"}
 	}
-	return []string{"weather", "ask_user_question"}
+	return []string{"weather", "tavily_search", "ask_user_question"}
 }
 
 // GetPermissionTools returns filesystem and HTTP tools that implement NeedPermissioner.
