@@ -394,6 +394,148 @@ paths:
         "200":
           description: Streaming stopped
 
+  /conversations/{id}/answer:
+    post:
+      summary: Answer an interrupted human-in-the-loop question
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checkpoint_id, interrupt_id, answer]
+              properties:
+                checkpoint_id:
+                  type: string
+                  description: Eino checkpoint ID for resuming the agent run
+                interrupt_id:
+                  type: string
+                  description: Eino interrupt signal ID for targeted resume
+                answer:
+                  type: string
+                  description: User's answer text
+      responses:
+        "200":
+          description: Agent resumed with user's answer
+        "404":
+          description: Conversation or HITL request not found
+        "400":
+          description: Invalid request or HITL already answered
+
+  /conversations/{id}/hitl:
+    get:
+      summary: List pending human-in-the-loop requests for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of pending HITL requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HumanInTheLoop"
+        "404":
+          description: Conversation not found
+
+  /conversations/{id}/todos:
+    get:
+      summary: List todos for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of todos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Todo"
+    post:
+      summary: Create a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+      responses:
+        "201":
+          description: Created todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+
+  /todos/{id}:
+    patch:
+      summary: Update a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                completed:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+        "404":
+          description: Todo not found
+    delete:
+      summary: Delete a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Todo deleted
+        "404":
+          description: Todo not found
+
   # ── Settings ──
   /settings:
     get:
@@ -1005,6 +1147,126 @@ components:
             type: string
           description: Fields that were changed.
 
+    HumanInTheLoop:
+      type: object
+      required: [id, conversation_id, question, answer_type, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [title]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+          enum: [single, multi, text]
+        answer:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, answered, expired]
+        created_at:
+          type: string
+          format: date-time
+
+    Todo:
+      type: object
+      required: [id, conversation_id, content, completed, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        completed:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HumanInTheLoopCreatedPayload:
+      type: object
+      required: [conversation_id, id, question, choices, answer_type, seq]
+      properties:
+        conversation_id:
+          type: string
+        id:
+          type: string
+          description: HITL request ID
+        checkpoint_id:
+          type: string
+          description: Checkpoint ID for resume
+        interrupt_id:
+          type: string
+          description: Interrupt ID for targeted resume
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [title]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    HumanInTheLoopAnsweredPayload:
+      type: object
+      required: [conversation_id, id, answer, seq]
+      properties:
+        conversation_id:
+          type: string
+        id:
+          type: string
+        answer:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    TodoSyncPayload:
+      type: object
+      required: [conversation_id, seq]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
     # ── Update (unified event type) ──
     # payload is a oneOf of all concrete payload types.
     # Frontend uses discriminated union: switch on Update.type to narrow payload type.
@@ -1030,6 +1292,11 @@ components:
             - message.thinking
             - message.error
             - message.stop
+            # Human-in-the-loop events
+            - human_in_the_loop.created
+            - human_in_the_loop.answered
+            # Todo event (single type — frontend refetches all todos on change)
+            - todo.sync
             # Conversation-level events
             - conversation.created
             - conversation.updated
@@ -1054,6 +1321,9 @@ components:
             - $ref: "#/components/schemas/MessageThinkingPayload"
             - $ref: "#/components/schemas/MessageErrorPayload"
             - $ref: "#/components/schemas/MessageStopPayload"
+            - $ref: "#/components/schemas/HumanInTheLoopCreatedPayload"
+            - $ref: "#/components/schemas/HumanInTheLoopAnsweredPayload"
+            - $ref: "#/components/schemas/TodoSyncPayload"
             - $ref: "#/components/schemas/ConversationCreatedPayload"
             - $ref: "#/components/schemas/ConversationUpdatedPayload"
             - $ref: "#/components/schemas/ConversationDeletedPayload"

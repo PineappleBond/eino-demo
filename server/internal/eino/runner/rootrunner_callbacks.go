@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/tools"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -640,10 +641,33 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Extract checkpoint ID from interrupt contexts
+	// Extract checkpoint ID and interrupt ID from interrupt contexts
 	var checkpointID string
+	var interruptID string
+	var hitlData *hitlInterruptData
+
 	if len(info.InterruptContexts) > 0 {
-		checkpointID = info.InterruptContexts[0].ID
+		// Use the last context (most specific) for checkpoint/interrupt IDs
+		rootCtx := info.InterruptContexts[0]
+		checkpointID = rootCtx.ID
+
+		// Find the most specific (deepest) context that has Info — this is the actual interrupt source.
+		for i := len(info.InterruptContexts) - 1; i >= 0; i-- {
+			ctx := info.InterruptContexts[i]
+			if ctx.Info != nil {
+				if i > 0 || interruptID == "" {
+					interruptID = ctx.ID
+				}
+				if data := parseHitLInterruptData(ctx.Info); data != nil {
+					hitlData = data
+					interruptID = ctx.ID
+					break
+				}
+			}
+		}
+		if interruptID == "" {
+			interruptID = checkpointID
+		}
 	}
 
 	// Mark all in-progress messages as stopped
@@ -656,7 +680,58 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		}
 	}
 
-	seq, err := c.cfg.NextSeq(c.cfg.ParentCtx, c.cfg.UserID)
+	ctx := c.cfg.ParentCtx
+
+	// If this is an ask_user_question interrupt, create a HITL record
+	if hitlData != nil {
+		// Convert to []any to ensure correct JSON serialization by GORM/pgx.
+		choicesAny := make([]any, len(hitlData.Choices))
+		for i, c := range hitlData.Choices {
+			choicesAny[i] = c
+		}
+		hitl := model.HumanInTheLoop{
+			ConversationID: c.cfg.ConversationID,
+			CheckpointID:   checkpointID,
+			InterruptID:    interruptID,
+			Question:       hitlData.Question,
+			Choices:        model.JSONMap{"choices": choicesAny},
+			AnswerType:     hitlData.AnswerType,
+			Status:         "pending",
+		}
+		if err := c.cfg.DB.WithContext(ctx).Create(&hitl).Error; err != nil {
+			c.cfg.Log.Error("failed to persist HITL record", zap.Error(err))
+		} else {
+			// Push human_in_the_loop.created Update
+			seq, err := c.cfg.NextSeq(ctx, c.cfg.UserID)
+			if err != nil {
+				c.cfg.Log.Error("seq assignment failed for HITL", zap.Error(err))
+			} else {
+				payload := model.JSONMap{
+					"conversation_id": c.cfg.ConversationID.String(),
+					"id":              hitl.ID.String(),
+					"checkpoint_id":   hitl.CheckpointID,
+					"interrupt_id":    hitl.InterruptID,
+					"question":        hitlData.Question,
+					"choices":         choicesAny,
+					"answer_type":     hitlData.AnswerType,
+					"seq":             seq,
+				}
+				update := model.UserUpdate{
+					UserID:  c.cfg.UserID,
+					Seq:     seq,
+					Type:    "human_in_the_loop.created",
+					Payload: payload,
+				}
+				if dbErr := c.cfg.DB.WithContext(ctx).Create(&update).Error; dbErr != nil {
+					c.cfg.Log.Error("failed to persist HITL created update", zap.Error(dbErr))
+				} else {
+					c.cfg.PushUpdate(c.cfg.UserID, update)
+				}
+			}
+		}
+	}
+
+	seq, err := c.cfg.NextSeq(ctx, c.cfg.UserID)
 	if err != nil {
 		c.cfg.Log.Error("seq assignment failed", zap.Error(err))
 		return
@@ -681,7 +756,7 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		Type:    "message.error",
 		Payload: payload,
 	}
-	if err := c.cfg.DB.WithContext(c.cfg.ParentCtx).Create(&update).Error; err != nil {
+	if err := c.cfg.DB.WithContext(ctx).Create(&update).Error; err != nil {
 		c.cfg.Log.Error("failed to persist interrupted update", zap.Error(err))
 		return
 	}
@@ -690,6 +765,52 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		zap.String("checkpoint", checkpointID),
 		zap.String("conv", c.cfg.ConversationID.String()),
 	)
+}
+
+// hitlInterruptData holds parsed data from an ask_user_question interrupt.
+type hitlInterruptData struct {
+	Type       string
+	Question   string
+	Choices    []map[string]any // each map has "title" and optionally "desc"
+	AnswerType string
+}
+
+// parseHitLInterruptData extracts HITL data from interrupt info if it's an ask_user_question type.
+func parseHitLInterruptData(info any) *hitlInterruptData {
+	m, ok := info.(map[string]any)
+	if !ok {
+		return nil
+	}
+	typ, _ := m["type"].(string)
+	if typ != "ask_user_question" {
+		return nil
+	}
+	data := &hitlInterruptData{Type: typ}
+	if q, ok := m["question"].(string); ok {
+		data.Question = q
+	}
+	if at, ok := m["answer_type"].(string); ok {
+		data.AnswerType = at
+	}
+	if choices, ok := m["choices"].([]any); ok {
+		for _, c := range choices {
+			if cm, ok := c.(map[string]any); ok {
+				if title, ok := cm["title"].(string); ok {
+					data.Choices = append(data.Choices, cm)
+					_ = title
+				}
+			}
+		}
+	}
+	if choices, ok := m["choices"].([]tools.HitlChoice); ok {
+		for _, cm := range choices {
+			data.Choices = append(data.Choices, map[string]any{
+				"title": cm.Title,
+				"desc":  cm.Desc,
+			})
+		}
+	}
+	return data
 }
 
 // ---- adk.CheckPointStore implementation ----

@@ -8,6 +8,7 @@ import { CopyOutlined } from '@ant-design/icons';
 import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
+import { HitlModal } from '@/components/chat/HitlModal';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
@@ -35,6 +36,16 @@ interface ChatState {
   // Conversation-level token stats from backend updates
   convTokenPrompt: number;
   convTokenCompletion: number;
+  // HITL state
+  pendingHitl: {
+    id: string;
+    checkpointId: string;
+    interruptId: string;
+    question: string;
+    choices: { title: string; desc?: string }[];
+    answerType: 'single' | 'multi' | 'text';
+  } | null;
+  hitlModalOpen: boolean;
 }
 
 type ChatAction =
@@ -56,7 +67,10 @@ type ChatAction =
   | { type: 'REMOVE_MENTION'; payload: string }
   | { type: 'CLEAR_MENTIONS' }
   | { type: 'STOP_STREAMING' }
-  | { type: 'SET_CONV_TOKENS'; payload: { tokenPrompt?: number; tokenCompletion?: number } };
+  | { type: 'SET_CONV_TOKENS'; payload: { tokenPrompt?: number; tokenCompletion?: number } }
+  | { type: 'SET_PENDING_HITL'; payload: ChatState['pendingHitl'] }
+  | { type: 'SET_HITL_MODAL_OPEN'; payload: boolean }
+  | { type: 'CLEAR_PENDING_HITL' };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -132,6 +146,12 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         convTokenCompletion: p.tokenCompletion !== undefined ? p.tokenCompletion : state.convTokenCompletion,
       };
     }
+    case 'SET_PENDING_HITL':
+      return { ...state, pendingHitl: action.payload, hitlModalOpen: action.payload !== null };
+    case 'SET_HITL_MODAL_OPEN':
+      return { ...state, hitlModalOpen: action.payload };
+    case 'CLEAR_PENDING_HITL':
+      return { ...state, pendingHitl: null, hitlModalOpen: false };
     default:
       return state;
   }
@@ -143,11 +163,13 @@ const initialState: ChatState = {
   isStreaming: false,
   loading: true,
   sending: false,
-  showConvInfo: false,
+  showConvInfo: true,
   members: [],
   mentions: [],
   convTokenPrompt: 0,
   convTokenCompletion: 0,
+  pendingHitl: null,
+  hitlModalOpen: false,
 };
 
 export default function ConvChatPage() {
@@ -311,6 +333,25 @@ export default function ConvChatPage() {
         });
         break;
       }
+      case 'human_in_the_loop.created': {
+        const payload = update.payload as components['schemas']['HumanInTheLoopCreatedPayload'];
+        dispatch({
+          type: 'SET_PENDING_HITL',
+          payload: {
+            id: payload.id,
+            checkpointId: payload.checkpoint_id || '',
+            interruptId: payload.interrupt_id || '',
+            question: payload.question,
+            choices: payload.choices || [],
+            answerType: (payload.answer_type as 'single' | 'multi' | 'text') || 'text',
+          },
+        });
+        break;
+      }
+      case 'human_in_the_loop.answered': {
+        dispatch({ type: 'CLEAR_PENDING_HITL' });
+        break;
+      }
     }
   }, [convId, message]);
 
@@ -367,6 +408,28 @@ export default function ConvChatPage() {
         .finally(() => {
           if (!cancelled) dispatch({ type: 'SET_LOADING', payload: false });
         });
+
+      // Sync pending HITL from server (survives browser refresh)
+      api.get<components['schemas']['HumanInTheLoop'][]>(`/conversations/${convId}/hitl`)
+        .then((hitls) => {
+          if (cancelled) return;
+          // Show the most recent pending HITL
+          if (hitls.length > 0) {
+            const latest = hitls[hitls.length - 1];
+            dispatch({
+              type: 'SET_PENDING_HITL',
+              payload: {
+                id: latest.id,
+                checkpointId: latest.checkpoint_id || '',
+                interruptId: latest.interrupt_id || '',
+                question: latest.question,
+                choices: latest.choices || [],
+                answerType: (latest.answer_type as 'single' | 'multi' | 'text') || 'text',
+              },
+            });
+          }
+        })
+        .catch(() => {});
     };
     loadMessages();
     return () => {
@@ -468,6 +531,30 @@ export default function ConvChatPage() {
     }
   }, [convId, message]);
 
+  // ─── HITL: Answer question ───
+
+  const handleHitlAnswer = useCallback(async (answer: string) => {
+    if (!state.pendingHitl) return;
+    const { checkpointId, interruptId } = state.pendingHitl;
+
+    try {
+      dispatch({ type: 'SET_HITL_MODAL_OPEN', payload: false });
+      await api.post<{ status: string }>(`/conversations/${convId}/answer`, {
+        checkpoint_id: checkpointId,
+        interrupt_id: interruptId,
+        answer,
+      });
+      message.success('Answer submitted');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to submit answer');
+      dispatch({ type: 'SET_HITL_MODAL_OPEN', payload: true });
+    }
+  }, [convId, message, state.pendingHitl]);
+
+  const handleHitlCancel = useCallback(() => {
+    dispatch({ type: 'SET_HITL_MODAL_OPEN', payload: false });
+  }, []);
+
   // ─── Mentions ───
 
   const handleMemberMention = useCallback((member: { id: string; name: string }) => {
@@ -565,7 +652,8 @@ export default function ConvChatPage() {
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
-          isLoading={state.isStreaming || state.sending}
+          isStreaming={state.isStreaming}
+          isSending={state.sending}
           mentions={state.mentions}
           onRemoveMention={handleRemoveMention}
         />
@@ -585,6 +673,19 @@ export default function ConvChatPage() {
           stats={stats}
           model="Sonnet"
           onMemberMention={handleMemberMention}
+          conversationId={convId}
+        />
+      )}
+
+      {/* HITL Modal */}
+      {state.pendingHitl && (
+        <HitlModal
+          open={state.hitlModalOpen}
+          question={state.pendingHitl.question}
+          choices={state.pendingHitl.choices}
+          answerType={state.pendingHitl.answerType}
+          onAnswer={handleHitlAnswer}
+          onCancel={handleHitlCancel}
         />
       )}
     </div>

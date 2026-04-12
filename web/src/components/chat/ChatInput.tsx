@@ -15,12 +15,15 @@ interface MentionMember {
 interface ChatInputProps {
   onSend: (content: string, mentionedMembers?: string[]) => Promise<void>;
   onStop?: () => Promise<void>;
-  isLoading?: boolean;
+  /** True while the agent is actively streaming — shows the stop button. */
+  isStreaming?: boolean;
+  /** True while the POST request is in-flight — disables send button. */
+  isSending?: boolean;
   mentions?: MentionMember[];
   onRemoveMention?: (id: string) => void;
 }
 
-export function ChatInput({ onSend, onStop, isLoading, mentions, onRemoveMention }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, isSending, mentions, onRemoveMention }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const t = useTranslations('chat');
@@ -37,7 +40,7 @@ export function ChatInput({ onSend, onStop, isLoading, mentions, onRemoveMention
   }, [text, adjustHeight]);
 
   const handleSend = async () => {
-    if (!text.trim() || isLoading) return;
+    if (!text.trim() || isSending) return;
     const content = text.trim();
     const mentionedIds = mentions?.map((m) => m.id);
     setText('');
@@ -81,31 +84,30 @@ export function ChatInput({ onSend, onStop, isLoading, mentions, onRemoveMention
             placeholder={t('placeholder')}
             aria-label={t('placeholder')}
             rows={1}
-            disabled={isLoading}
             style={{ height: 'auto', overflowY: 'auto' }}
           />
           <div className="chat-input-actions">
-            {isLoading ? (
+            {isStreaming && (
               <Button
                 type="primary"
                 danger
                 icon={<StopOutlined />}
                 onClick={onStop}
                 size="small"
+                style={{ marginRight: 8 }}
               >
                 {t('stop')}
               </Button>
-            ) : (
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleSend}
-                disabled={!text.trim()}
-                size="small"
-              >
-                {t('send')}
-              </Button>
             )}
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleSend}
+              disabled={!text.trim() || isSending}
+              size="small"
+            >
+              {t('send')}
+            </Button>
           </div>
         </div>
         <div className="chat-input-hint">

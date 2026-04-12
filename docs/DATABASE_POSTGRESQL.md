@@ -208,7 +208,7 @@
 | `id` | UUID | PK, `gen_random_uuid()` | Update identifier |
 | `user_id` | UUID | NOT NULL, FK → `users(id)` ON DELETE CASCADE | Target user. Every update is scoped to a single user |
 | `seq` | BIGINT | NOT NULL | Monotonically increasing sequence number from Redis `INCR("seq:{user_id}")`. Per-user, global across all events |
-| `type` | VARCHAR(40) | NOT NULL | Update type discriminator. One of: `message.new`, `message.delta`, `message.done`, `message.tool_call`, `message.thinking`, `message.error`, `message.stop`, `conversation.created`, `conversation.deleted`, `conversation.compacting`, `conversation.compacted`, `conversation.archived`, `project.created`, `project.deleted`, `settings.changed`, `empty` |
+| `type` | VARCHAR(40) | NOT NULL | Update type discriminator. One of: `message.new`, `message.delta`, `message.done`, `message.tool_call`, `message.thinking`, `message.error`, `message.stop`, `conversation.created`, `conversation.deleted`, `conversation.compacting`, `conversation.compacted`, `conversation.archived`, `human_in_the_loop.created`, `human_in_the_loop.answered`, `todo.created`, `todo.updated`, `todo.deleted`, `project.created`, `project.deleted`, `settings.changed`, `empty` |
 | `payload` | JSONB | NOT NULL | Type-specific data. Structure varies completely by `type`, hence JSONB. Frontend extracts `conversation_id` or `project_id` from payload to derive topic |
 | `created_at` | TIMESTAMPTZ | NOT NULL | Event creation time |
 
@@ -246,6 +246,52 @@
 - **Eino integration**: Checkpoint stores graph execution state (`compose.CheckpointStore` interface), including channel state, node inputs, graph-level state, and interrupt ID-to-address mappings.
 - **Resume flow**: User sees `reason` → confirms/rejects → `ResumeWithData(ctx, interrupt_id, data)` → Agent continues from checkpoint.
 - **Phase 2**: Only needed for Template 10. Can be deferred from Phase 1.
+
+---
+
+### `human_in_the_loops`
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, `gen_random_uuid()` | Human-in-the-loop request identifier |
+| `conversation_id` | UUID | NOT NULL, FK → `conversations(id)` ON DELETE CASCADE | Parent conversation |
+| `checkpoint_id` | VARCHAR(255) | NOT NULL | Eino `CheckPointStore` key for resuming the interrupted agent run |
+| `interrupt_id` | VARCHAR(255) | NOT NULL | Eino `InterruptSignal.ID` for targeted resume with `ResumeWithParams` |
+| `question` | TEXT | NOT NULL | The question text presented to the user |
+| `choices` | JSONB | NOT NULL, DEFAULT `'[]'` | Predefined answer options. Empty array means free-text input |
+| `answer_type` | VARCHAR(10) | NOT NULL, DEFAULT `'text'`, CHECK IN (`'single'`, `'multi'`, `'text'`) | UI rendering mode: radio button, checkbox, or free-text input |
+| `answer` | JSONB | DEFAULT NULL | User's submitted answer. `NULL` while `status = 'pending'` |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT `'pending'`, CHECK IN (`'pending'`, `'answered'`, `'expired'`) | Lifecycle state: awaiting response, answered, or timed-out |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Interruption time |
+
+**Index**: `(conversation_id)` — query pending HITLs for a conversation.
+
+**Design notes**:
+- **Conversation-level, not per-message**: The tool call input/output is already recorded in `messages.tool_calling` JSONB. This table exists to persist the question/answer lifecycle for UI display and browser refresh recovery.
+- **No FK to messages**: The agent's tool call is an assistant message, but the HITL is a separate business entity. Users find it by `conversation_id` (all pending HITLs for a chat), not by message.
+- **Resume flow**: Agent interrupts → `OnInterrupted` callback inserts row with `status='pending'` → pushes `human_in_the_loop.created` Update → frontend renders modal. User answers → `POST /answer` → updates row to `status='answered'` → `ResumeWithParams(checkpoint_id, {interrupt_id: answer})` → agent continues.
+- **Browser refresh**: On page mount, client syncs messages via HTTP. The `messages` table has the tool call record, and the `human_in_the_loops` table provides the pending question state. The chat page queries for `status='pending'` HITLs and re-renders the modal.
+
+---
+
+### `todos`
+
+| Column | Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `id` | UUID | PK, `gen_random_uuid()` | Todo item identifier |
+| `conversation_id` | UUID | NOT NULL, FK → `conversations(id)` ON DELETE CASCADE | Parent conversation |
+| `content` | TEXT | NOT NULL | Todo description text |
+| `completed` | BOOLEAN | NOT NULL, DEFAULT `FALSE` | Completion status |
+| `metadata` | JSONB | NOT NULL, DEFAULT `'{}'` | Extended attributes: source, priority, tags, etc. |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Last modification time |
+
+**Index**: `(conversation_id)` — list todos for a conversation.
+
+**Design notes**:
+- **Conversation-scoped**: Todos belong to a conversation, not a project or user globally. This aligns with the demo's per-conversation workflow.
+- **Agent-managed**: The `todo_write` tool lets the AI agent create, complete, or delete todos during conversations. Users can also interact via HTTP endpoints.
+- **No `user_id` denormalization**: The conversation already carries `user_id`, so ownership is enforced through the FK chain. Queries always include `conversation_id` as the primary filter.
 
 ---
 
@@ -343,6 +389,8 @@ erDiagram
 
     conversations ||--o{ messages : contains
     conversations ||--o{ checkpoints : has
+    conversations ||--o{ human_in_the_loops : has
+    conversations ||--o{ todos : has
     conversations ||--o| conversations : "parent (context compression)"
 
     messages ||--o| checkpoints : "triggers"
@@ -457,6 +505,29 @@ erDiagram
         timestamptz created_at
     }
 
+    human_in_the_loops {
+        uuid id PK
+        uuid conversation_id FK
+        varchar checkpoint_id
+        varchar interrupt_id
+        text question
+        jsonb choices
+        varchar answer_type
+        jsonb answer
+        varchar status
+        timestamptz created_at
+    }
+
+    todos {
+        uuid id PK
+        uuid conversation_id FK
+        text content
+        bool completed
+        jsonb metadata
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     settings {
         uuid id PK
         uuid user_id FK
@@ -519,6 +590,8 @@ erDiagram
 | `messages` | `(conversation_id, seq)` | UNIQUE | Prevent duplicate injection, ensure ordering |
 | `user_updates` | `(user_id, seq)` | UNIQUE | Critical: reconnect polling + gap-fill query |
 | `checkpoints` | `checkpoint_id` | UNIQUE | Eino CheckPointStore lookup |
+| `human_in_the_loops` | `(conversation_id)` | BTREE | List HITL requests for a conversation |
+| `todos` | `(conversation_id)` | BTREE | List todos for a conversation |
 | `settings` | `user_id` | UNIQUE | One row per user (implicit from UNIQUE constraint) |
 | `document_chunks` | `(project_id)` | BTREE | Filter by project before vector search |
 | `document_chunks` | `(embedding)` | HNSW | Approximate nearest neighbor for RAG retrieval |

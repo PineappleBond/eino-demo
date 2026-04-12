@@ -20,6 +20,9 @@ export type UpdatePayload =
   | components['schemas']['ProjectCreatedPayload']
   | components['schemas']['ProjectDeletedPayload']
   | components['schemas']['SettingsChangedPayload']
+  | components['schemas']['HumanInTheLoopCreatedPayload']
+  | components['schemas']['HumanInTheLoopAnsweredPayload']
+  | components['schemas']['TodoSyncPayload']
   | components['schemas']['EmptyPayload'];
 
 /**

@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
@@ -298,7 +299,10 @@ func (s *ChatService) runAgent(
 		ModelProvider:    s.modelProvider,
 		ModelTier:        modelTier,
 		SystemPrompt:     systemPrompt,
-		Tools:            s.toolRegistry.GetBaseTools(),
+		Tools: func() []tool.BaseTool {
+			s.toolRegistry.SetConversationID(conversationID)
+			return s.toolRegistry.GetBaseTools()
+		}(),
 		MaxIteration:     maxIteration,
 		ConversationID:   conversationID,
 		MessageQueue:     s.messageQueue,
@@ -406,10 +410,25 @@ func (s *ChatService) runAgent(
 	}
 
 	if hasCheckpoint {
-		iter, err = rootRunner.Resume(runCtx, checkpointID, handler)
-		if err != nil {
-			s.log.Error("runAgent: resume failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
-			iter = rootRunner.Run(runCtx, messages, "", handler)
+		resumeParams, hasResumeParams := s.runSessionMgr.GetResumeParams(conversationID)
+		if hasResumeParams {
+			s.log.Info("runAgent: resuming with params",
+				zap.String("checkpoint", checkpointID),
+				zap.Int("targets", len(resumeParams.Targets)),
+			)
+			// Clear resume params so they're only used once
+			s.runSessionMgr.ClearResumeParams(conversationID)
+			iter, err = rootRunner.ResumeWithParams(runCtx, checkpointID, resumeParams, handler)
+			if err != nil {
+				s.log.Error("runAgent: resumeWithParams failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
+				iter = rootRunner.Run(runCtx, messages, "", handler)
+			}
+		} else {
+			iter, err = rootRunner.Resume(runCtx, checkpointID, handler)
+			if err != nil {
+				s.log.Error("runAgent: resume failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
+				iter = rootRunner.Run(runCtx, messages, "", handler)
+			}
 		}
 	} else {
 		iter = rootRunner.Run(runCtx, messages, "", handler)
@@ -616,6 +635,140 @@ func (s *ChatService) StopMessage(
 	pushUpdate(userID, update)
 
 	return nil
+}
+
+// AnswerQuestionRequest holds the fields for answering an interrupted question.
+type AnswerQuestionRequest struct {
+	CheckpointID string `json:"checkpoint_id"`
+	InterruptID  string `json:"interrupt_id"`
+	Answer       string `json:"answer"`
+}
+
+// AnswerQuestion resumes an interrupted agent run with the user's answer.
+func (s *ChatService) AnswerQuestion(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req AnswerQuestionRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) error {
+	// 1. Verify conversation ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found")
+	}
+
+	// 2. Find the pending HITL record
+	var hitl model.HumanInTheLoop
+	if err := s.db.Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
+		conversationID, req.CheckpointID, req.InterruptID).First(&hitl).Error; err != nil {
+		return fmt.Errorf("pending HITL request not found")
+	}
+
+	// 3. Update HITL to answered
+	answerJSON := model.JSONMap{"text": req.Answer}
+	if err := s.db.Model(&hitl).Updates(map[string]interface{}{
+		"status": "answered",
+		"answer": answerJSON,
+	}).Error; err != nil {
+		return fmt.Errorf("failed to update HITL: %w", err)
+	}
+
+	// 4. Push human_in_the_loop.answered Update
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		s.log.Error("seq assignment failed", zap.Error(err))
+	} else {
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "human_in_the_loop.answered",
+			Payload: model.JSONMap{
+				"conversation_id": conversationID.String(),
+				"id":              hitl.ID.String(),
+				"answer":          req.Answer,
+				"seq":             seq,
+			},
+		}
+		if dbErr := s.db.Create(&update).Error; dbErr != nil {
+			s.log.Error("failed to persist HITL answered update", zap.Error(dbErr))
+		} else {
+			pushUpdate(userID, update)
+		}
+	}
+
+	// 5. Insert a user message recording the HITL answer
+	answerSeq, answerSeqErr := nextSeq(ctx, userID)
+	if answerSeqErr != nil {
+		s.log.Error("seq assignment failed for HITL answer message", zap.Error(answerSeqErr))
+	}
+
+	var answerMsgID uuid.UUID
+	if answerSeq > 0 {
+		answerMsg := model.Message{
+			ConversationID: conversationID,
+			SenderRole:     "user",
+			SenderID:       userID.String(),
+			Content:        req.Answer,
+			Metadata:       model.JSONMap{"type": "hitl_answer", "hitl_id": hitl.ID.String()},
+			Seq:            answerSeq,
+		}
+		if err := s.db.Create(&answerMsg).Error; err != nil {
+			s.log.Error("failed to create HITL answer message", zap.Error(err))
+		} else {
+			answerMsgID = answerMsg.ID
+			update := model.UserUpdate{
+				UserID: userID,
+				Seq:    answerSeq,
+				Type:   "message.new",
+				Payload: model.JSONMap{
+					"conversation_id": conversationID.String(),
+					"message_id":      answerMsgID.String(),
+					"role":            "user",
+					"content":         req.Answer,
+					"seq":             answerSeq,
+				},
+			}
+			if dbErr := s.db.Create(&update).Error; dbErr != nil {
+				s.log.Error("failed to persist HITL answer message update", zap.Error(dbErr))
+			} else {
+				pushUpdate(userID, update)
+			}
+		}
+	}
+
+	// 6. Set resume params and trigger a new agent run.
+	// The runAgent method detects ResumeParams and uses ResumeWithParams.
+	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
+		Targets: map[string]any{
+			req.InterruptID: req.Answer,
+		},
+	})
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.log.Error("AnswerQuestion runAgent panic recovered", zap.Any("recover", r))
+			}
+		}()
+		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, "", nextSeq, pushUpdate)
+	}()
+
+	return nil
+}
+
+// ListPendingHITL returns pending human-in-the-loop requests for a conversation.
+func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model.HumanInTheLoop, error) {
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found")
+	}
+
+	var hitls []model.HumanInTheLoop
+	if err := s.db.Where("conversation_id = ? AND status = ?", conversationID, "pending").Order("created_at ASC").Find(&hitls).Error; err != nil {
+		return nil, fmt.Errorf("failed to list pending HITL: %w", err)
+	}
+	return hitls, nil
 }
 
 // GetConversationMessagesRequest holds the query params for listing messages.

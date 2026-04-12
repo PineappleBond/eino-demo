@@ -172,6 +172,53 @@ func ToTemplate(t templates.TemplateInfo) types.Template {
 	return tpl
 }
 
+// ToTodo converts a GORM Todo model to the OpenAPI Todo type.
+func ToTodo(m model.Todo) types.Todo {
+	return types.Todo{
+		Id:             toUUID(m.ID),
+		ConversationId: toUUID(m.ConversationID),
+		Content:        m.Content,
+		Completed:      m.Completed,
+		Metadata:       toMapPtr(m.Metadata),
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
+	}
+}
+
+// ToHumanInTheLoop converts a GORM HumanInTheLoop model to the OpenAPI HumanInTheLoop type.
+func ToHumanInTheLoop(m model.HumanInTheLoop) types.HumanInTheLoop {
+	var choices *[]struct {
+		Desc  *string `json:"desc,omitempty"`
+		Title string  `json:"title"`
+	}
+	if m.Choices != nil {
+		if raw, ok := m.Choices["choices"].([]interface{}); ok {
+			// Marshal to JSON then unmarshal to match the generated types exactly.
+			b, _ := json.Marshal(raw)
+			var parsed []struct {
+				Desc  *string `json:"desc,omitempty"`
+				Title string  `json:"title"`
+			}
+			_ = json.Unmarshal(b, &parsed)
+			if len(parsed) > 0 {
+				choices = &parsed
+			}
+		}
+	}
+	return types.HumanInTheLoop{
+		Id:             toUUID(m.ID),
+		ConversationId: toUUID(m.ConversationID),
+		CheckpointId:   strPtr(m.CheckpointID),
+		InterruptId:    strPtr(m.InterruptID),
+		Question:       m.Question,
+		Choices:        choices,
+		AnswerType:     types.HumanInTheLoopAnswerType(m.AnswerType),
+		Answer:         nil,
+		Status:         types.HumanInTheLoopStatus(m.Status),
+		CreatedAt:      m.CreatedAt,
+	}
+}
+
 // ToUpdatePayload converts a model.JSONMap to the generated Update_Payload union type.
 // Used when reading persisted updates from the database.
 func ToUpdatePayload(payload model.JSONMap) types.Update_Payload {

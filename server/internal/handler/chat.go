@@ -84,6 +84,72 @@ func RegisterChatRoutes(
 		c.JSON(http.StatusOK, gin.H{"status": "stopped"})
 	})
 
+	api.POST("/conversations/:id/answer", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+
+		var req types.PostConversationsIdAnswerJSONBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+			return
+		}
+
+		if err := chatSvc.AnswerQuestion(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			service.AnswerQuestionRequest{
+				CheckpointID: req.CheckpointId,
+				InterruptID:  req.InterruptId,
+				Answer:       req.Answer,
+			},
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := convert.ToUpdate(update)
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		); err != nil {
+			if err.Error() == "conversation not found" || err.Error() == "pending HITL request not found" {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			} else {
+				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "resumed"})
+	})
+
+	api.GET("/conversations/:id/hitl", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+
+		hitls, err := chatSvc.ListPendingHITL(userID, conversationID)
+		if err != nil {
+			if err.Error() == "conversation not found" {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			} else {
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list pending HITL")
+			}
+			return
+		}
+
+		result := make([]types.HumanInTheLoop, len(hitls))
+		for i, h := range hitls {
+			result[i] = convert.ToHumanInTheLoop(h)
+		}
+
+		respondJSON(c, http.StatusOK, result)
+	})
+
 	api.GET("/conversations/:id/messages", func(c *gin.Context) {
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))

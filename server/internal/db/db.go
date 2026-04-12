@@ -35,6 +35,8 @@ func ProvideDB(databaseURL string, log *zap.Logger) *gorm.DB {
 		&model.UserUpdate{},
 		&model.Settings{},
 		&model.Checkpoint{},
+		&model.HumanInTheLoop{},
+		&model.Todo{},
 	); err != nil {
 		log.Fatal("db: AutoMigrate failed", zap.Error(err))
 	}
@@ -82,6 +84,10 @@ func setupForeignKeys(db *gorm.DB, log *zap.Logger) error {
 			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
 		`ALTER TABLE checkpoints ADD CONSTRAINT fk_checkpoints_message_id
 			 FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE`,
+		`ALTER TABLE human_in_the_loops ADD CONSTRAINT fk_hitl_conversation_id
+			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
+		`ALTER TABLE todos ADD CONSTRAINT fk_todos_conversation_id
+			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
 		`ALTER TABLE settings ADD CONSTRAINT fk_settings_user_id
 			 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`,
 	}
@@ -113,6 +119,10 @@ func setupCheckConstraints(db *gorm.DB, log *zap.Logger) error {
 			 CHECK (member_type IN ('user','agent'))`,
 		`ALTER TABLE agent_relationships ADD CONSTRAINT chk_agent_rel_relationship
 			 CHECK (relationship != '')`,
+		`ALTER TABLE human_in_the_loops ADD CONSTRAINT chk_hitl_answer_type
+			 CHECK (answer_type IN ('single','multi','text'))`,
+		`ALTER TABLE human_in_the_loops ADD CONSTRAINT chk_hitl_status
+			 CHECK (status IN ('pending','answered','expired'))`,
 	}
 
 	for _, c := range constraints {

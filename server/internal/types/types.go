@@ -11,6 +11,48 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for HumanInTheLoopAnswerType.
+const (
+	Multi  HumanInTheLoopAnswerType = "multi"
+	Single HumanInTheLoopAnswerType = "single"
+	Text   HumanInTheLoopAnswerType = "text"
+)
+
+// Valid indicates whether the value is a known member of the HumanInTheLoopAnswerType enum.
+func (e HumanInTheLoopAnswerType) Valid() bool {
+	switch e {
+	case Multi:
+		return true
+	case Single:
+		return true
+	case Text:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HumanInTheLoopStatus.
+const (
+	Answered HumanInTheLoopStatus = "answered"
+	Expired  HumanInTheLoopStatus = "expired"
+	Pending  HumanInTheLoopStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the HumanInTheLoopStatus enum.
+func (e HumanInTheLoopStatus) Valid() bool {
+	switch e {
+	case Answered:
+		return true
+	case Expired:
+		return true
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MessageSenderRole.
 const (
 	MessageSenderRoleAssistant MessageSenderRole = "assistant"
@@ -204,6 +246,8 @@ const (
 	ConversationDeleted    UpdateType = "conversation.deleted"
 	ConversationUpdated    UpdateType = "conversation.updated"
 	Empty                  UpdateType = "empty"
+	HumanInTheLoopAnswered UpdateType = "human_in_the_loop.answered"
+	HumanInTheLoopCreated  UpdateType = "human_in_the_loop.created"
 	MessageDelta           UpdateType = "message.delta"
 	MessageDone            UpdateType = "message.done"
 	MessageError           UpdateType = "message.error"
@@ -214,6 +258,7 @@ const (
 	ProjectCreated         UpdateType = "project.created"
 	ProjectDeleted         UpdateType = "project.deleted"
 	SettingsChanged        UpdateType = "settings.changed"
+	TodoSync               UpdateType = "todo.sync"
 )
 
 // Valid indicates whether the value is a known member of the UpdateType enum.
@@ -235,6 +280,10 @@ func (e UpdateType) Valid() bool {
 		return true
 	case Empty:
 		return true
+	case HumanInTheLoopAnswered:
+		return true
+	case HumanInTheLoopCreated:
+		return true
 	case MessageDelta:
 		return true
 	case MessageDone:
@@ -254,6 +303,8 @@ func (e UpdateType) Valid() bool {
 	case ProjectDeleted:
 		return true
 	case SettingsChanged:
+		return true
+	case TodoSync:
 		return true
 	default:
 		return false
@@ -464,6 +515,58 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// HumanInTheLoop defines model for HumanInTheLoop.
+type HumanInTheLoop struct {
+	Answer       *string                  `json:"answer,omitempty"`
+	AnswerType   HumanInTheLoopAnswerType `json:"answer_type"`
+	CheckpointId *string                  `json:"checkpoint_id,omitempty"`
+	Choices      *[]struct {
+		Desc  *string `json:"desc,omitempty"`
+		Title string  `json:"title"`
+	} `json:"choices,omitempty"`
+	ConversationId openapi_types.UUID   `json:"conversation_id"`
+	CreatedAt      time.Time            `json:"created_at"`
+	Id             openapi_types.UUID   `json:"id"`
+	InterruptId    *string              `json:"interrupt_id,omitempty"`
+	Question       string               `json:"question"`
+	Status         HumanInTheLoopStatus `json:"status"`
+}
+
+// HumanInTheLoopAnswerType defines model for HumanInTheLoop.AnswerType.
+type HumanInTheLoopAnswerType string
+
+// HumanInTheLoopStatus defines model for HumanInTheLoop.Status.
+type HumanInTheLoopStatus string
+
+// HumanInTheLoopAnsweredPayload defines model for HumanInTheLoopAnsweredPayload.
+type HumanInTheLoopAnsweredPayload struct {
+	Answer         string `json:"answer"`
+	ConversationId string `json:"conversation_id"`
+	Id             string `json:"id"`
+	Seq            int64  `json:"seq"`
+}
+
+// HumanInTheLoopCreatedPayload defines model for HumanInTheLoopCreatedPayload.
+type HumanInTheLoopCreatedPayload struct {
+	AnswerType string `json:"answer_type"`
+
+	// CheckpointId Checkpoint ID for resume
+	CheckpointId *string `json:"checkpoint_id,omitempty"`
+	Choices      []struct {
+		Desc  *string `json:"desc,omitempty"`
+		Title string  `json:"title"`
+	} `json:"choices"`
+	ConversationId string `json:"conversation_id"`
+
+	// Id HITL request ID
+	Id string `json:"id"`
+
+	// InterruptId Interrupt ID for targeted resume
+	InterruptId *string `json:"interrupt_id,omitempty"`
+	Question    string  `json:"question"`
+	Seq         int64   `json:"seq"`
+}
+
 // MeResponse defines model for MeResponse.
 type MeResponse struct {
 	CreatedAt *time.Time         `json:"created_at,omitempty"`
@@ -672,6 +775,23 @@ type Template struct {
 // TemplateDifficulty defines model for Template.Difficulty.
 type TemplateDifficulty string
 
+// Todo defines model for Todo.
+type Todo struct {
+	Completed      bool                    `json:"completed"`
+	Content        string                  `json:"content"`
+	ConversationId openapi_types.UUID      `json:"conversation_id"`
+	CreatedAt      time.Time               `json:"created_at"`
+	Id             openapi_types.UUID      `json:"id"`
+	Metadata       *map[string]interface{} `json:"metadata,omitempty"`
+	UpdatedAt      time.Time               `json:"updated_at"`
+}
+
+// TodoSyncPayload defines model for TodoSyncPayload.
+type TodoSyncPayload struct {
+	ConversationId string `json:"conversation_id"`
+	Seq            int64  `json:"seq"`
+}
+
 // Update defines model for Update.
 type Update struct {
 	// Payload Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic.
@@ -735,8 +855,25 @@ type PatchConversationsIdJSONBody struct {
 	Title string `json:"title"`
 }
 
+// PostConversationsIdAnswerJSONBody defines parameters for PostConversationsIdAnswer.
+type PostConversationsIdAnswerJSONBody struct {
+	// Answer User's answer text
+	Answer string `json:"answer"`
+
+	// CheckpointId Eino checkpoint ID for resuming the agent run
+	CheckpointId string `json:"checkpoint_id"`
+
+	// InterruptId Eino interrupt signal ID for targeted resume
+	InterruptId string `json:"interrupt_id"`
+}
+
 // PostConversationsIdMessagesJSONBody defines parameters for PostConversationsIdMessages.
 type PostConversationsIdMessagesJSONBody struct {
+	Content string `json:"content"`
+}
+
+// PostConversationsIdTodosJSONBody defines parameters for PostConversationsIdTodos.
+type PostConversationsIdTodosJSONBody struct {
 	Content string `json:"content"`
 }
 
@@ -770,6 +907,12 @@ type PutSettingsJSONBodyTheme string
 // PostTemplatesIdProjectsJSONBody defines parameters for PostTemplatesIdProjects.
 type PostTemplatesIdProjectsJSONBody = map[string]interface{}
 
+// PatchTodosIdJSONBody defines parameters for PatchTodosId.
+type PatchTodosIdJSONBody struct {
+	Completed *bool   `json:"completed,omitempty"`
+	Content   *string `json:"content,omitempty"`
+}
+
 // GetUsersMeUpdatesParams defines parameters for GetUsersMeUpdates.
 type GetUsersMeUpdatesParams struct {
 	LastSeq *int64 `form:"last_seq,omitempty" json:"last_seq,omitempty"`
@@ -778,8 +921,14 @@ type GetUsersMeUpdatesParams struct {
 // PatchConversationsIdJSONRequestBody defines body for PatchConversationsId for application/json ContentType.
 type PatchConversationsIdJSONRequestBody PatchConversationsIdJSONBody
 
+// PostConversationsIdAnswerJSONRequestBody defines body for PostConversationsIdAnswer for application/json ContentType.
+type PostConversationsIdAnswerJSONRequestBody PostConversationsIdAnswerJSONBody
+
 // PostConversationsIdMessagesJSONRequestBody defines body for PostConversationsIdMessages for application/json ContentType.
 type PostConversationsIdMessagesJSONRequestBody PostConversationsIdMessagesJSONBody
+
+// PostConversationsIdTodosJSONRequestBody defines body for PostConversationsIdTodos for application/json ContentType.
+type PostConversationsIdTodosJSONRequestBody PostConversationsIdTodosJSONBody
 
 // PutProjectsIdJSONRequestBody defines body for PutProjectsId for application/json ContentType.
 type PutProjectsIdJSONRequestBody PutProjectsIdJSONBody
@@ -792,6 +941,9 @@ type PutSettingsJSONRequestBody PutSettingsJSONBody
 
 // PostTemplatesIdProjectsJSONRequestBody defines body for PostTemplatesIdProjects for application/json ContentType.
 type PostTemplatesIdProjectsJSONRequestBody = PostTemplatesIdProjectsJSONBody
+
+// PatchTodosIdJSONRequestBody defines body for PatchTodosId for application/json ContentType.
+type PatchTodosIdJSONRequestBody PatchTodosIdJSONBody
 
 // AsMessageNewPayload returns the union data inside the Update_Payload as a MessageNewPayload
 func (t Update_Payload) AsMessageNewPayload() (MessageNewPayload, error) {
@@ -965,6 +1117,84 @@ func (t *Update_Payload) FromMessageStopPayload(v MessageStopPayload) error {
 
 // MergeMessageStopPayload performs a merge with any union data inside the Update_Payload, using the provided MessageStopPayload
 func (t *Update_Payload) MergeMessageStopPayload(v MessageStopPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsHumanInTheLoopCreatedPayload returns the union data inside the Update_Payload as a HumanInTheLoopCreatedPayload
+func (t Update_Payload) AsHumanInTheLoopCreatedPayload() (HumanInTheLoopCreatedPayload, error) {
+	var body HumanInTheLoopCreatedPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromHumanInTheLoopCreatedPayload overwrites any union data inside the Update_Payload as the provided HumanInTheLoopCreatedPayload
+func (t *Update_Payload) FromHumanInTheLoopCreatedPayload(v HumanInTheLoopCreatedPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeHumanInTheLoopCreatedPayload performs a merge with any union data inside the Update_Payload, using the provided HumanInTheLoopCreatedPayload
+func (t *Update_Payload) MergeHumanInTheLoopCreatedPayload(v HumanInTheLoopCreatedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsHumanInTheLoopAnsweredPayload returns the union data inside the Update_Payload as a HumanInTheLoopAnsweredPayload
+func (t Update_Payload) AsHumanInTheLoopAnsweredPayload() (HumanInTheLoopAnsweredPayload, error) {
+	var body HumanInTheLoopAnsweredPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromHumanInTheLoopAnsweredPayload overwrites any union data inside the Update_Payload as the provided HumanInTheLoopAnsweredPayload
+func (t *Update_Payload) FromHumanInTheLoopAnsweredPayload(v HumanInTheLoopAnsweredPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeHumanInTheLoopAnsweredPayload performs a merge with any union data inside the Update_Payload, using the provided HumanInTheLoopAnsweredPayload
+func (t *Update_Payload) MergeHumanInTheLoopAnsweredPayload(v HumanInTheLoopAnsweredPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTodoSyncPayload returns the union data inside the Update_Payload as a TodoSyncPayload
+func (t Update_Payload) AsTodoSyncPayload() (TodoSyncPayload, error) {
+	var body TodoSyncPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTodoSyncPayload overwrites any union data inside the Update_Payload as the provided TodoSyncPayload
+func (t *Update_Payload) FromTodoSyncPayload(v TodoSyncPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTodoSyncPayload performs a merge with any union data inside the Update_Payload, using the provided TodoSyncPayload
+func (t *Update_Payload) MergeTodoSyncPayload(v TodoSyncPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

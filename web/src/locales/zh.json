@@ -47,7 +47,12 @@
     "expandAll": "展开全部",
     "collapse": "折叠",
     "backToMessage": "查看原消息",
-    "thinking": "思考过程"
+    "thinking": "思考过程",
+    "hitlQuestion": "问题",
+    "typeAnswer": "输入你的回答...",
+    "submit": "提交",
+    "addTodo": "添加待办...",
+    "noTodos": "暂无待办"
   },
   "settings": {
     "title": "设置",

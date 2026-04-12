@@ -47,7 +47,12 @@
     "expandAll": "Expand all",
     "collapse": "Collapse",
     "backToMessage": "Back to message",
-    "thinking": "Thinking"
+    "thinking": "Thinking",
+    "hitlQuestion": "Question",
+    "typeAnswer": "Type your answer...",
+    "submit": "Submit",
+    "addTodo": "Add a todo...",
+    "noTodos": "No todos yet"
   },
   "settings": {
     "title": "Settings",

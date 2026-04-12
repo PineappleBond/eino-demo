@@ -265,6 +265,14 @@ func (r *RootRunner) Resume(ctx context.Context, checkpointID string, handler *R
 	return r.runner.Resume(ctx, checkpointID, opts...)
 }
 
+// ResumeWithParams continues an interrupted run with targeted resume data.
+func (r *RootRunner) ResumeWithParams(ctx context.Context, checkpointID string, params *adk.ResumeParams, handler *RootRunnerHandler) (*adk.AsyncIterator[*adk.AgentEvent], error) {
+	opts := []adk.AgentRunOption{
+		adk.WithCallbacks(handler),
+	}
+	return r.runner.ResumeWithParams(ctx, checkpointID, params, opts...)
+}
+
 // ---- Context helpers ----
 
 // AddrString converts compose.Address to a readable string for Update payloads.

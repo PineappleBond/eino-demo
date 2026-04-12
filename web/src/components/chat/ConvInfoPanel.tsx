@@ -1,9 +1,10 @@
 'use client';
 
 import { Avatar, Dropdown } from 'antd';
-import { UserOutlined, RobotOutlined, CloseOutlined } from '@ant-design/icons';
+import { UserOutlined, RobotOutlined, CloseOutlined, CheckSquareOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useTranslations } from 'next-intl';
+import { TodoPanel } from './TodoPanel';
 
 interface Member {
   id: string;
@@ -25,9 +26,10 @@ interface ConvInfoPanelProps {
   model?: string;
   template?: string;
   onMemberMention?: (member: Member) => void;
+  conversationId?: string;
 }
 
-export function ConvInfoPanel({ onClose, members, stats, model, template, onMemberMention }: ConvInfoPanelProps) {
+export function ConvInfoPanel({ onClose, members, stats, model, template, onMemberMention, conversationId }: ConvInfoPanelProps) {
   const t = useTranslations('conv');
   const getMemberContextMenu = (member: Member): MenuProps['items'] => [
     {
@@ -47,6 +49,7 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
         </span>
       </div>
 
+      <div className="right-panel-content">
       {stats && (
         <div className="right-panel-section">
           <div className="right-panel-section-title">{t('statistics')}</div>
@@ -108,6 +111,17 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
           )}
         </div>
       )}
+
+      {conversationId && (
+        <div className="right-panel-section">
+          <div className="right-panel-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckSquareOutlined />
+            <span>Todos</span>
+          </div>
+          <TodoPanel conversationId={conversationId} collapsible />
+        </div>
+      )}
+      </div>
     </div>
   );
 }

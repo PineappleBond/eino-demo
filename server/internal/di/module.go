@@ -42,6 +42,7 @@ var Module = fx.Options(
 		service.NewProjectService,
 		service.NewConversationService,
 		service.NewChatService,
+		service.NewTodoService,
 	),
 	// Handler modules — register Gin routes
 	fx.Invoke(RegisterRoutes),
@@ -69,6 +70,7 @@ func RegisterRoutes(
 	projectSvc *service.ProjectService,
 	convSvc *service.ConversationService,
 	chatSvc *service.ChatService,
+	todoSvc *service.TodoService,
 ) {
 	r := handler.NewRouter(cfg, log)
 
@@ -79,6 +81,7 @@ func RegisterRoutes(
 	handler.RegisterProjectRoutes(api, projectSvc, wsManager)
 	handler.RegisterConversationRoutes(api, convSvc, chatSvc, wsManager)
 	handler.RegisterChatRoutes(api, chatSvc, wsManager)
+	handler.RegisterTodoRoutes(api, todoSvc, wsManager, db)
 	handler.RegisterModelRoutes(api, cfg)
 
 	// WebSocket upgrade endpoint (not under /api/v1)

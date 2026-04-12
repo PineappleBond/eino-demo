@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudwego/eino/adk"
 	"github.com/google/uuid"
 )
 
@@ -12,6 +13,7 @@ import (
 type AgentRunSession struct {
 	CancelFunc   context.CancelFunc
 	CheckpointID string
+	ResumeParams *adk.ResumeParams // Params for targeted resume with user data
 	IsRunning    bool
 	StopFunc     func()        // marks in-progress messages as stopped in DB
 	done         chan struct{} // closed when the event loop goroutine fully drains
@@ -133,6 +135,34 @@ func (m *RunSessionManager) GetCheckpointID(conversationID uuid.UUID) (string, b
 		return s.CheckpointID, s.CheckpointID != ""
 	}
 	return "", false
+}
+
+// SetResumeParams stores resume params for targeted resume with ResumeWithParams.
+func (m *RunSessionManager) SetResumeParams(conversationID uuid.UUID, params *adk.ResumeParams) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[conversationID]; ok {
+		s.ResumeParams = params
+	}
+}
+
+// GetResumeParams returns the stored resume params, if any.
+func (m *RunSessionManager) GetResumeParams(conversationID uuid.UUID) (*adk.ResumeParams, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if s, ok := m.sessions[conversationID]; ok {
+		return s.ResumeParams, s.ResumeParams != nil
+	}
+	return nil, false
+}
+
+// ClearResumeParams removes stored resume params.
+func (m *RunSessionManager) ClearResumeParams(conversationID uuid.UUID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s, ok := m.sessions[conversationID]; ok {
+		s.ResumeParams = nil
+	}
 }
 
 // IsRunning checks whether an agent is currently executing.

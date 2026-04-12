@@ -701,6 +701,257 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer an interrupted human-in-the-loop question */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Eino checkpoint ID for resuming the agent run */
+                        checkpoint_id: string;
+                        /** @description Eino interrupt signal ID for targeted resume */
+                        interrupt_id: string;
+                        /** @description User's answer text */
+                        answer: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Agent resumed with user's answer */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid request or HITL already answered */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conversation or HITL request not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{id}/hitl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pending human-in-the-loop requests for a conversation */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of pending HITL requests */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HumanInTheLoop"][];
+                    };
+                };
+                /** @description Conversation not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{id}/todos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List todos for a conversation */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Array of todos */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Todo"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a todo item */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        content: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created todo */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Todo"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/todos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a todo item */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Todo deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Todo not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Update a todo item */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        content?: string;
+                        completed?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated todo */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Todo"];
+                    };
+                };
+                /** @description Todo not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -1111,6 +1362,70 @@ export interface components {
             /** @description Fields that were changed. */
             changed: string[];
         };
+        HumanInTheLoop: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            checkpoint_id?: string;
+            interrupt_id?: string;
+            question: string;
+            choices?: {
+                title: string;
+                desc?: string;
+            }[];
+            /** @enum {string} */
+            answer_type: "single" | "multi" | "text";
+            answer?: string | null;
+            /** @enum {string} */
+            status: "pending" | "answered" | "expired";
+            /** Format: date-time */
+            created_at: string;
+        };
+        Todo: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            content: string;
+            completed: boolean;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        HumanInTheLoopCreatedPayload: {
+            conversation_id: string;
+            /** @description HITL request ID */
+            id: string;
+            /** @description Checkpoint ID for resume */
+            checkpoint_id?: string;
+            /** @description Interrupt ID for targeted resume */
+            interrupt_id?: string;
+            question: string;
+            choices: {
+                title: string;
+                desc?: string;
+            }[];
+            answer_type: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        HumanInTheLoopAnsweredPayload: {
+            conversation_id: string;
+            id: string;
+            answer: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        TodoSyncPayload: {
+            conversation_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
         Update: {
             /**
              * Format: int64
@@ -1118,9 +1433,9 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
+            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "human_in_the_loop.created" | "human_in_the_loop.answered" | "todo.sync" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty";
             /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
-            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
+            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["HumanInTheLoopCreatedPayload"] | components["schemas"]["HumanInTheLoopAnsweredPayload"] | components["schemas"]["TodoSyncPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"];
         };
     };
     responses: never;
