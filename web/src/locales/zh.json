@@ -99,7 +99,14 @@
     "model": "模型",
     "activeModel": "当前模型",
     "template": "模板",
-    "members": "成员"
+    "members": "成员",
+    "mode": "权限模式",
+    "modeOptions": {
+      "ask_before_edits": "编辑前询问",
+      "edit_automatically": "自动编辑",
+      "bypass_permissions": "跳过权限检查",
+      "plan_mode": "计划模式（开发中）"
+    }
   },
   "tools": {
     "input": "输入",

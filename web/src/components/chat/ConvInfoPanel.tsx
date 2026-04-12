@@ -1,6 +1,6 @@
 'use client';
 
-import { Avatar, Dropdown } from 'antd';
+import { Avatar, Dropdown, Select, Tag } from 'antd';
 import { UserOutlined, RobotOutlined, CloseOutlined, CheckSquareOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useTranslations } from 'next-intl';
@@ -29,10 +29,13 @@ interface ConvInfoPanelProps {
   template?: string;
   onMemberMention?: (member: { id: string; name: string }) => void;
   conversationId?: string;
+  mode?: string;
+  onModeChange?: (mode: string) => void;
 }
 
-export function ConvInfoPanel({ onClose, members, stats, model, template, onMemberMention, conversationId }: ConvInfoPanelProps) {
+export function ConvInfoPanel({ onClose, members, stats, model, template, onMemberMention, conversationId, mode, onModeChange }: ConvInfoPanelProps) {
   const t = useTranslations('conv');
+  const tMode = useTranslations('conv.modeOptions');
 
   const getMemberDisplay = (member: Member) => {
     const name = member.member_name || 'Unknown';
@@ -126,6 +129,35 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
               <span className="right-panel-stat-value">{template}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {mode && (
+        <div className="right-panel-section">
+          <div className="right-panel-section-title">{t('mode')}</div>
+          <Select
+            value={mode}
+            onChange={(value) => onModeChange?.(value)}
+            style={{ width: '100%' }}
+            size="small"
+            options={[
+              { value: 'ask_before_edits', label: tMode('ask_before_edits') },
+              { value: 'edit_automatically', label: tMode('edit_automatically') },
+              { value: 'bypass_permissions', label: tMode('bypass_permissions') },
+              {
+                value: 'plan_mode',
+                label: (
+                  <span>
+                    {tMode('plan_mode')}
+                    <Tag color="orange" style={{ marginLeft: 6, fontSize: 10, lineHeight: '18px', padding: '0 4px' }}>
+                      WIP
+                    </Tag>
+                  </span>
+                ),
+                disabled: true,
+              },
+            ]}
+          />
         </div>
       )}
 

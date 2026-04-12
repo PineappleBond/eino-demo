@@ -99,7 +99,14 @@
     "model": "Model",
     "activeModel": "Active model",
     "template": "Template",
-    "members": "Members"
+    "members": "Members",
+    "mode": "Permission Mode",
+    "modeOptions": {
+      "ask_before_edits": "Ask before edits",
+      "edit_automatically": "Edit automatically",
+      "bypass_permissions": "Bypass permissions",
+      "plan_mode": "Plan mode (coming soon)"
+    }
   },
   "tools": {
     "input": "Input",
