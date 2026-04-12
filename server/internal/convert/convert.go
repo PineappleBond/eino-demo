@@ -84,6 +84,7 @@ func ToConversation(m model.Conversation) types.Conversation {
 		Title:           strPtr(m.Title),
 		Summary:         strPtr(m.Summary),
 		Status:          strPtr(m.Status),
+		Mode:            (*types.ConversationMode)(strPtr(m.Mode)),
 		LastPreview:     strPtr(m.LastMessagePreview),
 		MessageCount:    intPtr(m.MessageCount),
 		LatestSeq:       intPtr(int(m.LatestMessageSeq)),
@@ -202,12 +203,12 @@ func ToCronTask(m model.CronTask) types.CronTask {
 // ToMember converts a GORM ConversationMember model to the OpenAPI Member type.
 func ToMember(m model.ConversationMember) types.Member {
 	return types.Member{
-		Id:           toUUID(m.ID),
+		Id:             toUUID(m.ID),
 		ConversationId: toUUID(m.ConversationID),
-		MemberType:   m.MemberType,
-		MemberId:     m.MemberID,
-		MemberName:   strPtr(m.MemberName),
-		IsOwner:      &m.IsOwner,
+		MemberType:     m.MemberType,
+		MemberId:       m.MemberID,
+		MemberName:     strPtr(m.MemberName),
+		IsOwner:        &m.IsOwner,
 	}
 }
 

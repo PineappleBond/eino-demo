@@ -73,6 +73,7 @@ func RegisterConversationRoutes(
 		}
 		svcReq := service.CreateConversationRequest{
 			Title: valueOrZero(req.Title),
+			Mode:  string(valueOrZero(req.Mode)),
 		}
 		conv, err := svc.CompleteCreateConversation(
 			c.Request.Context(),
@@ -135,53 +136,97 @@ func RegisterConversationRoutes(
 		c.JSON(http.StatusNoContent, nil)
 	})
 
-	// Update conversation title
+	// Update conversation (title and/or mode)
 	api.PATCH("/conversations/:id", func(c *gin.Context) {
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
-			log.Warn("rename conversation: invalid conversation ID", zap.String("id", c.Param("id")))
+			log.Warn("update conversation: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
 		var req types.PatchConversationsIdJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
-			log.Warn("rename conversation: invalid request body",
+			log.Warn("update conversation: invalid request body",
 				zap.String("user_id", userID.String()),
 				zap.Error(err),
 			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
 			return
 		}
-		svcReq := service.RenameConversationRequest{
-			Title: req.Title,
-		}
-		conv, err := svc.CompleteRenameConversation(
-			c.Request.Context(),
-			userID,
-			conversationID,
-			svcReq,
-			wsManager.NextSeq,
-			func(userID uuid.UUID, update model.UserUpdate) {
-				wsUpdate := convert.ToUpdate(update)
-				wsManager.PushToUserConnections(userID, wsUpdate)
-			},
-		)
-		if err != nil {
-			log.Error("rename conversation failed",
-				zap.String("user_id", userID.String()),
-				zap.String("conv_id", conversationID.String()),
-				zap.Error(err),
-			)
-			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+
+		updateTitle := req.Title != nil && *req.Title != ""
+		updateMode := req.Mode != nil && *req.Mode != ""
+
+		if !updateTitle && !updateMode {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "at least one of title or mode must be provided")
 			return
 		}
-		log.Info("conversation renamed",
-			zap.String("user_id", userID.String()),
-			zap.String("conv_id", conversationID.String()),
-			zap.String("title", conv.Title),
-		)
-		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
+
+		var conv *model.Conversation
+
+		if updateTitle {
+			svcReq := service.RenameConversationRequest{
+				Title: *req.Title,
+			}
+			conv, err = svc.CompleteRenameConversation(
+				c.Request.Context(),
+				userID,
+				conversationID,
+				svcReq,
+				wsManager.NextSeq,
+				func(userID uuid.UUID, update model.UserUpdate) {
+					wsUpdate := convert.ToUpdate(update)
+					wsManager.PushToUserConnections(userID, wsUpdate)
+				},
+			)
+			if err != nil {
+				log.Error("rename conversation failed",
+					zap.String("user_id", userID.String()),
+					zap.String("conv_id", conversationID.String()),
+					zap.Error(err),
+				)
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+				return
+			}
+		}
+
+		if updateMode {
+			svcReq := service.UpdateConversationModeRequest{
+				Mode: string(*req.Mode),
+			}
+			modeConv, modeErr := svc.CompleteUpdateMode(
+				c.Request.Context(),
+				userID,
+				conversationID,
+				svcReq,
+				wsManager.NextSeq,
+				func(userID uuid.UUID, update model.UserUpdate) {
+					wsUpdate := convert.ToUpdate(update)
+					wsManager.PushToUserConnections(userID, wsUpdate)
+				},
+			)
+			if modeErr != nil {
+				log.Warn("update conversation mode failed",
+					zap.String("user_id", userID.String()),
+					zap.String("conv_id", conversationID.String()),
+					zap.Error(modeErr),
+				)
+				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "failed to update mode: "+modeErr.Error())
+				return
+			}
+			conv = modeConv
+		}
+
+		if conv != nil {
+			log.Info("conversation updated",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+			)
+			respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
+		} else {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "no changes to apply")
+		}
 	})
 
 	// Update conversation status (e.g., archive)

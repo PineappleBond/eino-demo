@@ -41,6 +41,7 @@ func (s *ConversationService) ListConversations(userID, projectID uuid.UUID) ([]
 // CreateConversationRequest holds the fields for creating a conversation.
 type CreateConversationRequest struct {
 	Title string `json:"title"`
+	Mode  string `json:"mode"`
 }
 
 // CompleteCreateConversation handles conversation creation with seq assignment, user_update, and WS push.
@@ -77,9 +78,13 @@ func (s *ConversationService) CompleteCreateConversation(
 			UserID:    userID,
 			Title:     req.Title,
 			Status:    "active",
+			Mode:      req.Mode,
 		}
 		if conversation.Title == "" {
 			conversation.Title = "New Conversation"
+		}
+		if conversation.Mode == "" {
+			conversation.Mode = "ask_before_edits"
 		}
 
 		if err := tx.Create(&conversation).Error; err != nil {
@@ -289,6 +294,7 @@ func (s *ConversationService) CompactConversation(
 
 	return newConv, nil
 }
+
 // RenameConversationRequest holds the fields for renaming a conversation.
 type RenameConversationRequest struct {
 	Title string `json:"title"`
@@ -362,6 +368,98 @@ func (s *ConversationService) CompleteRenameConversation(
 			"id":         conversationID.String(),
 			"project_id": conv.ProjectID.String(),
 			"title":      conv.Title,
+			"seq":        seq,
+		},
+	})
+	return &conv, nil
+}
+
+// UpdateConversationModeRequest holds the fields for updating a conversation mode.
+type UpdateConversationModeRequest struct {
+	Mode string `json:"mode"`
+}
+
+// CompleteUpdateMode handles conversation mode update with seq assignment, user_update, and WS push.
+func (s *ConversationService) CompleteUpdateMode(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req UpdateConversationModeRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		s.log.Error("update conversation mode: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
+
+	// 2. Validate mode
+	validModes := map[string]bool{
+		"ask_before_edits":   true,
+		"edit_automatically": true,
+		"bypass_permissions": true,
+		"plan_mode":          true,
+	}
+	if !validModes[req.Mode] {
+		return nil, fmt.Errorf("invalid mode: %s", req.Mode)
+	}
+
+	// 3. Allocate seq
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	// 4. Update mode + create user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&conv).Update("mode", req.Mode).Error; err != nil {
+			return err
+		}
+		conv.Mode = req.Mode
+
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "conversation.updated",
+			Payload: model.JSONMap{
+				"id":         conversationID.String(),
+				"project_id": conv.ProjectID.String(),
+				"title":      conv.Title,
+				"mode":       conv.Mode,
+				"seq":        seq,
+			},
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		s.log.Error("update conversation mode: transaction failed",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+	s.log.Info("conversation mode updated",
+		zap.String("user_id", userID.String()),
+		zap.String("conv_id", conversationID.String()),
+		zap.String("mode", conv.Mode),
+	)
+	pushUpdate(userID, model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.updated",
+		Payload: model.JSONMap{
+			"id":         conversationID.String(),
+			"project_id": conv.ProjectID.String(),
+			"title":      conv.Title,
+			"mode":       conv.Mode,
 			"seq":        seq,
 		},
 	})
