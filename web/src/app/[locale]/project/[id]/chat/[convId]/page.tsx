@@ -9,6 +9,7 @@ import { api, Message as MessageType } from '@/lib/api';
 import { MessageList } from '@/components/chat/MessageList';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
 import { HitlModal } from '@/components/chat/HitlModal';
+import { PermissionRequestCard } from '@/components/chat/PermissionRequestCard';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
@@ -46,6 +47,9 @@ interface ChatState {
     answerType: 'single' | 'multi' | 'text';
   } | null;
   hitlModalOpen: boolean;
+  // Permission state
+  pendingPermissions: Map<string, components['schemas']['PermissionPendingPayload']>; // permId -> payload
+  permissionAnswering: string | null; // permId currently being answered
 }
 
 type ChatAction =
@@ -70,7 +74,11 @@ type ChatAction =
   | { type: 'SET_CONV_TOKENS'; payload: { tokenPrompt?: number; tokenCompletion?: number } }
   | { type: 'SET_PENDING_HITL'; payload: ChatState['pendingHitl'] }
   | { type: 'SET_HITL_MODAL_OPEN'; payload: boolean }
-  | { type: 'CLEAR_PENDING_HITL' };
+  | { type: 'CLEAR_PENDING_HITL' }
+  | { type: 'ADD_PENDING_PERMISSION'; payload: components['schemas']['PermissionPendingPayload'] }
+  | { type: 'REMOVE_PENDING_PERMISSION'; payload: string } // permId
+  | { type: 'SET_PERMISSION_ANSWERING'; payload: string | null } // permId
+  | { type: 'CLEAR_PERMISSIONS_ON_INIT' };
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -152,6 +160,20 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, hitlModalOpen: action.payload };
     case 'CLEAR_PENDING_HITL':
       return { ...state, pendingHitl: null, hitlModalOpen: false };
+    case 'ADD_PENDING_PERMISSION': {
+      const perms = new Map(state.pendingPermissions);
+      perms.set(action.payload.permission_id, action.payload);
+      return { ...state, pendingPermissions: perms };
+    }
+    case 'REMOVE_PENDING_PERMISSION': {
+      const perms2 = new Map(state.pendingPermissions);
+      perms2.delete(action.payload);
+      return { ...state, pendingPermissions: perms2 };
+    }
+    case 'SET_PERMISSION_ANSWERING':
+      return { ...state, permissionAnswering: action.payload };
+    case 'CLEAR_PERMISSIONS_ON_INIT':
+      return { ...state, pendingPermissions: new Map() };
     default:
       return state;
   }
@@ -170,6 +192,8 @@ const initialState: ChatState = {
   convTokenCompletion: 0,
   pendingHitl: null,
   hitlModalOpen: false,
+  pendingPermissions: new Map(),
+  permissionAnswering: null,
 };
 
 export default function ConvChatPage() {
@@ -352,6 +376,16 @@ export default function ConvChatPage() {
         dispatch({ type: 'CLEAR_PENDING_HITL' });
         break;
       }
+      case 'permission.pending': {
+        const payload = update.payload as components['schemas']['PermissionPendingPayload'];
+        dispatch({ type: 'ADD_PENDING_PERMISSION', payload });
+        break;
+      }
+      case 'permission.decided': {
+        const payload = update.payload as components['schemas']['PermissionDecidedPayload'];
+        dispatch({ type: 'REMOVE_PENDING_PERMISSION', payload: payload.permission_id });
+        break;
+      }
     }
   }, [convId, message]);
 
@@ -427,6 +461,33 @@ export default function ConvChatPage() {
                 answerType: (latest.answer_type as 'single' | 'multi' | 'text') || 'text',
               },
             });
+          }
+        })
+        .catch(() => {});
+
+      // Sync pending permissions from server (survives browser refresh)
+      api.get<components['schemas']['HumanInPermission'][]>(`/conversations/${convId}/permissions?status=pending`)
+        .then((perms) => {
+          if (cancelled) return;
+          if (perms.length > 0) {
+            dispatch({ type: 'CLEAR_PERMISSIONS_ON_INIT' });
+            for (const perm of perms) {
+              const permPayload: components['schemas']['PermissionPendingPayload'] = {
+                conversation_id: perm.conversation_id,
+                permission_id: perm.id,
+                tool_name: perm.tool_name,
+                action: perm.action,
+                content: perm.content,
+                tool_desc: perm.tool_desc,
+                args_summary: perm.args_summary,
+                safety_level: perm.safety_level,
+                safety_reason: perm.safety_reason || '',
+                checkpoint_id: perm.checkpoint_id,
+                interrupt_id: perm.interrupt_id,
+                seq: 0,
+              };
+              dispatch({ type: 'ADD_PENDING_PERMISSION', payload: permPayload });
+            }
           }
         })
         .catch(() => {});
@@ -554,6 +615,27 @@ export default function ConvChatPage() {
   const handleHitlCancel = useCallback(() => {
     dispatch({ type: 'SET_HITL_MODAL_OPEN', payload: false });
   }, []);
+
+  // ─── Permission: Answer request ───
+
+  const handlePermissionAnswer = useCallback(async (permId: string, decision: string) => {
+    const perm = state.pendingPermissions.get(permId);
+    if (!perm) return;
+
+    dispatch({ type: 'SET_PERMISSION_ANSWERING', payload: permId });
+    try {
+      await api.post<{ status: string }>(`/conversations/${convId}/permissions/${permId}/answer`, {
+        checkpoint_id: perm.checkpoint_id,
+        interrupt_id: perm.interrupt_id,
+        decision,
+      });
+      message.success(t('permissionAnswered') || 'Permission answered');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to answer permission');
+    } finally {
+      dispatch({ type: 'SET_PERMISSION_ANSWERING', payload: null });
+    }
+  }, [convId, message, state.pendingPermissions, t]);
 
   // ─── Mentions ───
 
@@ -687,6 +769,31 @@ export default function ConvChatPage() {
           onAnswer={handleHitlAnswer}
           onCancel={handleHitlCancel}
         />
+      )}
+
+      {/* Permission Requests */}
+      {state.pendingPermissions.size > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          padding: '8px 16px',
+          background: 'var(--bg-primary, #fff)',
+          borderTop: '1px solid var(--border-subtle, #d9d9d9)',
+          maxHeight: 400,
+          overflowY: 'auto',
+        }}>
+          {Array.from(state.pendingPermissions.values()).map((perm) => (
+            <PermissionRequestCard
+              key={perm.permission_id}
+              permission={perm}
+              onAnswer={(decision) => handlePermissionAnswer(perm.permission_id, decision)}
+              loading={state.permissionAnswering === perm.permission_id}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

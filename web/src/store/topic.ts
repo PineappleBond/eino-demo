@@ -23,6 +23,8 @@ export type UpdatePayload =
   | components['schemas']['HumanInTheLoopCreatedPayload']
   | components['schemas']['HumanInTheLoopAnsweredPayload']
   | components['schemas']['TodoSyncPayload']
+  | components['schemas']['PermissionPendingPayload']
+  | components['schemas']['PermissionDecidedPayload']
   | components['schemas']['EmptyPayload'];
 
 /**

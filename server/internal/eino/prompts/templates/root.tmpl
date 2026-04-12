@@ -41,6 +41,10 @@
 - 操作系统: {{ .OSInfo }}
 - 时区: {{ .Timezone }}
 - 语言: {{ .Language }}
+{{ if .WorkspaceDir }}
+- 工作目录: {{ .WorkspaceDir }}
+{{ if .IsGitRepo }}- Git 仓库: 是{{ end }}
+{{ end }}
 {{ if .SystemPrompt }}
 
 # 角色补充

@@ -16,6 +16,13 @@ interface ProjectInfo {
   updated_at: string;
 }
 
+function extractWorkspaceDir(config: Record<string, unknown>): string {
+  if (typeof config.workspace_dir === 'string') {
+    return config.workspace_dir;
+  }
+  return '';
+}
+
 interface ProjectInfoDrawerProps {
   open: boolean;
   projectId: string;
@@ -37,7 +44,10 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
       api.get<ProjectInfo>(`/projects/${projectId}`)
         .then((data) => {
           setProject(data);
-          form.setFieldsValue({ name: data.name });
+          form.setFieldsValue({
+            name: data.name,
+            workspace_dir: extractWorkspaceDir(data.config),
+          });
         })
         .catch((err) => message.error(err.message))
         .finally(() => setLoading(false));
@@ -49,13 +59,25 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
     setSaving(true);
     try {
       const values = form.getFieldsValue();
-      const updated = await api.put<ProjectInfo>(`/projects/${projectId}`, values);
+      const config: Record<string, unknown> = {
+        ...(project.config || {}),
+        workspace_dir: (values.workspace_dir as string) || undefined,
+      };
+      const updated = await api.put<ProjectInfo>(`/projects/${projectId}`, {
+        name: values.name,
+        config,
+      });
       setProject(updated);
       onNameChange?.(updated.name);
       message.success('Project updated');
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to update');
-      if (project) form.setFieldsValue({ name: project.name });
+      if (project) {
+        form.setFieldsValue({
+          name: project.name,
+          workspace_dir: extractWorkspaceDir(project.config),
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -94,6 +116,13 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
           name="name"
         >
           <Input />
+        </Form.Item>
+
+        <Form.Item
+          label={<Text style={{ fontFamily: 'var(--font-label)', fontSize: 10, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Workspace Directory</Text>}
+          name="workspace_dir"
+        >
+          <Input placeholder="/path/to/project" />
         </Form.Item>
 
         <Divider style={{ borderColor: 'var(--border-subtle)' }} />

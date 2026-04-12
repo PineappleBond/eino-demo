@@ -79,13 +79,13 @@ func NewRootRunnerCallbacks(cfg RunCallbackConfig) *RootRunnerCallbacks {
 	}
 }
 
-// markTrackerStopped patches an in-progress message with finish_reason="stopped".
+// markTrackerStopped patches an in-progress message with finish_reason="error" (stopped by user).
 func (c *RootRunnerCallbacks) markTrackerStopped(t *msgTracker) error {
 	if t.completed || t.msgID == uuid.Nil {
 		return nil
 	}
 	t.completed = true
-	finishReason := "stopped"
+	finishReason := "error"
 	if err := c.cfg.DB.WithContext(c.cfg.ParentCtx).Model(&model.Message{}).
 		Where("id = ?", t.msgID).
 		Updates(map[string]interface{}{
@@ -383,7 +383,10 @@ func (c *RootRunnerCallbacks) OnInputToolCalling(ctx context.Context, info *call
 func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *callbacks.RunInfo, addr compose.Address, output callbacks.CallbackOutput) {
 	addrStr := AddrString(addr)
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer func() {
+		c.deleteTracker(addrStr, "tool")
+		c.mu.Unlock()
+	}()
 
 	t := c.getOrCreateAssistantTracker(addrStr)
 	if t.msgID != uuid.Nil {
@@ -681,6 +684,26 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 	}
 
 	ctx := c.cfg.ParentCtx
+
+	// If this is a permission interrupt (tool_name present but no HITL data),
+	// update the HumanInPermission record with the actual Eino checkpoint/interrupt IDs.
+	if hitlData == nil && len(info.InterruptContexts) > 0 {
+		// Check if any interrupt context contains a permission_request type.
+		for _, ictx := range info.InterruptContexts {
+			if m, ok := ictx.Info.(map[string]any); ok {
+				if typ, _ := m["type"].(string); typ == "permission_request" {
+					c.cfg.DB.WithContext(ctx).Table("human_in_permissions").
+						Where("conversation_id = ? AND checkpoint_id = '' AND interrupt_id = '' AND status = 'pending'",
+							c.cfg.ConversationID).
+						Updates(map[string]interface{}{
+							"checkpoint_id": checkpointID,
+							"interrupt_id":  interruptID,
+						})
+					break
+				}
+			}
+		}
+	}
 
 	// If this is an ask_user_question interrupt, create a HITL record
 	if hitlData != nil {

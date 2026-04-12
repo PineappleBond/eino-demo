@@ -3,8 +3,10 @@ module github.com/PineappleBond/eino-demo-dev/server
 go 1.26
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cloudwego/eino v0.8.8
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.12
+	github.com/cloudwego/eino-ext/components/tool/httprequest v0.0.0
 	github.com/coder/websocket v1.8.14
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
@@ -24,7 +26,6 @@ require (
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
@@ -82,8 +83,11 @@ require (
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
+
+replace github.com/cloudwego/eino-ext/components/tool/httprequest => ../downloads/eino-ext/components/tool/httprequest

@@ -150,6 +150,90 @@ func RegisterChatRoutes(
 		respondJSON(c, http.StatusOK, result)
 	})
 
+	api.GET("/conversations/:id/permissions", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+
+		var params types.GetConversationsIdPermissionsParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid query params")
+			return
+		}
+
+		status := ""
+		if params.Status != nil {
+			status = string(*params.Status)
+		}
+
+		perms, err := chatSvc.ListPendingPermissions(userID, conversationID, status)
+		if err != nil {
+			if err.Error() == "conversation not found" {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			} else {
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list permissions")
+			}
+			return
+		}
+
+		result := make([]types.HumanInPermission, len(perms))
+		for i, p := range perms {
+			result[i] = convert.ToHumanInPermission(p)
+		}
+
+		respondJSON(c, http.StatusOK, result)
+	})
+
+	api.POST("/conversations/:id/permissions/:permId/answer", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+
+		var req types.PostConversationsIdPermissionsPermIdAnswerJSONBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
+			return
+		}
+
+		permId, err := uuid.Parse(c.Param("permId"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid permission ID")
+			return
+		}
+
+		if err := chatSvc.AnswerPermission(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			permId,
+			service.AnswerPermissionRequest{
+				CheckpointID: req.CheckpointId,
+				InterruptID:  req.InterruptId,
+				Decision:     string(req.Decision),
+			},
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := convert.ToUpdate(update)
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		); err != nil {
+			if err.Error() == "conversation not found" || err.Error() == "pending permission request not found" {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
+			} else {
+				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "resumed"})
+	})
+
 	api.GET("/conversations/:id/messages", func(c *gin.Context) {
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))

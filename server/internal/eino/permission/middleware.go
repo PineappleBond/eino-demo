@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -220,7 +221,41 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		// Continue anyway — the interrupt will still work.
 	}
 
-	// Push permission.pending update.
+	// Execute the Eino Interrupt. This generates a new InterruptSignal with a unique ID.
+	// The InterruptSignal.ID is the key that Eino uses for resume targeting via BatchResumeWithData.
+	// We must extract it and include in the permission.pending update so the frontend can
+	// pass it back as the resume target.
+	interruptErr := tool.Interrupt(ctx, map[string]any{
+		"type":           "permission_request",
+		"tool_name":      req.ToolName,
+		"action":         req.Action,
+		"content":        req.Content,
+		"tool_desc":      req.ToolDesc,
+		"args_summary":   req.ArgsSummary,
+		"safety_level":   eval.Level,
+		"safety_reason":  eval.Reason,
+		"question":       question,
+		"answer_type":    "single",
+		"choices":        choices,
+	})
+
+	// Extract the InterruptSignal ID from the returned error.
+	// The error implements adk.InterruptContextsProvider (GetInterruptContexts()).
+	var interruptID string
+	if interruptErr != nil {
+		var provider interface {
+			GetInterruptContexts() []*adk.InterruptCtx
+		}
+		if ok := errors.As(interruptErr, &provider); ok && provider != nil {
+			ctxs := provider.GetInterruptContexts()
+			if len(ctxs) > 0 {
+				// Last context is the most specific — the actual interrupt source.
+				interruptID = ctxs[len(ctxs)-1].ID
+			}
+		}
+	}
+
+	// Push permission.pending update with Eino's InterruptSignal.ID.
 	if m.cfg.PushUpdate != nil && m.cfg.NextSeq != nil {
 		seq, _ := m.cfg.NextSeq(ctx, m.cfg.UserID)
 		if seq > 0 {
@@ -231,6 +266,8 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 				Payload: model.JSONMap{
 					"conversation_id": m.cfg.ConversationID.String(),
 					"permission_id":   perm.ID.String(),
+					"checkpoint_id":   perm.CheckpointID,
+					"interrupt_id":    interruptID,
 					"tool_name":       req.ToolName,
 					"action":          req.Action,
 					"content":         req.Content,
@@ -244,19 +281,7 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		}
 	}
 
-	return tool.Interrupt(ctx, map[string]any{
-		"type":           "permission_request",
-		"tool_name":      req.ToolName,
-		"action":         req.Action,
-		"content":        req.Content,
-		"tool_desc":      req.ToolDesc,
-		"args_summary":   req.ArgsSummary,
-		"safety_level":   eval.Level,
-		"safety_reason":  eval.Reason,
-		"question":       question,
-		"answer_type":    "single",
-		"choices":        choices,
-	})
+	return interruptErr
 }
 
 func (m *Middleware) evaluateSafely(ctx context.Context, req *PermissionRequest) (*SafetyEvaluation, error) {

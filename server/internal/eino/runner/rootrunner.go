@@ -43,6 +43,8 @@ type promptData struct {
 	Timezone     string
 	Language     string
 	SystemPrompt string
+	WorkspaceDir string
+	IsGitRepo    bool
 }
 
 // toolsToContext converts tool instances to template context data for rendering.
@@ -62,7 +64,7 @@ func toolsToContext(toolList []tool.BaseTool) ([]toolContext, error) {
 }
 
 // renderRootPrompt renders the root prompt template with tool/agent metadata.
-func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent, systemPrompt string) (string, error) {
+func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent, systemPrompt, workspaceDir string, isGitRepo bool) (string, error) {
 	tz, _ := time.Now().Local().Zone()
 	lang := os.Getenv("LANG")
 	if lang == "" {
@@ -89,6 +91,8 @@ func renderRootPrompt(toolList []tool.BaseTool, subAgents []adk.Agent, systemPro
 		Timezone:     tz,
 		Language:     lang,
 		SystemPrompt: systemPrompt,
+		WorkspaceDir: workspaceDir,
+		IsGitRepo:    isGitRepo,
 	})
 }
 
@@ -124,6 +128,10 @@ type RootRunnerConfig struct {
 	// PermissionMW intercepts tool calls for permission checking.
 	// Nil disables permission gateway.
 	PermissionMW *permission.Middleware
+	// WorkspaceDir is the project working directory path.
+	WorkspaceDir string
+	// IsGitRepo indicates whether the workspace contains a .git directory.
+	IsGitRepo bool
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.
@@ -159,7 +167,7 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 	}
 
 	// 2. Render instruction — template includes SystemPrompt via {{ .SystemPrompt }}.
-	instruction, err := renderRootPrompt(cfg.Tools, cfg.SubAgents, cfg.SystemPrompt)
+	instruction, err := renderRootPrompt(cfg.Tools, cfg.SubAgents, cfg.SystemPrompt, cfg.WorkspaceDir, cfg.IsGitRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +241,7 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
 				Tools:               cfg.Tools,
-				UnknownToolsHandler: unknownToolsHandler,
+				UnknownToolsHandler: UnknownToolsHandler,
 			},
 			EmitInternalEvents: true,
 		},

@@ -482,7 +482,7 @@ paths:
         - name: permId
           in: path
           required: true
-          schema: { type: string }
+          schema: { type: string, format: uuid }
       requestBody:
         required: true
         content:

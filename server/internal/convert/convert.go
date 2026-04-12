@@ -219,6 +219,31 @@ func ToHumanInTheLoop(m model.HumanInTheLoop) types.HumanInTheLoop {
 	}
 }
 
+// ToHumanInPermission converts a GORM HumanInPermission model to the OpenAPI HumanInPermission type.
+func ToHumanInPermission(m model.HumanInPermission) types.HumanInPermission {
+	var decision *types.HumanInPermissionDecision
+	if m.Decision != "" {
+		d := types.HumanInPermissionDecision(m.Decision)
+		decision = &d
+	}
+	return types.HumanInPermission{
+		Id:             toUUID(m.ID),
+		ConversationId: toUUID(m.ConversationID),
+		CheckpointId:   strPtr(m.CheckpointID),
+		InterruptId:    strPtr(m.InterruptID),
+		ToolName:       m.ToolName,
+		Action:         m.Action,
+		Content:        m.Content,
+		ToolDesc:       strPtr(m.ToolDesc),
+		ArgsSummary:    strPtr(m.ArgsSummary),
+		SafetyLevel:    m.SafetyLevel,
+		SafetyReason:   strPtr(m.SafetyReason),
+		Decision:       decision,
+		Status:         types.HumanInPermissionStatus(m.Status),
+		CreatedAt:      m.CreatedAt,
+	}
+}
+
 // ToUpdatePayload converts a model.JSONMap to the generated Update_Payload union type.
 // Used when reading persisted updates from the database.
 func ToUpdatePayload(payload model.JSONMap) types.Update_Payload {

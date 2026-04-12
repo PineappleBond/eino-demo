@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,11 +14,13 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/permission"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/tools"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
@@ -36,6 +40,8 @@ type ChatService struct {
 	runSessionMgr  *runner.RunSessionManager
 	messageQueue   *runner.MessageQueue
 	compressionSvc *CompressionService
+	// evalModelConfig holds haiku model config for the permission evaluator.
+	evalModelConfig *openai.ChatModelConfig
 }
 
 // NewChatService creates a ChatService.
@@ -48,6 +54,14 @@ func NewChatService(
 	messageQueue *runner.MessageQueue,
 	compressionSvc *CompressionService,
 ) *ChatService {
+	// Create haiku model config for permission evaluator (safety assessment)
+	mc := modelProvider.GetModel("haiku")
+	evalCfg := &openai.ChatModelConfig{
+		BaseURL: mc.BaseURL,
+		APIKey:  mc.APIKey,
+		Model:   mc.Model,
+	}
+
 	return &ChatService{
 		db:             db,
 		log:            log,
@@ -56,6 +70,7 @@ func NewChatService(
 		runSessionMgr:  runSessionMgr,
 		messageQueue:   messageQueue,
 		compressionSvc: compressionSvc,
+		evalModelConfig: evalCfg,
 	}
 }
 
@@ -295,13 +310,30 @@ func (s *ChatService) runAgent(
 		maxIteration = 50 // default to sonnet
 	}
 
+	// Extract workspace info for evaluator and runner config
+	workspaceDir := ""
+	if wd, ok := project.Config["workspace_dir"].(string); ok && wd != "" {
+		workspaceDir = wd
+	}
+
+	isGitRepo := false
+	if workspaceDir != "" {
+		if _, err := os.Stat(filepath.Join(workspaceDir, ".git")); err == nil {
+			isGitRepo = true
+		}
+	}
+
 	runCfg := runner.RootRunnerConfig{
-		ModelProvider:    s.modelProvider,
-		ModelTier:        modelTier,
-		SystemPrompt:     systemPrompt,
+		ModelProvider: s.modelProvider,
+		ModelTier:     modelTier,
+		SystemPrompt:  systemPrompt,
 		Tools: func() []tool.BaseTool {
 			s.toolRegistry.SetConversationID(conversationID)
-			return s.toolRegistry.GetBaseTools()
+			s.toolRegistry.SetWorkspaceDir(workspaceDir)
+			tools := s.toolRegistry.GetBaseTools()
+			// Append filesystem and HTTP tools (they implement NeedPermissioner).
+			tools = append(tools, s.toolRegistry.GetPermissionTools()...)
+			return tools
 		}(),
 		MaxIteration:     maxIteration,
 		ConversationID:   conversationID,
@@ -321,6 +353,36 @@ func (s *ChatService) runAgent(
 				// here would emit a duplicate message.stop update.
 			},
 		},
+		PermissionMW: func() *permission.Middleware {
+			// Create evaluator here where workspace info is available.
+			var evaluator permission.SafetyEvaluator
+			evalModel, err := openai.NewChatModel(context.Background(), s.evalModelConfig)
+			if err != nil {
+				s.log.Warn("runAgent: failed to create permission evaluator model, using fallback", zap.Error(err))
+			} else {
+				evaluator = permission.NewLLMReviewer(evalModel, workspaceDir, isGitRepo)
+			}
+
+			mwCfg := permission.MiddlewareConfig{
+				DB:             s.db,
+				ProjectID:      project.ID,
+				UserID:         userID,
+				ConversationID: conversationID,
+				Threshold:      2,
+				Evaluator:      evaluator,
+				Tools: func() []tool.BaseTool {
+					s.toolRegistry.SetConversationID(conversationID)
+					tools := s.toolRegistry.GetBaseTools()
+					tools = append(tools, s.toolRegistry.GetPermissionTools()...)
+					return tools
+				}(),
+				PushUpdate: pushUpdate,
+				NextSeq:    nextSeq,
+			}
+			return permission.NewMiddleware(mwCfg)
+		}(),
+		WorkspaceDir: workspaceDir,
+		IsGitRepo:    isGitRepo,
 		SummarizationCallback: func(cbCtx context.Context, compressedMsgCount int) {
 			s.log.Info("runAgent: summarization callback triggered",
 				zap.Int("compressed_count", compressedMsgCount),
@@ -782,6 +844,7 @@ type AnswerPermissionRequest struct {
 func (s *ChatService) AnswerPermission(
 	ctx context.Context,
 	userID, conversationID uuid.UUID,
+	permissionID uuid.UUID,
 	req AnswerPermissionRequest,
 	nextSeq NextSeqFunc,
 	pushUpdate PushUpdateFunc,
@@ -797,12 +860,9 @@ func (s *ChatService) AnswerPermission(
 		return fmt.Errorf("project not found")
 	}
 
-	// 2. Find the pending permission record.
+	// 2. Find the pending permission record by ID.
 	var perm model.HumanInPermission
-	if err := s.db.Where(
-		"conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
-		conversationID, req.CheckpointID, req.InterruptID,
-	).First(&perm).Error; err != nil {
+	if err := s.db.Where("id = ? AND status = 'pending'", permissionID).First(&perm).Error; err != nil {
 		return fmt.Errorf("pending permission request not found")
 	}
 

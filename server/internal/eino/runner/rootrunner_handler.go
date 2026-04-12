@@ -41,6 +41,8 @@ func (h *RootRunnerHandler) OnStart(ctx context.Context, info *callbacks.RunInfo
 			span.SetAttributes(attribute.String("input", utils.TruncateString(fmt.Sprintf("%#v", input), 100)))
 			h.callback.OnInputToolCalling(ctx, info, compose.GetCurrentAddress(ctx), input)
 			span.End()
+		} else if info.Component == "ToolsNode" {
+
 		}
 	}
 	return ctx

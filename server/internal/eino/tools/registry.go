@@ -17,6 +17,7 @@ type ToolRegistry struct {
 	db             *gorm.DB
 	baseTools      []tool.BaseTool
 	conversationID uuid.UUID // Set per-run for context-aware tools
+	workspaceDir   string    // Set per-run for filesystem tool working directory
 }
 
 // NewToolRegistry creates a tool registry.
@@ -46,6 +47,11 @@ func (r *ToolRegistry) buildBaseTools() {
 // SetConversationID sets the conversation ID for context-aware tools (todo_read, todo_write).
 func (r *ToolRegistry) SetConversationID(conversationID uuid.UUID) {
 	r.conversationID = conversationID
+}
+
+// SetWorkspaceDir sets the workspace directory for filesystem tools.
+func (r *ToolRegistry) SetWorkspaceDir(workspaceDir string) {
+	r.workspaceDir = workspaceDir
 }
 
 // GetBaseTools returns all tools as BaseTool instances for use in agents.
@@ -84,4 +90,15 @@ func (r *ToolRegistry) ListToolNames() []string {
 		return []string{"weather", "ask_user_question", "todo_read", "todo_write"}
 	}
 	return []string{"weather", "ask_user_question"}
+}
+
+// GetPermissionTools returns filesystem and HTTP tools that implement NeedPermissioner.
+// These tools require permission checks before execution.
+func (r *ToolRegistry) GetPermissionTools() []tool.BaseTool {
+	var tools []tool.BaseTool
+	tools = append(tools, NewFilesystemTools(r.workspaceDir)...)
+	if httpTools := NewHTTPTools(); httpTools != nil {
+		tools = append(tools, httpTools...)
+	}
+	return tools
 }

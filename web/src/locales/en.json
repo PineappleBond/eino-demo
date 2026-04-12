@@ -77,6 +77,7 @@
     "created": "创建时间",
     "updated": "更新时间",
     "name": "名称",
+    "workspaceDir": "工作目录",
     "updateSuccess": "项目已更新",
     "updateFailed": "更新失败"
   },
@@ -104,6 +105,17 @@
     "tokenPlaceholder": "输入任意令牌（演示模式）",
     "connect": "连接",
     "title": "认证"
+  },
+  "permission": {
+    "title": "Permission Request",
+    "pending": "Pending",
+    "decided": "Decided",
+    "risk": "Risk Level",
+    "approve": "Approve",
+    "approveAndRemember": "Approve & Remember (Exact)",
+    "approveAndWildcard": "Approve & Remember (Wildcard)",
+    "deny": "Deny",
+    "permissionAnswered": "Permission answered"
   },
   "notFound": {
     "title": "404",
