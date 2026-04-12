@@ -3,7 +3,6 @@ package permission
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -115,11 +114,6 @@ func (c *Checker) isWhitelisted(toolName, action, content string) bool {
 		}
 	}
 	return false
-}
-
-// matchPattern checks if a pattern (exact or glob) matches the content.
-func matchPattern(pattern, content string) (bool, error) {
-	return filepath.Match(pattern, content)
 }
 
 // WriteWhitelist adds a new permission entry.

@@ -19,6 +19,7 @@ import (
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/permission"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/prompts"
 )
 
@@ -120,6 +121,9 @@ type RootRunnerConfig struct {
 	// Args: (ctx, compressedMsgCount). The caller queries DB to determine the new min_seq.
 	// Nil disables summarization sync.
 	SummarizationCallback func(ctx context.Context, compressedMsgCount int)
+	// PermissionMW intercepts tool calls for permission checking.
+	// Nil disables permission gateway.
+	PermissionMW *permission.Middleware
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.
@@ -194,7 +198,12 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		handlers = append(handlers, summarizationMW)
 	}
 
-	// 3b. Context injection middleware (message injection from queue + token check).
+	// 3b. Permission middleware — intercepts tool calls for permission checks.
+	if cfg.PermissionMW != nil {
+		handlers = append(handlers, cfg.PermissionMW)
+	}
+
+	// 3c. Context injection middleware (message injection from queue + token check).
 	if cfg.MessageQueue != nil && cfg.ConversationID != uuid.Nil {
 		handlers = append(handlers, NewContextInjectionMiddleware(cfg.MessageQueue, cfg.ConversationID, cfg.TokenCheck))
 	}

@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
@@ -64,66 +65,68 @@ func NewMiddleware(cfg MiddlewareConfig) *Middleware {
 }
 
 // WrapInvokableToolCall wraps tool invocation with permission checking.
-func (m *Middleware) WrapInvokableToolCall(ctx context.Context, next compose.InvokableToolEndpoint, tCtx *adk.ToolContext) (compose.InvokableToolEndpoint, error) {
-	return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
-		return m.handleToolCall(ctx, next, input)
+func (m *Middleware) WrapInvokableToolCall(ctx context.Context, next adk.InvokableToolCallEndpoint, tCtx *adk.ToolContext) (adk.InvokableToolCallEndpoint, error) {
+	return func(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
+		// Check permission before invoking.
+		allowed, err := m.checkPermission(ctx, tCtx.Name, argumentsInJSON)
+		if err != nil {
+			return "", err
+		}
+		if !allowed {
+			return "", nil // Interrupt was called, return empty.
+		}
+		return next(ctx, argumentsInJSON)
 	}, nil
 }
 
 // WrapStreamableToolCall wraps streamable tool invocation with permission checking.
-func (m *Middleware) WrapStreamableToolCall(ctx context.Context, next compose.StreamableToolEndpoint, tCtx *adk.ToolContext) (compose.StreamableToolEndpoint, error) {
-	return func(ctx context.Context, input *compose.ToolInput) (*compose.StreamToolOutput, error) {
+func (m *Middleware) WrapStreamableToolCall(ctx context.Context, next adk.StreamableToolCallEndpoint, tCtx *adk.ToolContext) (adk.StreamableToolCallEndpoint, error) {
+	return func(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
 		// Permission check happens before streaming.
-		_, err := m.handleToolCall(ctx, nil, input)
+		allowed, err := m.checkPermission(ctx, tCtx.Name, argumentsInJSON)
 		if err != nil {
 			return nil, err
 		}
-		// Allowed — proceed with streaming.
-		return next(ctx, input)
+		if !allowed {
+			return nil, nil
+		}
+		return next(ctx, argumentsInJSON)
 	}, nil
 }
 
-func (m *Middleware) handleToolCall(ctx context.Context, next compose.InvokableToolEndpoint, input *compose.ToolInput) (*compose.ToolOutput, error) {
-	toolName := input.Name
-
+// checkPermission returns (shouldProceed, error).
+// If error is non-nil, the tool call was interrupted (Interrupt was called).
+// If shouldProceed is false and error is nil, the tool was denied.
+func (m *Middleware) checkPermission(ctx context.Context, toolName, argumentsInJSON string) (bool, error) {
 	// Skip if tool doesn't need permission checking.
 	np, needsPerm := m.permTools[toolName]
 	if !needsPerm {
-		if next != nil {
-			return next(ctx, input)
-		}
-		return nil, nil
+		return true, nil
 	}
 
 	// Check if resuming from a permission interrupt.
 	wasInterrupted, _, _ := tool.GetInterruptState[any](ctx)
 	if wasInterrupted {
-		return m.handleResume(ctx, next, input)
+		return m.handleResume(ctx, toolName, argumentsInJSON)
 	}
 
 	// First invocation — get PermissionRequest from tool.
 	var args map[string]any
-	_ = json.Unmarshal([]byte(input.Arguments), &args)
+	_ = json.Unmarshal([]byte(argumentsInJSON), &args)
 	req := np.NeedPermission(args)
 	if req == nil {
-		if next != nil {
-			return next(ctx, input)
-		}
-		return nil, nil
+		return true, nil
 	}
 
 	// Fill metadata.
 	req.ToolName = toolName
 	if req.ArgsSummary == "" {
-		req.ArgsSummary = truncateJSON(input.Arguments, 200)
+		req.ArgsSummary = truncateJSON(argumentsInJSON, 200)
 	}
 
 	// Check whitelist.
 	if m.checker.isWhitelisted(req.ToolName, req.Action, req.Content) {
-		if next != nil {
-			return next(ctx, input)
-		}
-		return nil, nil
+		return true, nil
 	}
 
 	// Safety evaluation.
@@ -134,27 +137,24 @@ func (m *Middleware) handleToolCall(ctx context.Context, next compose.InvokableT
 
 	// Compare against threshold.
 	if eval.Level <= m.checker.threshold {
-		if next != nil {
-			return next(ctx, input)
-		}
-		return nil, nil
+		return true, nil
 	}
 
 	// Exceeds threshold — interrupt for human approval.
-	return nil, m.interruptForPermission(ctx, req, eval)
+	return false, m.interruptForPermission(ctx, req, eval)
 }
 
-func (m *Middleware) handleResume(ctx context.Context, next compose.InvokableToolEndpoint, input *compose.ToolInput) (*compose.ToolOutput, error) {
+func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON string) (bool, error) {
 	isTarget, hasData, data := tool.GetResumeContext[string](ctx)
 	if !isTarget || !hasData {
 		// Not our resume — re-interrupt.
-		return nil, tool.Interrupt(ctx, nil)
+		_ = tool.Interrupt(ctx, nil)
+		return false, fmt.Errorf("permission resume interrupted")
 	}
 
 	// Decode resume data.
 	var resumeInfo map[string]string
 	if err := json.Unmarshal([]byte(data), &resumeInfo); err != nil {
-		// Try raw string.
 		resumeInfo = map[string]string{"decision": data}
 	}
 
@@ -173,7 +173,7 @@ func (m *Middleware) handleResume(ctx context.Context, next compose.InvokableToo
 	result := m.checker.Check(ctx, req, string(decision))
 
 	if !result.Allowed {
-		return nil, fmt.Errorf("permission denied: %s 调用被用户拒绝", req.ToolName)
+		return false, fmt.Errorf("permission denied: %s 调用被用户拒绝", req.ToolName)
 	}
 
 	// Write whitelist if needed.
@@ -200,8 +200,7 @@ func (m *Middleware) handleResume(ctx context.Context, next compose.InvokableToo
 		}
 	}
 
-	// Proceed with tool call.
-	return next(ctx, input)
+	return true, nil
 }
 
 func (m *Middleware) interruptForPermission(ctx context.Context, req *PermissionRequest, eval *SafetyEvaluation) error {
@@ -245,8 +244,6 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		}
 	}
 
-	_ = choices // available for frontend UI
-
 	return tool.Interrupt(ctx, map[string]any{
 		"type":           "permission_request",
 		"tool_name":      req.ToolName,
@@ -284,4 +281,9 @@ func getString(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+// matchPattern checks if a pattern (exact or glob) matches the content.
+func matchPattern(pattern, content string) (bool, error) {
+	return filepath.Match(pattern, content)
 }
