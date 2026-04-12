@@ -435,6 +435,7 @@ func (s *ChatService) runAgent(
 				}(),
 				PushUpdate: pushUpdate,
 				NextSeq:    nextSeq,
+				Mode:       permission.ConversationMode(conv.Mode),
 			}
 			return permission.NewMiddleware(mwCfg)
 		}(),
