@@ -37,6 +37,8 @@ func ProvideDB(databaseURL string, log *zap.Logger) *gorm.DB {
 		&model.Checkpoint{},
 		&model.HumanInTheLoop{},
 		&model.Todo{},
+		&model.ProjectToolPermission{},
+		&model.HumanInPermission{},
 	); err != nil {
 		log.Fatal("db: AutoMigrate failed", zap.Error(err))
 	}
@@ -88,6 +90,10 @@ func setupForeignKeys(db *gorm.DB, log *zap.Logger) error {
 			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
 		`ALTER TABLE todos ADD CONSTRAINT fk_todos_conversation_id
 			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
+		`ALTER TABLE human_in_permissions ADD CONSTRAINT fk_hip_conversation_id
+			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
+		`ALTER TABLE project_tool_permissions ADD CONSTRAINT fk_ptp_project_id
+			 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE`,
 		`ALTER TABLE settings ADD CONSTRAINT fk_settings_user_id
 			 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`,
 	}
