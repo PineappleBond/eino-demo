@@ -23,6 +23,10 @@ func NewUserService(db *gorm.DB, log *zap.Logger) *UserService {
 func (s *UserService) GetMe(userID uuid.UUID) (*model.User, *model.Settings, error) {
 	var user model.User
 	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		s.log.Error("get user: not found",
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, nil, err
 	}
 
