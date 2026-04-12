@@ -867,9 +867,8 @@ func (s *ChatService) AnswerQuestion(
 	pushUpdate PushUpdateFunc,
 ) error {
 	// 1. Verify conversation ownership
-	var conv model.Conversation
-	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
+	if _, err := s.verifyConversationOwnedByUser(ctx, conversationID, userID); err != nil {
+		return err
 	}
 
 	// 2. Find the pending HITL record
@@ -953,56 +952,10 @@ func (s *ChatService) AnswerQuestion(
 		}
 	}
 
-	// 6. Set resume params and trigger a new agent run.
-	// Always use conversationID.String() as the checkpoint key — this is the same
-	// key passed to RootRunner.Run via WithCheckPointID. The DB checkpoint_id may
-	// contain stale address-derived values from before the fix, which don't match
-	// any entry in the checkpoint store.
-	checkpointKey := conversationID.String()
-
-	// Clear the DB checkpoint — it will be re-set by the next interrupt if needed.
-	if err := s.db.WithContext(ctx).
-		Model(&model.Conversation{}).
-		Where("id = ?", conversationID).
-		Update("checkpoint_id", "").Error; err != nil {
-		s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
-	}
-
-	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
-		Targets: map[string]any{
-			req.InterruptID: req.Answer,
-		},
-	})
-
-	// Also store the checkpoint in the session so runAgent's GetCheckpointID
-	// returns true.
-	s.runSessionMgr.SetCheckpointID(conversationID, checkpointKey)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				s.log.Error("AnswerQuestion runAgent panic recovered", zap.Any("recover", r))
-			}
-		}()
-		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, "", nextSeq, pushUpdate)
-	}()
+	// 6. Resume agent with the user's answer.
+	s.resumeAgent(ctx, userID, conversationID, req.InterruptID, req.Answer, nextSeq, pushUpdate)
 
 	return nil
-}
-
-// ListPendingHITL returns pending human-in-the-loop requests for a conversation.
-func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model.HumanInTheLoop, error) {
-	ctx := context.Background()
-	var conv model.Conversation
-	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
-	}
-
-	var hitls []model.HumanInTheLoop
-	if err := s.db.WithContext(ctx).Where("conversation_id = ? AND status = ?", conversationID, "pending").Order("created_at ASC").Find(&hitls).Error; err != nil {
-		return nil, fmt.Errorf("failed to list pending HITL: %w", err)
-	}
-	return hitls, nil
 }
 
 // AnswerPermissionRequest holds the fields for answering a permission request.
@@ -1022,9 +975,9 @@ func (s *ChatService) AnswerPermission(
 	pushUpdate PushUpdateFunc,
 ) error {
 	// 1. Verify conversation ownership and get project ID.
-	var conv model.Conversation
-	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
+	conv, err := s.verifyConversationOwnedByUser(ctx, conversationID, userID)
+	if err != nil {
+		return err
 	}
 
 	var project model.Project
@@ -1105,13 +1058,31 @@ func (s *ChatService) AnswerPermission(
 		}
 	}
 
-	// 7. Set ResumeParams and restart agent.
-	// Always use conversationID.String() as the checkpoint key — this is the same
-	// key passed to RootRunner.Run via WithCheckPointID. The DB checkpoint_id may
-	// contain stale address-derived values from before the fix, which don't match
-	// any entry in the checkpoint store.
-	checkpointKey := conversationID.String()
+	// 7. Resume agent with the user's decision.
+	s.resumeAgent(ctx, userID, conversationID, req.InterruptID, req.Decision, nextSeq, pushUpdate)
 
+	return nil
+}
+
+// verifyConversationOwnedByUser checks that the conversation belongs to the user.
+// Returns the conversation on success, or an error if not found.
+func (s *ChatService) verifyConversationOwnedByUser(ctx context.Context, conversationID, userID uuid.UUID) (*model.Conversation, error) {
+	var conv model.Conversation
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
+	}
+	return &conv, nil
+}
+
+// resumeAgent sets resume params and restarts the agent in a background goroutine.
+// The resume data is keyed on interruptID → answerValue.
+func (s *ChatService) resumeAgent(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	interruptID, answerValue string,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) {
 	// Clear the DB checkpoint — it will be re-set by the next interrupt if needed.
 	if err := s.db.WithContext(ctx).
 		Model(&model.Conversation{}).
@@ -1120,26 +1091,36 @@ func (s *ChatService) AnswerPermission(
 		s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
 	}
 
+	// Set resume params and checkpoint ID for runAgent.
+	// conversationID.String() is the key passed to RootRunner.Run via WithCheckPointID.
 	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
 		Targets: map[string]any{
-			req.InterruptID: req.Decision,
+			interruptID: answerValue,
 		},
 	})
-
-	// Also store the checkpoint in the session so runAgent's GetCheckpointID
-	// returns true.
-	s.runSessionMgr.SetCheckpointID(conversationID, checkpointKey)
+	s.runSessionMgr.SetCheckpointID(conversationID, conversationID.String())
 
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				s.log.Error("AnswerPermission runAgent panic recovered", zap.Any("recover", r))
+				s.log.Error("resumeAgent runAgent panic recovered", zap.Any("recover", r))
 			}
 		}()
 		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, "", nextSeq, pushUpdate)
 	}()
+}
+func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model.HumanInTheLoop, error) {
+	ctx := context.Background()
+	var conv model.Conversation
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
 
-	return nil
+	var hitls []model.HumanInTheLoop
+	if err := s.db.WithContext(ctx).Where("conversation_id = ? AND status = ?", conversationID, "pending").Order("created_at ASC").Find(&hitls).Error; err != nil {
+		return nil, fmt.Errorf("failed to list pending HITL: %w", err)
+	}
+	return hitls, nil
 }
 
 // ListPendingPermissions returns permission requests for a conversation.
