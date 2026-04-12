@@ -337,23 +337,157 @@ if cfg.PermissionMW != nil {
 - `POST /api/conversations/:id/permissions/:permId/answer` — 回答权限请求
 - `GET /api/conversations/:id/permissions?status=pending` — 列出权限请求
 
-### 8.5 OpenAPI Spec 更新
+### 8. OpenAPI Spec 更新（协议优先）
 
-在 `openapi/spec.yaml` 中新增：
-- `HumanInPermission` 模型
-- `permission.pending` / `permission.decided` Update 类型
-- 权限回答的 Request/Response schema
+**所有前后端通信协议必须先写入 `openapi/spec.yaml`**，然后运行 `openapi/generate.sh` 生成 Go (`server/internal/types/types.go`) 和 TypeScript (`web/src/types/api.d.ts`) 类型。禁止手写已有类型的 Request/Response。
+
+### 8.1 新增 HTTP 端点
+
+```yaml
+# 权限请求列表
+/conversations/{id}/permissions:
+  get:
+    summary: List permission requests for a conversation
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: status
+        in: query
+        required: false
+        schema: { type: string, enum: [pending, answered] }
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/HumanInPermission" }
+
+# 回答权限请求
+/conversations/{id}/permissions/{permId}/answer:
+  post:
+    summary: Answer a permission request
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: permId
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [checkpoint_id, interrupt_id, decision]
+            properties:
+              checkpoint_id:
+                type: string
+              interrupt_id:
+                type: string
+              decision:
+                type: string
+                enum: [approved, approved_exact, approved_wildcard, denied]
+    responses:
+      "200": { description: Permission answered, agent resumed }
+      "404": { description: Permission request not found }
+      "400": { description: Already answered or invalid request }
+```
+
+### 8.2 新增 Schemas
+
+```yaml
+HumanInPermission:
+  type: object
+  required: [id, conversation_id, tool_name, action, content, safety_level, status, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    conversation_id: { type: string, format: uuid }
+    checkpoint_id: { type: string }
+    interrupt_id: { type: string }
+    tool_name: { type: string }
+    action: { type: string }
+    content: { type: string }
+    tool_desc: { type: string }
+    args_summary: { type: string }
+    safety_level: { type: integer, minimum: 1, maximum: 4 }
+    safety_reason: { type: string }
+    decision:
+      type: string
+      nullable: true
+      enum: [approved, approved_exact, approved_wildcard, denied]
+    status: { type: string, enum: [pending, answered] }
+    created_at: { type: string, format: date-time }
+```
+
+### 8.3 新增 Update 类型
+
+在 Update.type enum 中追加：
+
+- `permission.pending` — 新的权限请求
+- `permission.decided` — 用户已做出决策
+
+新增对应 Payload：
+
+```yaml
+PermissionPendingPayload:
+  type: object
+  required: [conversation_id, permission_id, tool_name, action, content, safety_level, safety_reason, seq]
+  properties:
+    conversation_id: { type: string }
+    permission_id: { type: string }
+    tool_name: { type: string }
+    action: { type: string }
+    content: { type: string }
+    tool_desc: { type: string }
+    args_summary: { type: string }
+    safety_level: { type: integer }
+    safety_reason: { type: string }
+    checkpoint_id: { type: string }
+    interrupt_id: { type: string }
+    seq: { type: integer, format: int64 }
+
+PermissionDecidedPayload:
+  type: object
+  required: [conversation_id, permission_id, decision, seq]
+  properties:
+    conversation_id: { type: string }
+    permission_id: { type: string }
+    decision: { type: string, enum: [approved, approved_exact, approved_wildcard, denied] }
+    seq: { type: integer, format: int64 }
+```
+
+### 8.4 集成到 spec
+
+- 在 Update.payload 的 oneOf 中加入 `PermissionPendingPayload` 和 `PermissionDecidedPayload`
+- 在 `Update.type` 的 enum 列表中追加两个新值
+
+---
 
 ## 9. 前端变更
 
-### 9.1 Update 类型
+### 9.1 类型生成
 
-前端需处理两种新 Update 类型：
+运行 `openapi/generate.sh` 后自动生成：
+
+- Go: `server/internal/types/types.go` 中的 `HumanInPermission`, `PermissionPendingPayload`, `PermissionDecidedPayload`
+- TypeScript: `web/src/types/api.d.ts` 中对应接口
+
+**禁止手动编写这些类型。**
+
+### 9.2 Update 类型处理
+
+前端 `applyUpdates()` 需处理两种新 Update 类型：
 
 - `permission.pending` — 显示权限请求卡片（Tool 名、操作、安全等级、Agent 理由、四选一按钮）
 - `permission.decided` — 更新权限请求状态（已批准/已拒绝）
 
-### 9.2 UI 组件
+### 9.3 UI 组件
 
 新增 `PermissionRequestCard` 组件，类似 `ToolCallCard` 但带有审批按钮：
 
