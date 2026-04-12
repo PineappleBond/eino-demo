@@ -103,6 +103,22 @@ func RegisterConversationRoutes(
 		respondJSON(c, http.StatusCreated, convert.ToConversation(*conv))
 	})
 
+	api.GET("/conversations/:id", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("get conversation: invalid conversation ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		conv, err := svc.GetConversation(userID, conversationID)
+		if err != nil {
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			return
+		}
+		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
+	})
+
 	api.DELETE("/conversations/:id", func(c *gin.Context) {
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
