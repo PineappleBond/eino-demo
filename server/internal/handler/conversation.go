@@ -13,6 +13,7 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
+	"go.uber.org/zap"
 )
 
 // RegisterConversationRoutes registers conversation endpoints.
@@ -21,6 +22,7 @@ func RegisterConversationRoutes(
 	svc *service.ConversationService,
 	chatSvc *service.ChatService,
 	wsManager *ws.Manager,
+	log *zap.Logger,
 ) {
 	api.GET("/projects/:id/conversations", func(c *gin.Context) {
 		userID := getUserID(c)

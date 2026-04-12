@@ -11,10 +11,11 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
+	"go.uber.org/zap"
 )
 
 // RegisterProjectRoutes registers project endpoints.
-func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, wsManager *ws.Manager) {
+func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, wsManager *ws.Manager, log *zap.Logger) {
 	api.GET("/projects", func(c *gin.Context) {
 		userID := getUserID(c)
 		projects, err := svc.ListProjects(userID)

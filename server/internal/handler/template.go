@@ -11,10 +11,11 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
+	"go.uber.org/zap"
 )
 
 // RegisterTemplateRoutes registers template endpoints.
-func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, wsManager *ws.Manager) {
+func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, wsManager *ws.Manager, log *zap.Logger) {
 	api.GET("/templates", func(c *gin.Context) {
 		list := svc.ListTemplates()
 		result := make([]types.Template, len(list))

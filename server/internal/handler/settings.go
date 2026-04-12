@@ -11,10 +11,11 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/service"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
+	"go.uber.org/zap"
 )
 
 // RegisterSettingsRoutes registers GET /settings and PUT /settings.
-func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, wsManager *ws.Manager) {
+func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, wsManager *ws.Manager, log *zap.Logger) {
 	api.GET("/settings", func(c *gin.Context) {
 		userID := getUserID(c)
 		settings, err := svc.GetSettings(userID)
