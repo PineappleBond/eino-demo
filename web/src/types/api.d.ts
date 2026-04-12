@@ -472,7 +472,43 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /** Update conversation status (archive, etc.) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description New conversation status (e.g., "archived") */
+                        status: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated conversation */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Conversation"];
+                    };
+                };
+                /** @description Conversation not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         post?: never;
         /** Delete a conversation */
         delete: {
@@ -575,20 +611,54 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            id?: string;
-                            conversation_id?: string;
-                            member_type?: string;
-                            member_id?: string;
-                            member_name?: string;
-                            is_owner?: boolean;
-                        }[];
+                        "application/json": components["schemas"]["Member"][];
                     };
                 };
             };
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compact a conversation (summarize and create new conversation) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Compaction started */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            conversation_id: string;
+                            status: string;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1708,6 +1778,21 @@ export interface components {
             /** Format: int64 */
             seq: number;
         };
+        CronTaskSyncPayload: {
+            conversation_id: string;
+            /** Format: int64 */
+            seq: number;
+        };
+        Member: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            member_type: string;
+            member_id: string;
+            member_name?: string;
+            is_owner?: boolean;
+        };
         Update: {
             /**
              * Format: int64
@@ -1715,9 +1800,9 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "human_in_the_loop.created" | "human_in_the_loop.answered" | "todo.sync" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty" | "permission.pending" | "permission.decided";
+            type: "message.new" | "message.delta" | "message.done" | "message.tool_call" | "message.thinking" | "message.error" | "message.stop" | "human_in_the_loop.created" | "human_in_the_loop.answered" | "todo.sync" | "conversation.created" | "conversation.updated" | "conversation.deleted" | "conversation.compressed" | "conversation.compacting" | "conversation.compacted" | "conversation.archived" | "project.created" | "project.deleted" | "settings.changed" | "empty" | "permission.pending" | "permission.decided" | "cron_task.sync";
             /** @description Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic. */
-            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["HumanInTheLoopCreatedPayload"] | components["schemas"]["HumanInTheLoopAnsweredPayload"] | components["schemas"]["TodoSyncPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"] | components["schemas"]["PermissionPendingPayload"] | components["schemas"]["PermissionDecidedPayload"];
+            payload: components["schemas"]["MessageNewPayload"] | components["schemas"]["MessageDeltaPayload"] | components["schemas"]["MessageDonePayload"] | components["schemas"]["MessageToolCallPayload"] | components["schemas"]["MessageThinkingPayload"] | components["schemas"]["MessageErrorPayload"] | components["schemas"]["MessageStopPayload"] | components["schemas"]["HumanInTheLoopCreatedPayload"] | components["schemas"]["HumanInTheLoopAnsweredPayload"] | components["schemas"]["TodoSyncPayload"] | components["schemas"]["ConversationCreatedPayload"] | components["schemas"]["ConversationUpdatedPayload"] | components["schemas"]["ConversationDeletedPayload"] | components["schemas"]["ConversationCompressedPayload"] | components["schemas"]["ConversationCompactingPayload"] | components["schemas"]["ConversationCompactedPayload"] | components["schemas"]["ConversationArchivedPayload"] | components["schemas"]["ProjectCreatedPayload"] | components["schemas"]["ProjectDeletedPayload"] | components["schemas"]["SettingsChangedPayload"] | components["schemas"]["EmptyPayload"] | components["schemas"]["PermissionPendingPayload"] | components["schemas"]["PermissionDecidedPayload"] | components["schemas"]["CronTaskSyncPayload"];
         };
     };
     responses: never;

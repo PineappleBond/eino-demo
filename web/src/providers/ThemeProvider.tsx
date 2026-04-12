@@ -2,9 +2,11 @@
 
 import { ConfigProvider, theme as antdTheme, App } from 'antd';
 import { StyleProvider, createCache } from '@ant-design/cssinjs';
-import { ReactNode, useState, useEffect, useRef } from 'react';
+import { ReactNode, useState, useEffect, useRef, useCallback } from 'react';
 import { getLatestTheme, setTheme } from '@/hooks/useTheme';
 import { api } from '@/lib/api';
+import { useSubscribe } from '@/providers/UpdateProvider';
+import type { Update } from '@/lib/updateDispatcher';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
@@ -34,6 +36,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeMode);
   }, [themeMode]);
+
+  // Listen for settings changes from other tabs to sync theme
+  const handleSettingsChange = useCallback((update: Update) => {
+    if (update.type === 'settings.changed') {
+      const payload = update.payload as Record<string, unknown>;
+      if (payload.theme === 'light' || payload.theme === 'dark') {
+        const newTheme = payload.theme as 'light' | 'dark';
+        if (newTheme !== themeMode) {
+          setTheme(newTheme);
+          setThemeMode(newTheme);
+        }
+      }
+    }
+  }, [themeMode]);
+
+  useSubscribe('system', handleSettingsChange);
 
   // Dynamic Ant Design theme tokens — these change when themeMode changes
   const isDark = themeMode === 'dark';

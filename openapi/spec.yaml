@@ -295,6 +295,34 @@ paths:
           description: Conversation deleted
         "404":
           description: Conversation not found
+    put:
+      summary: Update conversation status (archive, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ status ]
+              properties:
+                status:
+                  type: string
+                  description: New conversation status (e.g., "archived")
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          description: Conversation not found
 
   /conversations/{id}/members:
     get:
@@ -313,20 +341,30 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    conversation_id:
-                      type: string
-                    member_type:
-                      type: string
-                    member_id:
-                      type: string
-                    member_name:
-                      type: string
-                    is_owner:
-                      type: boolean
+                  $ref: "#/components/schemas/Member"
+
+  /conversations/{id}/compact:
+    post:
+      summary: Compact a conversation (summarize and create new conversation)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Compaction started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ conversation_id, status ]
+                properties:
+                  conversation_id:
+                    type: string
+                  status:
+                    type: string
 
   # ── Messages ──
   /conversations/{id}/messages:
@@ -1481,6 +1519,35 @@ components:
           type: integer
           format: int64
 
+    CronTaskSyncPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    Member:
+      type: object
+      required: [ id, conversation_id, member_type, member_id ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        member_type:
+          type: string
+        member_id:
+          type: string
+        member_name:
+          type: string
+        is_owner:
+          type: boolean
+
     # ── Update (unified event type) ──
     # payload is a oneOf of all concrete payload types.
     # Frontend uses discriminated union: switch on Update.type to narrow payload type.
@@ -1529,6 +1596,8 @@ components:
             # Permission events
             - permission.pending
             - permission.decided
+            # Cron task events
+            - cron_task.sync
         payload:
           oneOf:
             - $ref: "#/components/schemas/MessageNewPayload"
@@ -1554,4 +1623,5 @@ components:
             - $ref: "#/components/schemas/EmptyPayload"
             - $ref: "#/components/schemas/PermissionPendingPayload"
             - $ref: "#/components/schemas/PermissionDecidedPayload"
+            - $ref: "#/components/schemas/CronTaskSyncPayload"
           description: "Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic."

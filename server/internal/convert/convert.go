@@ -199,6 +199,18 @@ func ToCronTask(m model.CronTask) types.CronTask {
 	}
 }
 
+// ToMember converts a GORM ConversationMember model to the OpenAPI Member type.
+func ToMember(m model.ConversationMember) types.Member {
+	return types.Member{
+		Id:           toUUID(m.ID),
+		ConversationId: toUUID(m.ConversationID),
+		MemberType:   m.MemberType,
+		MemberId:     m.MemberID,
+		MemberName:   strPtr(m.MemberName),
+		IsOwner:      &m.IsOwner,
+	}
+}
+
 // ToHumanInTheLoop converts a GORM HumanInTheLoop model to the OpenAPI HumanInTheLoop type.
 func ToHumanInTheLoop(m model.HumanInTheLoop) types.HumanInTheLoop {
 	var choices *[]struct {

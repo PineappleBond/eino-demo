@@ -6,6 +6,9 @@ import { Spin, Result, App } from 'antd';
 import type { MenuProps } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { api, Message as MessageType } from '@/lib/api';
+import type { components } from '@/types/api';
+
+type Member = components['schemas']['Member'];
 import { MessageList } from '@/components/chat/MessageList';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
 import { HitlModal } from '@/components/chat/HitlModal';
@@ -14,7 +17,6 @@ import { ChatInput } from '@/components/chat/ChatInput';
 import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
 import type { Update } from '@/lib/updateDispatcher';
-import type { components } from '@/types/api';
 import { dispatcher } from '@/lib/updateDispatcher';
 import { saveMessages, getMessages } from '@/store/indexedDB';
 
@@ -27,12 +29,7 @@ interface ChatState {
   loading: boolean;
   sending: boolean;
   showConvInfo: boolean;
-  members: Array<{
-    id: string;
-    member_type: string;
-    member_name: string;
-    is_owner: boolean;
-  }>;
+  members: Member[];
   mentions: Array<{ id: string; name: string }>;
   // Conversation-level token stats from backend updates
   convTokenPrompt: number;
@@ -395,7 +392,7 @@ export default function ConvChatPage() {
 
   useEffect(() => {
     if (!state.showConvInfo) return;
-    api.get<Array<{ id: string; member_type: string; member_name: string; is_owner: boolean }>>(
+    api.get<Member[]>(
       `/conversations/${convId}/members`
     )
       .then((data) => dispatch({ type: 'SET_MEMBERS', payload: data }))
@@ -745,13 +742,7 @@ export default function ConvChatPage() {
       {state.showConvInfo && (
         <ConvInfoPanel
           onClose={() => dispatch({ type: 'TOGGLE_CONV_INFO' })}
-          members={state.members.map((m) => ({
-            id: m.id,
-            name: m.member_name,
-            type: m.member_type as 'user' | 'agent',
-            color: m.is_owner ? 'var(--accent)' : 'var(--bg-elevated)',
-            role: m.is_owner ? 'owner' : 'agent',
-          }))}
+          members={state.members}
           stats={stats}
           model="Sonnet"
           onMemberMention={handleMemberMention}

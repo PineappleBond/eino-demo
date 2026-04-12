@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Form, Select, Button, Divider, Typography, Spin, App } from 'antd';
 import { useTranslations } from 'next-intl';
 import { useTheme } from '@/hooks/useTheme';
 import { api, Settings as SettingsType } from '@/lib/api';
+import { useSubscribe } from '@/providers/UpdateProvider';
+import type { Update } from '@/lib/updateDispatcher';
 
 const { Text } = Typography;
 
@@ -44,6 +46,30 @@ export function SettingsForm({ onSaved, children }: SettingsFormProps) {
       .catch((err) => message.error(err.message))
       .finally(() => setLoading(false));
   }, [form, message]);
+
+  // Sync settings when another tab updates them
+  const fetchSettingsRef = useRef(() => {
+    api.get<SettingsType>('/settings')
+      .then((data) => {
+        setSettings(data);
+        form.setFieldsValue(data);
+        // Apply theme change immediately
+        if (data.theme && data.theme !== theme) {
+          setTheme(data.theme);
+        }
+      })
+      .catch(() => {
+        // Silently fail — settings will refresh on next save
+      });
+  });
+
+  const handleSettingsChange = useCallback((update: Update) => {
+    if (update.type === 'settings.changed') {
+      fetchSettingsRef.current();
+    }
+  }, []);
+
+  useSubscribe('system', handleSettingsChange);
 
   const handleSave = async () => {
     setSaving(true);

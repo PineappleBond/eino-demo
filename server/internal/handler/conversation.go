@@ -136,6 +136,40 @@ func RegisterConversationRoutes(
 		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
 	})
 
+	// Update conversation status (e.g., archive)
+	api.PUT("/conversations/:id", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		var req types.PutConversationsIdJSONBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
+			return
+		}
+		svcReq := service.UpdateConversationStatusRequest{
+			Status: req.Status,
+		}
+		conv, err := svc.UpdateStatus(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			svcReq,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := convert.ToUpdate(update)
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		)
+		if err != nil {
+			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			return
+		}
+		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
+	})
+
 	// List conversation members
 	api.GET("/conversations/:id/members", func(c *gin.Context) {
 		userID := getUserID(c)
@@ -149,16 +183,9 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list members")
 			return
 		}
-		result := make([]gin.H, len(members))
+		result := make([]types.Member, len(members))
 		for i, m := range members {
-			result[i] = gin.H{
-				"id":              m.ID,
-				"conversation_id": m.ConversationID,
-				"member_type":     m.MemberType,
-				"member_id":       m.MemberID,
-				"member_name":     m.MemberName,
-				"is_owner":        m.IsOwner,
-			}
+			result[i] = convert.ToMember(m)
 		}
 		respondJSON(c, http.StatusOK, result)
 	})

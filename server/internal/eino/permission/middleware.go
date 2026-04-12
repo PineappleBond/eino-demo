@@ -169,6 +169,7 @@ func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON
 
 	// Get the original permission request from interrupt context.
 	_, _, rawPayload := tool.GetInterruptState[map[string]any](ctx)
+	permID := getString(rawPayload, "permission_id")
 	req := &PermissionRequest{
 		ToolName:    getString(rawPayload, "tool_name"),
 		Action:      getString(rawPayload, "action"),
@@ -200,6 +201,7 @@ func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON
 				Type:   "permission.decided",
 				Payload: model.JSONMap{
 					"conversation_id": m.cfg.ConversationID.String(),
+					"permission_id":   permID,
 					"decision":        string(result.Decision),
 					"seq":             seq,
 				},
@@ -243,6 +245,7 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		"question":      question,
 		"answer_type":   "single",
 		"choices":       choices,
+		"permission_id": perm.ID.String(),
 	})
 
 	// Extract the InterruptSignal ID from the returned error.

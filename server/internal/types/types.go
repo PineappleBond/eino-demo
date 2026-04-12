@@ -335,6 +335,7 @@ const (
 	ConversationCreated    UpdateType = "conversation.created"
 	ConversationDeleted    UpdateType = "conversation.deleted"
 	ConversationUpdated    UpdateType = "conversation.updated"
+	CronTaskSync           UpdateType = "cron_task.sync"
 	Empty                  UpdateType = "empty"
 	HumanInTheLoopAnswered UpdateType = "human_in_the_loop.answered"
 	HumanInTheLoopCreated  UpdateType = "human_in_the_loop.created"
@@ -369,6 +370,8 @@ func (e UpdateType) Valid() bool {
 	case ConversationDeleted:
 		return true
 	case ConversationUpdated:
+		return true
+	case CronTaskSync:
 		return true
 	case Empty:
 		return true
@@ -681,6 +684,12 @@ type CronTask struct {
 // CronTaskSenderRole defines model for CronTask.SenderRole.
 type CronTaskSenderRole string
 
+// CronTaskSyncPayload defines model for CronTaskSyncPayload.
+type CronTaskSyncPayload struct {
+	ConversationId string `json:"conversation_id"`
+	Seq            int64  `json:"seq"`
+}
+
 // EmptyPayload Seq gap filler. No data.
 type EmptyPayload = map[string]interface{}
 
@@ -774,6 +783,16 @@ type MeResponse struct {
 	Id        openapi_types.UUID `json:"id"`
 	Name      *string            `json:"name,omitempty"`
 	Settings  Settings           `json:"settings"`
+}
+
+// Member defines model for Member.
+type Member struct {
+	ConversationId openapi_types.UUID `json:"conversation_id"`
+	Id             openapi_types.UUID `json:"id"`
+	IsOwner        *bool              `json:"is_owner,omitempty"`
+	MemberId       string             `json:"member_id"`
+	MemberName     *string            `json:"member_name,omitempty"`
+	MemberType     string             `json:"member_type"`
 }
 
 // Message defines model for Message.
@@ -1083,6 +1102,12 @@ type PatchConversationsIdJSONBody struct {
 	Title string `json:"title"`
 }
 
+// PutConversationsIdJSONBody defines parameters for PutConversationsId.
+type PutConversationsIdJSONBody struct {
+	// Status New conversation status (e.g., "archived")
+	Status string `json:"status"`
+}
+
 // PostConversationsIdAnswerJSONBody defines parameters for PostConversationsIdAnswer.
 type PostConversationsIdAnswerJSONBody struct {
 	// Answer User's answer text
@@ -1176,6 +1201,9 @@ type GetUsersMeUpdatesParams struct {
 
 // PatchConversationsIdJSONRequestBody defines body for PatchConversationsId for application/json ContentType.
 type PatchConversationsIdJSONRequestBody PatchConversationsIdJSONBody
+
+// PutConversationsIdJSONRequestBody defines body for PutConversationsId for application/json ContentType.
+type PutConversationsIdJSONRequestBody PutConversationsIdJSONBody
 
 // PostConversationsIdAnswerJSONRequestBody defines body for PostConversationsIdAnswer for application/json ContentType.
 type PostConversationsIdAnswerJSONRequestBody PostConversationsIdAnswerJSONBody
@@ -1795,6 +1823,32 @@ func (t *Update_Payload) FromPermissionDecidedPayload(v PermissionDecidedPayload
 
 // MergePermissionDecidedPayload performs a merge with any union data inside the Update_Payload, using the provided PermissionDecidedPayload
 func (t *Update_Payload) MergePermissionDecidedPayload(v PermissionDecidedPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCronTaskSyncPayload returns the union data inside the Update_Payload as a CronTaskSyncPayload
+func (t Update_Payload) AsCronTaskSyncPayload() (CronTaskSyncPayload, error) {
+	var body CronTaskSyncPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCronTaskSyncPayload overwrites any union data inside the Update_Payload as the provided CronTaskSyncPayload
+func (t *Update_Payload) FromCronTaskSyncPayload(v CronTaskSyncPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCronTaskSyncPayload performs a merge with any union data inside the Update_Payload, using the provided CronTaskSyncPayload
+func (t *Update_Payload) MergeCronTaskSyncPayload(v CronTaskSyncPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

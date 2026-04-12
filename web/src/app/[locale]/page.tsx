@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { TopBar } from '@/components/layout/Header';
 import { TemplateList } from '@/components/template/TemplateList';
+import { ProjectList } from '@/components/project/ProjectList';
 
 export default async function HomePage({
   params,
@@ -21,6 +22,7 @@ export default async function HomePage({
           <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 32 }}>
             {t('subtitle')}
           </p>
+          <ProjectList locale={locale} />
           <TemplateList locale={locale} />
         </div>
       </div>

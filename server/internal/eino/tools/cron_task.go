@@ -18,8 +18,8 @@ import (
 type CronTaskInput struct {
 	Action     string `json:"action" jsonschema_description:"Action to perform: 'create', 'list', or 'cancel'"`
 	Content    string `json:"content,omitempty" jsonschema_description:"Message content to send when the task fires (required for create)"`
-	SenderRole string `json:"sender_role" jsonschema_description:"Sender role to send message when the task fires (one of 'assistant', 'user', 'tool', 'system')"`
-	Schedule   string `json:"schedule,omitempty" jsonschema_description:"Cron expression (e.g. '0 9 * * *'), predefined (@hourly, @daily, @every 1h), or one-time delay (once:5m, once:1h). Required for create."`
+	SenderRole string `json:"sender_role" jsonschema_description:"Sender role for the scheduled message: 'user', 'assistant', 'system', or 'tool'"`
+	Schedule   string `json:"schedule,omitempty" jsonschema_description:"When the task should run. For one-time tasks use 'once:' followed by a Go duration (e.g. 'once:2m' for 2 minutes from now, 'once:1h' for 1 hour). For recurring tasks use a standard 5-field cron expression like '0 9 * * *' (daily at 9 AM), '*/30 * * * *' (every 30 minutes), or '0 */2 * * *' (every 2 hours). Predefined aliases: @hourly, @daily (or @midnight), @weekly, @monthly, @yearly (or @annually), @every 1h (custom interval). NOTE: @at and @every Ns (seconds) are NOT supported."`
 	TaskID     string `json:"task_id,omitempty" jsonschema_description:"Task ID to cancel (required for cancel)"`
 }
 
@@ -47,7 +47,7 @@ var CronTaskRegisterFunc func(ctx context.Context, taskID uuid.UUID, nextRun tim
 // NewCronTaskTool creates a cron_task tool scoped to a conversation.
 func NewCronTaskTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool, error) {
 	t := &cronTaskRunner{db: db, conversationID: conversationID}
-	return utils.InferTool("cron_task", "Create, list, or cancel scheduled messages for this conversation. Use 'create' to schedule a message at a future time using a cron expression, predefined interval, or one-time delay. Use 'list' to see all scheduled tasks. Use 'cancel' to remove a scheduled task. When a task fires, the message content is sent to the conversation, triggering the AI agent to respond.",
+	return utils.InferTool("cron_task", "Create, list, or cancel scheduled messages for this conversation. For 'create': set schedule to 'once:duration' for one-time tasks (e.g. 'once:2m' = 2 minutes from now), a 5-field cron like '0 9 * * *' (daily at 9 AM) for recurring tasks, or aliases like @hourly, @daily. Content is the message to send when the task fires.",
 		func(ctx context.Context, input CronTaskInput) (CronTaskOutput, error) {
 			return t.Run(ctx, input)
 		})
@@ -69,7 +69,7 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 			return CronTaskOutput{Success: false, Message: "content is required for create action"}, nil
 		}
 		if input.Schedule == "" {
-			return CronTaskOutput{Success: false, Message: "schedule is required for create action. Use a cron expression (e.g. '0 9 * * *'), predefined (@hourly, @daily, @every 1h), or one-time delay (once:5m, once:1h)"}, nil
+			return CronTaskOutput{Success: false, Message: "schedule is required for create action. Examples: 'once:5m' (one-time, 5 min from now), '0 9 * * *' (daily at 9 AM), '@hourly'"}, nil
 		}
 		if input.SenderRole != "assistant" && input.SenderRole != "user" && input.SenderRole != "tool" && input.SenderRole != "system" {
 			return CronTaskOutput{Success: false, Message: "sender_role must is one of ('assistant', 'user', 'tool', 'system')"}, nil
@@ -194,10 +194,10 @@ func parseCronSchedule(schedule string) (string, time.Time, error) {
 			return "", time.Time{}, fmt.Errorf("invalid once duration %q: %w", schedule[5:], err)
 		}
 		nextRun := time.Now().Add(d)
-		return fmt.Sprintf("@at %s", nextRun.Format(time.RFC3339)), nextRun, nil
+		return schedule, nextRun, nil
 	}
 
-	p := cron.NewParser(cron.SecondOptional)
+	p := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	spec, err := p.Parse(schedule)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("invalid cron expression %q: %w", schedule, err)

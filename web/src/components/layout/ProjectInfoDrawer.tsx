@@ -3,21 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Drawer, Form, Input, Button, Divider, App, Spin, Descriptions, Typography } from 'antd';
 import { useTranslations } from 'next-intl';
-import { api } from '@/lib/api';
+import { api, Project } from '@/lib/api';
 
 const { Text } = Typography;
 
-interface ProjectInfo {
-  id: string;
-  name: string;
-  template_id: string;
-  config: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
-
-function extractWorkspaceDir(config: Record<string, unknown>): string {
-  if (typeof config.workspace_dir === 'string') {
+function extractWorkspaceDir(config?: Record<string, never>): string {
+  if (config && typeof config.workspace_dir === 'string') {
     return config.workspace_dir;
   }
   return '';
@@ -36,12 +27,12 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [project, setProject] = useState<ProjectInfo | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
 
   useEffect(() => {
     if (open && projectId) {
       setLoading(true);
-      api.get<ProjectInfo>(`/projects/${projectId}`)
+      api.get<Project>(`/projects/${projectId}`)
         .then((data) => {
           setProject(data);
           form.setFieldsValue({
@@ -59,11 +50,11 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
     setSaving(true);
     try {
       const values = form.getFieldsValue();
-      const config: Record<string, unknown> = {
+      const config = {
         ...(project.config || {}),
         workspace_dir: (values.workspace_dir as string) || undefined,
-      };
-      const updated = await api.put<ProjectInfo>(`/projects/${projectId}`, {
+      } as unknown as Record<string, never>;
+      const updated = await api.put<Project>(`/projects/${projectId}`, {
         name: values.name,
         config,
       });
@@ -104,8 +95,7 @@ export function ProjectInfoDrawer({ open, projectId, onClose, onNameChange }: Pr
           styles={{ label: { color: 'var(--text-tertiary)', fontWeight: 500 } }}
         >
           <Descriptions.Item label="Template">{project?.template_id || <Spin size="small" />}</Descriptions.Item>
-          <Descriptions.Item label="Created">{project ? new Date(project.created_at).toLocaleDateString() : <Spin size="small" />}</Descriptions.Item>
-          <Descriptions.Item label="Updated">{project ? new Date(project.updated_at).toLocaleDateString() : <Spin size="small" />}</Descriptions.Item>
+          <Descriptions.Item label="Created">{project?.created_at ? new Date(project.created_at).toLocaleDateString() : <Spin size="small" />}</Descriptions.Item>
         </Descriptions>
 
         <Divider style={{ borderColor: 'var(--border-subtle)' }} />

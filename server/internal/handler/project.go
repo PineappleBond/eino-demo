@@ -51,15 +51,20 @@ func RegisterProjectRoutes(api *gin.RouterGroup, svc *service.ProjectService, ws
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
-		var req struct {
-			Name   string        `json:"name"`
-			Config model.JSONMap `json:"config"`
-		}
+		var req types.PutProjectsIdJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 			return
 		}
-		project, err := svc.UpdateProject(userID, projectID, req.Name, req.Config)
+		var name string
+		if req.Name != nil {
+			name = *req.Name
+		}
+		var config model.JSONMap
+		if req.Config != nil {
+			config = *req.Config
+		}
+		project, err := svc.UpdateProject(userID, projectID, name, config)
 		if err != nil {
 			respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
 			return

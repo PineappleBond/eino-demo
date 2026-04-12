@@ -47,9 +47,13 @@ export function TodoPanel({ conversationId, collapsible = false }: TodoPanelProp
 
   const handleTodoUpdate = useCallback((update: Update) => {
     if (update.type === 'todo.sync') {
-      fetchTodosRef.current();
+      const payload = update.payload as Record<string, unknown>;
+      // Only refetch if the update belongs to this conversation
+      if (payload.conversation_id === conversationId) {
+        fetchTodosRef.current();
+      }
     }
-  }, []);
+  }, [conversationId]);
 
   useSubscribe(topic, handleTodoUpdate);
 

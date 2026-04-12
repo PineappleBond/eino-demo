@@ -346,6 +346,116 @@ func (s *ConversationService) CompleteRenameConversation(
 	return &conv, nil
 }
 
+// UpdateConversationStatusRequest holds the fields for updating a conversation status.
+type UpdateConversationStatusRequest struct {
+	Status string `json:"status"`
+}
+
+// UpdateStatus updates a conversation's status and emits appropriate Update events.
+// When status is "archived", it sends both conversation.updated and conversation.archived events.
+func (s *ConversationService) UpdateStatus(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req UpdateConversationStatusRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
+
+	// 2. Allocate seq
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	// 3. Update status + create user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&conv).Update("status", req.Status).Error; err != nil {
+			return err
+		}
+		conv.Status = req.Status
+
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "conversation.updated",
+			Payload: model.JSONMap{
+				"id":         conversationID.String(),
+				"project_id": conv.ProjectID.String(),
+				"title":      conv.Title,
+				"status":     conv.Status,
+				"seq":        seq,
+			},
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+
+		// If archiving, also send conversation.archived event
+		if req.Status == "archived" {
+			archivedSeq, seqErr := nextSeq(ctx, userID)
+			if seqErr != nil {
+				return fmt.Errorf("seq assignment failed for archived: %w", seqErr)
+			}
+			archivedUpdate := model.UserUpdate{
+				UserID: userID,
+				Seq:    archivedSeq,
+				Type:   "conversation.archived",
+				Payload: model.JSONMap{
+					"conversation_id": conversationID.String(),
+					"seq":             archivedSeq,
+				},
+			}
+			if err := tx.Create(&archivedUpdate).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Push conversation.updated
+	pushUpdate(userID, model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.updated",
+		Payload: model.JSONMap{
+			"id":         conversationID.String(),
+			"project_id": conv.ProjectID.String(),
+			"title":      conv.Title,
+			"status":     conv.Status,
+			"seq":        seq,
+		},
+	})
+
+	// 5. Push conversation.archived if applicable
+	if req.Status == "archived" {
+		archivedSeq, err := nextSeq(ctx, userID)
+		if err != nil {
+			s.log.Error("seq assignment failed for archived push", zap.Error(err))
+		} else if archivedSeq > 0 {
+			pushUpdate(userID, model.UserUpdate{
+				UserID: userID,
+				Seq:    archivedSeq,
+				Type:   "conversation.archived",
+				Payload: model.JSONMap{
+					"conversation_id": conversationID.String(),
+					"seq":             archivedSeq,
+				},
+			})
+		}
+	}
+
+	return &conv, nil
+}
+
 func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUID) error {
 	result := s.db.Where("id = ? AND user_id = ?", conversationID, userID).Delete(&model.Conversation{})
 	if result.Error != nil {

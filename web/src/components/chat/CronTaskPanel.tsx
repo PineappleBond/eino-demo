@@ -23,7 +23,7 @@ const ROLE_OPTIONS = [
   { value: 'assistant', label: 'Assistant' },
   { value: 'tool', label: 'Tool' },
   { value: 'system', label: 'System' },
-] as const;
+];
 
 const roleColors: Record<string, string> = {
   user: 'blue',
@@ -63,9 +63,13 @@ export function CronTaskPanel({ conversationId, collapsible = false }: CronTaskP
 
   const handleUpdate = useCallback((update: Update) => {
     if (update.type === 'cron_task.sync') {
-      fetchTasksRef.current();
+      const payload = update.payload as Record<string, unknown>;
+      // Only refetch if the update belongs to this conversation
+      if (payload.conversation_id === conversationId) {
+        fetchTasksRef.current();
+      }
     }
-  }, []);
+  }, [conversationId]);
 
   useSubscribe(topic, handleUpdate);
 

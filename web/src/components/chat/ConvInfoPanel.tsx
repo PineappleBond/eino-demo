@@ -6,14 +6,15 @@ import type { MenuProps } from 'antd';
 import { useTranslations } from 'next-intl';
 import { TodoPanel } from './TodoPanel';
 import { CronTaskPanel } from './CronTaskPanel';
+import type { components } from '@/types/api';
 
-interface Member {
-  id: string;
-  name: string;
-  type: 'user' | 'agent';
-  color: string;
-  role: string;
-}
+type Member = components['schemas']['Member'];
+
+// Role label colors matching member type
+const typeColors: Record<string, string> = {
+  user: '#5B8FF9',
+  agent: '#61DDAA',
+};
 
 interface ConvInfoPanelProps {
   onClose: () => void;
@@ -26,20 +27,32 @@ interface ConvInfoPanelProps {
   };
   model?: string;
   template?: string;
-  onMemberMention?: (member: Member) => void;
+  onMemberMention?: (member: { id: string; name: string }) => void;
   conversationId?: string;
 }
 
 export function ConvInfoPanel({ onClose, members, stats, model, template, onMemberMention, conversationId }: ConvInfoPanelProps) {
   const t = useTranslations('conv');
-  const getMemberContextMenu = (member: Member): MenuProps['items'] => [
-    {
-      key: 'mention',
-      icon: <span style={{ fontSize: 14, fontWeight: 'bold' }}>@</span>,
-      label: `@${member.name}`,
-      onClick: () => onMemberMention?.(member),
-    },
-  ];
+
+  const getMemberDisplay = (member: Member) => {
+    const name = member.member_name || 'Unknown';
+    const icon = member.member_type === 'user' ? <UserOutlined /> : <RobotOutlined />;
+    const color = typeColors[member.member_type] || '#999';
+    const role = member.is_owner ? 'owner' : member.member_type;
+    return { name, icon, color, role };
+  };
+
+  const getMemberContextMenu = (member: Member): MenuProps['items'] => {
+    const display = getMemberDisplay(member);
+    return [
+      {
+        key: 'mention',
+        icon: <span style={{ fontSize: 14, fontWeight: 'bold' }}>@</span>,
+        label: `@${display.name}`,
+        onClick: () => onMemberMention?.({ id: member.id, name: display.name }),
+      },
+    ];
+  };
 
   return (
     <div className="right-panel">
@@ -76,24 +89,27 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
       {members && members.length > 0 && (
         <div className="right-panel-section">
           <div className="right-panel-section-title">{t('members')}</div>
-          {members.map((m) => (
-            <Dropdown
-              key={m.id}
-              menu={{ items: getMemberContextMenu(m) }}
-              trigger={['contextMenu']}
-            >
-              <div className="right-panel-member">
-                <Avatar
-                  size={22}
-                  className="right-panel-member-avatar"
-                  icon={m.type === 'user' ? <UserOutlined /> : <RobotOutlined />}
-                  style={{ background: m.color }}
-                />
-                <span className="right-panel-member-name">{m.name}</span>
-                <span className="right-panel-member-role">{m.role}</span>
-              </div>
-            </Dropdown>
-          ))}
+          {members.map((m) => {
+            const display = getMemberDisplay(m);
+            return (
+              <Dropdown
+                key={m.id}
+                menu={{ items: getMemberContextMenu(m) }}
+                trigger={['contextMenu']}
+              >
+                <div className="right-panel-member">
+                  <Avatar
+                    size={22}
+                    className="right-panel-member-avatar"
+                    icon={display.icon}
+                    style={{ background: display.color }}
+                  />
+                  <span className="right-panel-member-name">{display.name}</span>
+                  <span className="right-panel-member-role">{display.role}</span>
+                </div>
+              </Dropdown>
+            );
+          })}
         </div>
       )}
 

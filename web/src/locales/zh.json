@@ -8,6 +8,7 @@
   "home": {
     "title": "模板库",
     "subtitle": "选择一个模板开始学习 Eino",
+    "myProjects": "我的项目",
     "start": "创建项目",
     "difficulty": {
       "beginner": "入门",

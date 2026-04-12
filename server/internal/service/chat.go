@@ -189,6 +189,8 @@ func (s *ChatService) sendMessageWithRole(
 				"conversation_id": conversationID.String(),
 				"message_id":      messageID.String(),
 				"role":            senderRole,
+				"sender_id":       senderID,
+				"addr":            "",
 				"content":         content,
 				"seq":             seq,
 			},
@@ -212,6 +214,8 @@ func (s *ChatService) sendMessageWithRole(
 			"conversation_id": conversationID.String(),
 			"message_id":      messageID.String(),
 			"role":            senderRole,
+			"sender_id":       senderID,
+			"addr":            "",
 			"content":         content,
 			"seq":             seq,
 		},
@@ -824,9 +828,11 @@ func (s *ChatService) AnswerQuestion(
 				Payload: model.JSONMap{
 					"conversation_id": conversationID.String(),
 					"message_id":      answerMsgID.String(),
-					"role":            "user",
-					"content":         req.Answer,
 					"seq":             answerSeq,
+					"role":            "user",
+					"sender_id":       userID.String(),
+					"addr":            "",
+					"content":         req.Answer,
 				},
 			}
 			if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {

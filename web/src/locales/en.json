@@ -8,6 +8,7 @@
   "home": {
     "title": "Template Gallery",
     "subtitle": "Choose a template to start learning Eino",
+    "myProjects": "My Projects",
     "start": "Start Project",
     "difficulty": {
       "beginner": "Beginner",
