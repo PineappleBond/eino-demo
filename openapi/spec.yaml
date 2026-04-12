@@ -226,6 +226,14 @@ paths:
               properties:
                 title:
                   type: string
+                mode:
+                  type: string
+                  enum:
+                    - ask_before_edits
+                    - edit_automatically
+                    - bypass_permissions
+                    - plan_mode
+                  default: ask_before_edits
       responses:
         "201":
           description: Created conversation
@@ -241,6 +249,8 @@ paths:
                   user_id:
                     type: string
                   title:
+                    type: string
+                  mode:
                     type: string
                   status:
                     type: string
@@ -261,16 +271,21 @@ paths:
           schema:
             type: string
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ title ]
               properties:
                 title:
                   type: string
                   description: New conversation title
+                mode:
+                  type: string
+                  enum:
+                    - ask_before_edits
+                    - edit_automatically
+                    - bypass_permissions
+                    - plan_mode
       responses:
         "200":
           description: Updated conversation
@@ -875,6 +890,14 @@ components:
         updated_at:
           type: string
           format: date-time
+        mode:
+          type: string
+          enum:
+            - ask_before_edits
+            - edit_automatically
+            - bypass_permissions
+            - plan_mode
+          default: ask_before_edits
 
     Message:
       type: object
@@ -1176,6 +1199,9 @@ components:
           type: integer
           format: int64
           description: Estimated completion token count for the conversation.
+        mode:
+          type: string
+          description: Conversation permission mode.
 
     ConversationCreatedPayload:
       type: object
