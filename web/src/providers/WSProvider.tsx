@@ -1,9 +1,10 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
-import { dispatcher } from '@/lib/updateDispatcher';
+import { dispatcher, type Update } from '@/lib/updateDispatcher';
 import { getLatestSeq, setLatestSeq } from '@/store/indexedDB';
 import { useAuth } from './AuthProvider';
+import { useTranslations } from 'next-intl';
 
 interface WSContextValue {
   connected: boolean;
@@ -22,6 +23,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 export function WSProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
+  const t = useTranslations('ws');
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const [connected, setConnected] = useState(false);
@@ -46,10 +48,10 @@ export function WSProvider({ children }: { children: ReactNode }) {
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
       if (res.ok) {
-        const data = await res.json() as { updates: unknown[]; max_seq?: number };
+        const data = await res.json() as { updates: Update[]; max_seq?: number };
         // Apply updates FIRST — setLatestSeq happens inside applyUpdates on success
         if (data.updates?.length > 0) {
-          dispatcher.applyUpdates(data.updates as never);
+          dispatcher.applyUpdates(data.updates);
         }
         // Always advance cursor to server's max_seq on success, even when
         // there are no updates to apply (e.g. server is idle, all streaming
@@ -221,6 +223,21 @@ export function WSProvider({ children }: { children: ReactNode }) {
 
   return (
     <WSContext.Provider value={{ connected, reconnecting, reconnect }}>
+      {reconnecting && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          background: '#fff3e0', color: '#e65100', textAlign: 'center',
+          padding: '8px 16px', fontSize: 14, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', gap: 12,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <span>{t('reconnecting')}</span>
+          <button onClick={reconnect} style={{
+            background: '#e65100', color: '#fff', border: 'none',
+            borderRadius: 4, padding: '4px 12px', cursor: 'pointer', fontSize: 13,
+          }}>{t('retryNow')}</button>
+        </div>
+      )}
       {children}
     </WSContext.Provider>
   );

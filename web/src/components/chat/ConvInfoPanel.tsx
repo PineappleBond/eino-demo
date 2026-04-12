@@ -1,10 +1,11 @@
 'use client';
 
 import { Avatar, Dropdown } from 'antd';
-import { UserOutlined, RobotOutlined, CloseOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { UserOutlined, RobotOutlined, CloseOutlined, CheckSquareOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { useTranslations } from 'next-intl';
 import { TodoPanel } from './TodoPanel';
+import { CronTaskPanel } from './CronTaskPanel';
 
 interface Member {
   id: string;
@@ -119,6 +120,16 @@ export function ConvInfoPanel({ onClose, members, stats, model, template, onMemb
             <span>Todos</span>
           </div>
           <TodoPanel conversationId={conversationId} collapsible />
+        </div>
+      )}
+
+      {conversationId && (
+        <div className="right-panel-section">
+          <div className="right-panel-section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ClockCircleOutlined />
+            <span>Scheduled</span>
+          </div>
+          <CronTaskPanel conversationId={conversationId} collapsible />
         </div>
       )}
       </div>

@@ -22,6 +22,7 @@ interface HitlModalProps {
 
 export function HitlModal({ open, question, choices, answerType, onAnswer, onCancel }: HitlModalProps) {
   const t = useTranslations('chat');
+  const tHitl = useTranslations('hitl');
   const hasChoices = choices.length > 0;
   const [selectedTitle, setSelectedTitle] = useState<string>('');
   const [selectedTitles, setSelectedTitles] = useState<string[]>([]);
@@ -113,7 +114,7 @@ export function HitlModal({ open, question, choices, answerType, onAnswer, onCan
         />
       )}
 
-      {hasChoices && <Divider style={{ margin: '12px 0', color: '#999', fontSize: 12 }}>或输入自定义回答</Divider>}
+      {hasChoices && <Divider style={{ margin: '12px 0', color: '#999', fontSize: 12 }}>{tHitl('orCustomAnswer')}</Divider>}
 
       <Input.TextArea
         value={textValue}

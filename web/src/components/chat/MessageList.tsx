@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Dropdown } from 'antd';
 import type { MenuProps } from 'antd';
 import { Message } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
 import { LastUserMessageStickyBar } from './LastUserMessageStickyBar';
 
-export function MessageList({ messages, isStreaming, messageContextMenuItems }: {
+const MessageListInner = memo(function MessageList({ messages, isStreaming, messageContextMenuItems }: {
   messages: Message[];
   isStreaming?: boolean;
   messageContextMenuItems?: (msg: Message) => MenuProps['items'];
@@ -16,11 +16,14 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
   const messagesRef = useRef<HTMLDivElement>(null);
   const [userAtBottom, setUserAtBottom] = useState(true);
 
-  // Find the last user message index
-  const lastUserMsgIdx = messages
-    .map((m, i) => (m.sender_role === 'user' ? i : -1))
-    .filter((i) => i >= 0)
-    .pop() ?? -1;
+  // Find the last user message index in a single pass
+  let lastUserMsgIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].sender_role === 'user') {
+      lastUserMsgIdx = i;
+      break;
+    }
+  }
   const lastUserMessage = lastUserMsgIdx >= 0 ? messages[lastUserMsgIdx] : null;
 
   // Track whether user is scrolled near the bottom
@@ -104,4 +107,6 @@ export function MessageList({ messages, isStreaming, messageContextMenuItems }: 
       </div>
     </div>
   );
-}
+});
+
+export const MessageList = MessageListInner;

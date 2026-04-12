@@ -11,6 +11,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for CronTaskSenderRole.
+const (
+	CronTaskSenderRoleAssistant CronTaskSenderRole = "assistant"
+	CronTaskSenderRoleSystem    CronTaskSenderRole = "system"
+	CronTaskSenderRoleTool      CronTaskSenderRole = "tool"
+	CronTaskSenderRoleUser      CronTaskSenderRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the CronTaskSenderRole enum.
+func (e CronTaskSenderRole) Valid() bool {
+	switch e {
+	case CronTaskSenderRoleAssistant:
+		return true
+	case CronTaskSenderRoleSystem:
+		return true
+	case CronTaskSenderRoleTool:
+		return true
+	case CronTaskSenderRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HumanInPermissionDecision.
 const (
 	HumanInPermissionDecisionApproved         HumanInPermissionDecision = "approved"
@@ -416,6 +440,30 @@ func (e WSServerFrameType) Valid() bool {
 	}
 }
 
+// Defines values for PostConversationsIdCronTasksJSONBodySenderRole.
+const (
+	PostConversationsIdCronTasksJSONBodySenderRoleAssistant PostConversationsIdCronTasksJSONBodySenderRole = "assistant"
+	PostConversationsIdCronTasksJSONBodySenderRoleSystem    PostConversationsIdCronTasksJSONBodySenderRole = "system"
+	PostConversationsIdCronTasksJSONBodySenderRoleTool      PostConversationsIdCronTasksJSONBodySenderRole = "tool"
+	PostConversationsIdCronTasksJSONBodySenderRoleUser      PostConversationsIdCronTasksJSONBodySenderRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the PostConversationsIdCronTasksJSONBodySenderRole enum.
+func (e PostConversationsIdCronTasksJSONBodySenderRole) Valid() bool {
+	switch e {
+	case PostConversationsIdCronTasksJSONBodySenderRoleAssistant:
+		return true
+	case PostConversationsIdCronTasksJSONBodySenderRoleSystem:
+		return true
+	case PostConversationsIdCronTasksJSONBodySenderRoleTool:
+		return true
+	case PostConversationsIdCronTasksJSONBodySenderRoleUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetConversationsIdPermissionsParamsStatus.
 const (
 	Answered GetConversationsIdPermissionsParamsStatus = "answered"
@@ -617,6 +665,21 @@ type ConversationUpdatedPayload struct {
 	// TokenPrompt Estimated prompt token count for the conversation.
 	TokenPrompt *int64 `json:"token_prompt,omitempty"`
 }
+
+// CronTask defines model for CronTask.
+type CronTask struct {
+	Content        string             `json:"content"`
+	ConversationId openapi_types.UUID `json:"conversation_id"`
+	CreatedAt      time.Time          `json:"created_at"`
+	Id             openapi_types.UUID `json:"id"`
+	NextRunAt      time.Time          `json:"next_run_at"`
+	Schedule       string             `json:"schedule"`
+	SenderRole     CronTaskSenderRole `json:"sender_role"`
+	Status         string             `json:"status"`
+}
+
+// CronTaskSenderRole defines model for CronTask.SenderRole.
+type CronTaskSenderRole string
 
 // EmptyPayload Seq gap filler. No data.
 type EmptyPayload = map[string]interface{}
@@ -1032,6 +1095,16 @@ type PostConversationsIdAnswerJSONBody struct {
 	InterruptId string `json:"interrupt_id"`
 }
 
+// PostConversationsIdCronTasksJSONBody defines parameters for PostConversationsIdCronTasks.
+type PostConversationsIdCronTasksJSONBody struct {
+	Content    string                                          `json:"content"`
+	Schedule   string                                          `json:"schedule"`
+	SenderRole *PostConversationsIdCronTasksJSONBodySenderRole `json:"sender_role,omitempty"`
+}
+
+// PostConversationsIdCronTasksJSONBodySenderRole defines parameters for PostConversationsIdCronTasks.
+type PostConversationsIdCronTasksJSONBodySenderRole string
+
 // PostConversationsIdMessagesJSONBody defines parameters for PostConversationsIdMessages.
 type PostConversationsIdMessagesJSONBody struct {
 	Content string `json:"content"`
@@ -1106,6 +1179,9 @@ type PatchConversationsIdJSONRequestBody PatchConversationsIdJSONBody
 
 // PostConversationsIdAnswerJSONRequestBody defines body for PostConversationsIdAnswer for application/json ContentType.
 type PostConversationsIdAnswerJSONRequestBody PostConversationsIdAnswerJSONBody
+
+// PostConversationsIdCronTasksJSONRequestBody defines body for PostConversationsIdCronTasks for application/json ContentType.
+type PostConversationsIdCronTasksJSONRequestBody PostConversationsIdCronTasksJSONBody
 
 // PostConversationsIdMessagesJSONRequestBody defines body for PostConversationsIdMessages for application/json ContentType.
 type PostConversationsIdMessagesJSONRequestBody PostConversationsIdMessagesJSONBody

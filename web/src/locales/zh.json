@@ -52,7 +52,14 @@
     "typeAnswer": "输入你的回答...",
     "submit": "提交",
     "addTodo": "添加待办...",
-    "noTodos": "暂无待办"
+    "noTodos": "暂无待办",
+    "addCronTask": "定时任务触发时发送的消息内容...",
+    "noCronTasks": "暂无定时任务",
+    "cronTasks": "定时任务",
+    "schedulePlaceholder": "例如：0 9 * * * 或 once:5m",
+    "senderRole": "发送角色",
+    "nextRun": "下次执行",
+    "cancelTask": "取消"
   },
   "settings": {
     "title": "设置",
@@ -71,40 +78,40 @@
     "dark": "深色"
   },
   "project": {
-    "info": "Project Info",
-    "save": "Save",
-    "template": "Template",
-    "created": "Created",
-    "updated": "Updated",
-    "name": "Name",
+    "info": "项目信息",
+    "save": "保存",
+    "template": "模板",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "name": "名称",
     "workspaceDir": "工作目录",
-    "updateSuccess": "Project updated",
-    "updateFailed": "Failed to update"
+    "updateSuccess": "项目已更新",
+    "updateFailed": "更新失败"
   },
   "conv": {
-    "title": "Conversation Info",
-    "statistics": "Statistics",
-    "messages": "Messages",
-    "tokensPrompt": "Tokens (input)",
-    "tokensCompletion": "Tokens (output)",
-    "toolCalls": "Tool calls",
-    "model": "Model",
-    "activeModel": "Active model",
-    "template": "Template",
-    "members": "Members"
+    "title": "对话信息",
+    "statistics": "统计",
+    "messages": "消息数",
+    "tokensPrompt": "Tokens (输入)",
+    "tokensCompletion": "Tokens (输出)",
+    "toolCalls": "工具调用",
+    "model": "模型",
+    "activeModel": "当前模型",
+    "template": "模板",
+    "members": "成员"
   },
   "tools": {
-    "input": "Input",
-    "output": "Output",
-    "running": "Running",
-    "done": "Done",
-    "error": "Error"
+    "input": "输入",
+    "output": "输出",
+    "running": "运行中",
+    "done": "完成",
+    "error": "错误"
   },
   "auth": {
-    "tokenLabel": "Auth Token",
-    "tokenPlaceholder": "Enter any token for demo mode",
-    "connect": "Connect",
-    "title": "Authentication"
+    "tokenLabel": "认证令牌",
+    "tokenPlaceholder": "输入任意令牌（演示模式）",
+    "connect": "连接",
+    "title": "认证"
   },
   "permission": {
     "title": "权限请求",
@@ -119,7 +126,18 @@
   },
   "notFound": {
     "title": "404",
-    "message": "Sorry, the page you visited does not exist.",
-    "backHome": "Back Home"
+    "message": "抱歉，页面不存在。",
+    "backHome": "返回首页"
+  },
+  "hitl": {
+    "orCustomAnswer": "或输入自定义回答",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "critical": "严重"
+  },
+  "ws": {
+    "reconnecting": "连接已断开，正在重连...",
+    "retryNow": "立即重试"
   }
 }

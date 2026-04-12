@@ -27,7 +27,7 @@ func NewTodoService(db *gorm.DB, log *zap.Logger) *TodoService {
 func (s *TodoService) ListTodos(userID, conversationID uuid.UUID) ([]model.Todo, error) {
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	var todos []model.Todo
@@ -41,7 +41,7 @@ func (s *TodoService) ListTodos(userID, conversationID uuid.UUID) ([]model.Todo,
 func (s *TodoService) CreateTodo(userID, conversationID uuid.UUID, input types.PostConversationsIdTodosJSONBody) (*model.Todo, error) {
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	todo := model.Todo{
@@ -59,12 +59,12 @@ func (s *TodoService) CreateTodo(userID, conversationID uuid.UUID, input types.P
 func (s *TodoService) UpdateTodo(userID, conversationID, todoID uuid.UUID, input types.PatchTodosIdJSONBody) (*model.Todo, error) {
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	var todo model.Todo
 	if err := s.db.Where("id = ? AND conversation_id = ?", todoID, conversationID).First(&todo).Error; err != nil {
-		return nil, fmt.Errorf("todo not found")
+		return nil, fmt.Errorf("get todo: %w", ErrTodoNotFound)
 	}
 
 	updates := map[string]interface{}{}
@@ -92,7 +92,7 @@ func (s *TodoService) UpdateTodo(userID, conversationID, todoID uuid.UUID, input
 func (s *TodoService) DeleteTodo(userID, conversationID, todoID uuid.UUID) error {
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+		return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	result := s.db.Where("id = ? AND conversation_id = ?", todoID, conversationID).Delete(&model.Todo{})
@@ -100,7 +100,7 @@ func (s *TodoService) DeleteTodo(userID, conversationID, todoID uuid.UUID) error
 		return fmt.Errorf("failed to delete todo: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("todo not found")
+		return fmt.Errorf("get todo: %w", ErrTodoNotFound)
 	}
 	return nil
 }
@@ -110,12 +110,12 @@ func (s *TodoService) DeleteTodo(userID, conversationID, todoID uuid.UUID) error
 func (s *TodoService) UpdateTodoByTodoID(userID, todoID uuid.UUID, input types.PatchTodosIdJSONBody) (*model.Todo, error) {
 	var todo model.Todo
 	if err := s.db.Where("id = ?", todoID).First(&todo).Error; err != nil {
-		return nil, fmt.Errorf("todo not found")
+		return nil, fmt.Errorf("get todo: %w", ErrTodoNotFound)
 	}
 
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", todo.ConversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	return s.UpdateTodo(userID, todo.ConversationID, todoID, input)
@@ -126,12 +126,12 @@ func (s *TodoService) UpdateTodoByTodoID(userID, todoID uuid.UUID, input types.P
 func (s *TodoService) DeleteTodoByTodoID(userID, todoID uuid.UUID) error {
 	var todo model.Todo
 	if err := s.db.Where("id = ?", todoID).First(&todo).Error; err != nil {
-		return fmt.Errorf("todo not found")
+		return fmt.Errorf("get todo: %w", ErrTodoNotFound)
 	}
 
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", todo.ConversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+		return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	return s.DeleteTodo(userID, todo.ConversationID, todoID)

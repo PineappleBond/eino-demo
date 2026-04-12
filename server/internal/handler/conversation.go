@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -174,7 +175,7 @@ func RegisterConversationRoutes(
 			wsUpdate := convert.ToUpdate(update)
 			wsManager.PushToUserConnections(userID, wsUpdate)
 		}); err != nil {
-			if err.Error() == "conversation not found" {
+			if errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			} else {
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())

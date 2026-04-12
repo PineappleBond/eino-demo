@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // TavilySearchInput is the input schema for the tavily search tool.
@@ -83,7 +84,7 @@ func (t *TavilySearchTool) Run(input TavilySearchInput) string {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+t.apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Sprintf("<tool_error>request failed: %s</tool_error>", err)

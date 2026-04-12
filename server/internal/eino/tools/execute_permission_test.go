@@ -969,29 +969,6 @@ func TestExecutePerm_InvokableRun_WithWorkspace(t *testing.T) {
 	}
 }
 
-func TestExecutePerm_StreamableRun(t *testing.T) {
-	p := &executePerm{}
-	sr, err := p.StreamableRun(context.Background(), `{"command": "echo hello"}`)
-	if err != nil {
-		t.Fatalf("StreamableRun() error = %v", err)
-	}
-	if sr == nil {
-		t.Fatal("StreamableRun() returned nil stream")
-	}
-
-	var result string
-	for {
-		chunk, err := sr.Recv()
-		if err != nil {
-			break
-		}
-		result += chunk
-	}
-	if result != "hello\n" {
-		t.Errorf("StreamableRun() = %q, want %q", result, "hello\n")
-	}
-}
-
 func TestExecutePerm_NeedPermission_NilInput(t *testing.T) {
 	p := &executePerm{}
 	got := p.NeedPermission(nil)

@@ -104,11 +104,49 @@ func (s *ChatService) CompleteSendMessage(
 	// 1. Verify conversation ownership before allocating seq
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	if req.Content == "" {
 		return nil, fmt.Errorf("content is required")
+	}
+
+	return s.sendMessageWithRole(ctx, userID, conversationID, req.Content, "user", userID.String(), nextSeq, pushUpdate)
+}
+
+// CompleteToolMessage creates a tool-role message and triggers the AI agent.
+// Used by cron task execution and other system-triggered messages.
+func (s *ChatService) CompleteToolMessage(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	content string,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*SendMessageResponse, error) {
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
+
+	if content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+
+	return s.sendMessageWithRole(ctx, userID, conversationID, content, "tool", "cron_scheduler", nextSeq, pushUpdate)
+}
+
+// sendMessageWithRole is the shared implementation for creating messages with any role.
+func (s *ChatService) sendMessageWithRole(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	content, senderRole, senderID string,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*SendMessageResponse, error) {
+	// 1. Verify conversation ownership before allocating seq
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Allocate seq after ownership confirmed
@@ -120,22 +158,22 @@ func (s *ChatService) CompleteSendMessage(
 	var messageID uuid.UUID
 	var isFirstMessage bool
 
-	// 3. Create user message + user_update in a single transaction
+	// 3. Create message + user_update in a single transaction
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Check if this is truly the first message inside the transaction to avoid
 		// race conditions where concurrent requests both see messageCount == 0.
 		var count int64
 		if err := tx.Model(&model.Message{}).Where("conversation_id = ?", conversationID).Count(&count).Error; err != nil {
-			s.log.Error("CompleteSendMessage: failed to count messages in transaction", zap.Error(err))
+			s.log.Error("sendMessageWithRole: failed to count messages in transaction", zap.Error(err))
 		}
 		isFirstMessage = count == 0
 
 		msg := model.Message{
 			ConversationID: conversationID,
-			SenderRole:     "user",
-			SenderID:       userID.String(),
-			Content:        req.Content,
-			Metadata:       model.JSONMap{},
+			SenderRole:     senderRole,
+			SenderID:       senderID,
+			Content:        content,
+			Metadata:       model.JSONMap{"source": senderRole},
 			Seq:            seq,
 		}
 		if err := tx.Create(&msg).Error; err != nil {
@@ -150,8 +188,8 @@ func (s *ChatService) CompleteSendMessage(
 			Payload: model.JSONMap{
 				"conversation_id": conversationID.String(),
 				"message_id":      messageID.String(),
-				"role":            "user",
-				"content":         req.Content,
+				"role":            senderRole,
+				"content":         content,
 				"seq":             seq,
 			},
 		}
@@ -173,8 +211,8 @@ func (s *ChatService) CompleteSendMessage(
 		Payload: model.JSONMap{
 			"conversation_id": conversationID.String(),
 			"message_id":      messageID.String(),
-			"role":            "user",
-			"content":         req.Content,
+			"role":            senderRole,
+			"content":         content,
 			"seq":             seq,
 		},
 	})
@@ -186,8 +224,8 @@ func (s *ChatService) CompleteSendMessage(
 	// Use IsRunning (not IsActive) to avoid enqueuing to a session that is
 	// stopping but not yet cleaned up.
 	if s.runSessionMgr.IsRunning(conversationID) {
-		s.messageQueue.Enqueue(conversationID, req.Content)
-		s.log.Info("CompleteSendMessage: enqueued message for active agent",
+		s.messageQueue.Enqueue(conversationID, content)
+		s.log.Info("sendMessageWithRole: enqueued message for active agent",
 			zap.String("conv", conversationID.String()),
 		)
 	} else {
@@ -197,7 +235,7 @@ func (s *ChatService) CompleteSendMessage(
 					s.log.Error("runAgent panic recovered", zap.Any("recover", r))
 				}
 			}()
-			s.runAgent(context.WithoutCancel(ctx), userID, conversationID, req.Content, nextSeq, pushUpdate)
+			s.runAgent(context.WithoutCancel(ctx), userID, conversationID, content, nextSeq, pushUpdate)
 		}()
 	}
 
@@ -209,7 +247,7 @@ func (s *ChatService) CompleteSendMessage(
 					s.log.Error("runTitleAgent panic recovered", zap.Any("recover", r))
 				}
 			}()
-			s.runTitleAgent(context.WithoutCancel(ctx), userID, conversationID, req.Content, nextSeq, pushUpdate)
+			s.runTitleAgent(context.WithoutCancel(ctx), userID, conversationID, content, nextSeq, pushUpdate)
 		}()
 	}
 
@@ -622,7 +660,7 @@ func (s *ChatService) runAgent(
 							Type:   "message.error",
 							Payload: model.JSONMap{
 								"conversation_id": conversationID.String(),
-								"error":           "对话上下文超出限制，请先压缩对话历史后再继续。",
+								"error":           ErrContextLimitExceeded.Error(),
 							},
 						}
 						if dbErr := s.db.WithContext(ctx).Create(&errUpdate).Error; dbErr != nil {
@@ -663,8 +701,8 @@ func (s *ChatService) StopMessage(
 ) error {
 	// Verify conversation exists and belongs to user
 	var conv model.Conversation
-	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
 	}
 
 	// 1. Check if agent is running before stopping
@@ -690,7 +728,7 @@ func (s *ChatService) StopMessage(
 			"conversation_id": conversationID.String(),
 		},
 	}
-	if err := s.db.Create(&update).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(&update).Error; err != nil {
 		return err
 	}
 
@@ -716,20 +754,20 @@ func (s *ChatService) AnswerQuestion(
 ) error {
 	// 1. Verify conversation ownership
 	var conv model.Conversation
-	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
 	}
 
 	// 2. Find the pending HITL record
 	var hitl model.HumanInTheLoop
-	if err := s.db.Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
+	if err := s.db.WithContext(ctx).Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
 		conversationID, req.CheckpointID, req.InterruptID).First(&hitl).Error; err != nil {
-		return fmt.Errorf("pending HITL request not found")
+		return fmt.Errorf("pending HITL request not found: %w", ErrHITLNotFound)
 	}
 
 	// 3. Update HITL to answered
 	answerJSON := model.JSONMap{"text": req.Answer}
-	if err := s.db.Model(&hitl).Updates(map[string]interface{}{
+	if err := s.db.WithContext(ctx).Model(&hitl).Updates(map[string]interface{}{
 		"status": "answered",
 		"answer": answerJSON,
 	}).Error; err != nil {
@@ -752,7 +790,7 @@ func (s *ChatService) AnswerQuestion(
 				"seq":             seq,
 			},
 		}
-		if dbErr := s.db.Create(&update).Error; dbErr != nil {
+		if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
 			s.log.Error("failed to persist HITL answered update", zap.Error(dbErr))
 		} else {
 			pushUpdate(userID, update)
@@ -775,7 +813,7 @@ func (s *ChatService) AnswerQuestion(
 			Metadata:       model.JSONMap{"type": "hitl_answer", "hitl_id": hitl.ID.String()},
 			Seq:            answerSeq,
 		}
-		if err := s.db.Create(&answerMsg).Error; err != nil {
+		if err := s.db.WithContext(ctx).Create(&answerMsg).Error; err != nil {
 			s.log.Error("failed to create HITL answer message", zap.Error(err))
 		} else {
 			answerMsgID = answerMsg.ID
@@ -791,7 +829,7 @@ func (s *ChatService) AnswerQuestion(
 					"seq":             answerSeq,
 				},
 			}
-			if dbErr := s.db.Create(&update).Error; dbErr != nil {
+			if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
 				s.log.Error("failed to persist HITL answer message update", zap.Error(dbErr))
 			} else {
 				pushUpdate(userID, update)
@@ -821,13 +859,14 @@ func (s *ChatService) AnswerQuestion(
 
 // ListPendingHITL returns pending human-in-the-loop requests for a conversation.
 func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model.HumanInTheLoop, error) {
+	ctx := context.Background()
 	var conv model.Conversation
-	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	var hitls []model.HumanInTheLoop
-	if err := s.db.Where("conversation_id = ? AND status = ?", conversationID, "pending").Order("created_at ASC").Find(&hitls).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("conversation_id = ? AND status = ?", conversationID, "pending").Order("created_at ASC").Find(&hitls).Error; err != nil {
 		return nil, fmt.Errorf("failed to list pending HITL: %w", err)
 	}
 	return hitls, nil
@@ -851,19 +890,19 @@ func (s *ChatService) AnswerPermission(
 ) error {
 	// 1. Verify conversation ownership and get project ID.
 	var conv model.Conversation
-	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
 	}
 
 	var project model.Project
-	if err := s.db.Where("id = ?", conv.ProjectID).First(&project).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ?", conv.ProjectID).First(&project).Error; err != nil {
 		return fmt.Errorf("project not found")
 	}
 
 	// 2. Find the pending permission record by ID.
 	var perm model.HumanInPermission
-	if err := s.db.Where("id = ? AND status = 'pending'", permissionID).First(&perm).Error; err != nil {
-		return fmt.Errorf("pending permission request not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND status = 'pending'", permissionID).First(&perm).Error; err != nil {
+		return fmt.Errorf("pending permission request not found: %w", ErrPermissionNotFound)
 	}
 
 	// 3. Validate decision.
@@ -876,7 +915,7 @@ func (s *ChatService) AnswerPermission(
 	}
 
 	// 4. Update record.
-	if err := s.db.Model(&perm).Updates(map[string]interface{}{
+	if err := s.db.WithContext(ctx).Model(&perm).Updates(map[string]interface{}{
 		"status": "answered", "decision": req.Decision,
 	}).Error; err != nil {
 		return fmt.Errorf("update permission: %w", err)
@@ -890,7 +929,7 @@ func (s *ChatService) AnswerPermission(
 		}
 
 		var count int64
-		s.db.Table("project_tool_permissions").
+		s.db.WithContext(ctx).Table("project_tool_permissions").
 			Where("project_id = ? AND tool_name = ? AND action = ? AND pattern = ?",
 				project.ID, perm.ToolName, perm.Action, perm.Content).
 			Count(&count)
@@ -904,7 +943,7 @@ func (s *ChatService) AnswerPermission(
 				GrantedBy: userID,
 				Level:     level,
 			}
-			if err := s.db.Create(&wp).Error; err != nil {
+			if err := s.db.WithContext(ctx).Create(&wp).Error; err != nil {
 				s.log.Error("write whitelist", zap.Error(err))
 			}
 		}
@@ -926,7 +965,7 @@ func (s *ChatService) AnswerPermission(
 				"seq":             seq,
 			},
 		}
-		if dbErr := s.db.Create(&update).Error; dbErr != nil {
+		if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
 			s.log.Error("persist permission.decided update", zap.Error(dbErr))
 		} else {
 			pushUpdate(userID, update)
@@ -954,13 +993,14 @@ func (s *ChatService) AnswerPermission(
 
 // ListPendingPermissions returns permission requests for a conversation.
 func (s *ChatService) ListPendingPermissions(userID, conversationID uuid.UUID, status string) ([]model.HumanInPermission, error) {
+	ctx := context.Background()
 	var conv model.Conversation
-	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	var perms []model.HumanInPermission
-	query := s.db.Where("conversation_id = ?", conversationID).Order("created_at ASC")
+	query := s.db.WithContext(ctx).Where("conversation_id = ?", conversationID).Order("created_at ASC")
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -980,7 +1020,7 @@ func (s *ChatService) GetConversationMessages(userID, conversationID uuid.UUID, 
 	// Verify conversation exists and belongs to user
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	query := s.db.Where("conversation_id = ?", conversationID).Order("seq ASC")
@@ -1008,7 +1048,7 @@ func (s *ChatService) StartCompaction(
 	// 1. Verify ownership
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+		return fmt.Errorf("conversation not found: %w", ErrConversationNotFound)
 	}
 
 	// 2. Stop running agent if any

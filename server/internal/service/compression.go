@@ -78,7 +78,7 @@ func (s *CompressionService) CompressConversation(
 	// 1. Verify ownership and get current MinSeq
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Load messages to compress (seq >= MinSeq) — includes tool messages

@@ -52,7 +52,14 @@
     "typeAnswer": "Type your answer...",
     "submit": "Submit",
     "addTodo": "Add a todo...",
-    "noTodos": "No todos yet"
+    "noTodos": "No todos yet",
+    "addCronTask": "Message content to send when the task fires...",
+    "noCronTasks": "No scheduled tasks yet",
+    "cronTasks": "Scheduled Tasks",
+    "schedulePlaceholder": "e.g. 0 9 * * * or once:5m",
+    "senderRole": "Sender role",
+    "nextRun": "Next run",
+    "cancelTask": "Cancel"
   },
   "settings": {
     "title": "Settings",
@@ -71,40 +78,40 @@
     "dark": "Dark"
   },
   "project": {
-    "info": "项目信息",
-    "save": "保存",
-    "template": "模板",
-    "created": "创建时间",
-    "updated": "更新时间",
-    "name": "名称",
-    "workspaceDir": "工作目录",
-    "updateSuccess": "项目已更新",
-    "updateFailed": "更新失败"
+    "info": "Project Info",
+    "save": "Save",
+    "template": "Template",
+    "created": "Created",
+    "updated": "Updated",
+    "name": "Name",
+    "workspaceDir": "Workspace",
+    "updateSuccess": "Project updated",
+    "updateFailed": "Failed to update"
   },
   "conv": {
-    "title": "对话信息",
-    "statistics": "统计",
-    "messages": "消息数",
-    "tokensPrompt": "Tokens (输入)",
-    "tokensCompletion": "Tokens (输出)",
-    "toolCalls": "工具调用",
-    "model": "模型",
-    "activeModel": "当前模型",
-    "template": "模板",
-    "members": "成员"
+    "title": "Conversation Info",
+    "statistics": "Statistics",
+    "messages": "Messages",
+    "tokensPrompt": "Tokens (input)",
+    "tokensCompletion": "Tokens (output)",
+    "toolCalls": "Tool calls",
+    "model": "Model",
+    "activeModel": "Active model",
+    "template": "Template",
+    "members": "Members"
   },
   "tools": {
     "input": "Input",
     "output": "Output",
-    "running": "运行中",
-    "done": "完成",
-    "error": "错误"
+    "running": "Running",
+    "done": "Done",
+    "error": "Error"
   },
   "auth": {
-    "tokenLabel": "认证令牌",
-    "tokenPlaceholder": "输入任意令牌（演示模式）",
-    "connect": "连接",
-    "title": "认证"
+    "tokenLabel": "Auth Token",
+    "tokenPlaceholder": "Enter any token for demo mode",
+    "connect": "Connect",
+    "title": "Authentication"
   },
   "permission": {
     "title": "Permission Request",
@@ -119,7 +126,18 @@
   },
   "notFound": {
     "title": "404",
-    "message": "抱歉，页面不存在。",
-    "backHome": "返回首页"
+    "message": "Sorry, page not found.",
+    "backHome": "Back to Home"
+  },
+  "hitl": {
+    "orCustomAnswer": "or enter custom answer",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical"
+  },
+  "ws": {
+    "reconnecting": "Connection lost, reconnecting...",
+    "retryNow": "Retry Now"
   }
 }

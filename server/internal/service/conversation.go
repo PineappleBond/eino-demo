@@ -132,7 +132,7 @@ func (s *ConversationService) CompleteCreateConversation(
 func (s *ConversationService) GetConversation(userID, conversationID uuid.UUID) (*model.Conversation, error) {
 	var conversation model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conversation).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 	return &conversation, nil
 }
@@ -142,7 +142,7 @@ func (s *ConversationService) ListMembers(userID, conversationID uuid.UUID) ([]m
 	// Verify the conversation belongs to the user
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	var members []model.ConversationMember
@@ -163,7 +163,7 @@ func (s *ConversationService) CompactConversation(
 	// 1. Verify ownership
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Allocate seq for compacting event
@@ -296,7 +296,7 @@ func (s *ConversationService) CompleteRenameConversation(
 	// 1. Verify ownership
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return nil, fmt.Errorf("conversation not found")
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Allocate seq
@@ -352,7 +352,7 @@ func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUI
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("conversation not found")
+		return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 	return nil
 }
@@ -368,7 +368,7 @@ func (s *ConversationService) CompleteDeleteConversation(
 	// 1. Verify ownership first — before allocating seq
 	var conv model.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
-		return fmt.Errorf("conversation not found")
+		return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
 	// 2. Allocate seq after ownership confirmed
@@ -384,7 +384,7 @@ func (s *ConversationService) CompleteDeleteConversation(
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return fmt.Errorf("conversation not found")
+			return fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 		}
 
 		update := model.UserUpdate{

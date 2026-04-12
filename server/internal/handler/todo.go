@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
@@ -56,7 +57,7 @@ func RegisterTodoRoutes(
 
 		todos, err := todoSvc.ListTodos(userID, conversationID)
 		if err != nil {
-			if err.Error() == "conversation not found" {
+			if errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list todos")
@@ -88,7 +89,7 @@ func RegisterTodoRoutes(
 
 		todo, err := todoSvc.CreateTodo(userID, conversationID, req)
 		if err != nil {
-			if err.Error() == "conversation not found" {
+			if errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
@@ -121,7 +122,7 @@ func RegisterTodoRoutes(
 
 		todo, err := todoSvc.UpdateTodoByTodoID(userID, todoID, req)
 		if err != nil {
-			if err.Error() == "todo not found" || err.Error() == "conversation not found" {
+			if errors.Is(err, service.ErrTodoNotFound) || errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
@@ -150,7 +151,7 @@ func RegisterTodoRoutes(
 		}
 
 		if err := todoSvc.DeleteTodoByTodoID(userID, todoID); err != nil {
-			if err.Error() == "todo not found" || err.Error() == "conversation not found" {
+			if errors.Is(err, service.ErrTodoNotFound) || errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())

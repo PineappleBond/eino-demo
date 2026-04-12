@@ -50,7 +50,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [updates, max_seq, has_more]
+                required: [ updates, max_seq, has_more ]
                 properties:
                   updates:
                     type: array
@@ -266,7 +266,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [title]
+              required: [ title ]
               properties:
                 title:
                   type: string
@@ -361,7 +361,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [content]
+              required: [ content ]
               properties:
                 content:
                   type: string
@@ -409,7 +409,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [checkpoint_id, interrupt_id, answer]
+              required: [ checkpoint_id, interrupt_id, answer ]
               properties:
                 checkpoint_id:
                   type: string
@@ -460,7 +460,7 @@ paths:
         - name: status
           in: query
           required: false
-          schema: { type: string, enum: [pending, answered] }
+          schema: { type: string, enum: [ pending, answered ] }
       responses:
         "200":
           description: List of permission requests
@@ -489,11 +489,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [checkpoint_id, interrupt_id, decision]
+              required: [ checkpoint_id, interrupt_id, decision ]
               properties:
                 checkpoint_id: { type: string }
                 interrupt_id: { type: string }
-                decision: { type: string, enum: [approved, approved_exact, approved_wildcard, denied] }
+                decision: { type: string, enum: [ approved, approved_exact, approved_wildcard, denied ] }
       responses:
         "200": { description: Permission answered, agent resumed }
         "404": { description: Permission request not found }
@@ -531,7 +531,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [content]
+              required: [ content ]
               properties:
                 content:
                   type: string
@@ -586,6 +586,77 @@ paths:
         "404":
           description: Todo not found
 
+  # ── Cron Tasks ──
+  /conversations/{id}/cron-tasks:
+    get:
+      summary: List cron tasks for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of cron tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CronTask"
+    post:
+      summary: Create a cron task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ content, schedule ]
+              properties:
+                content:
+                  type: string
+                schedule:
+                  type: string
+                sender_role:
+                  type: string
+                  enum: [ "assistant", "user", "system", "tool" ]
+                  default: "user"
+      responses:
+        "201":
+          description: Created cron task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CronTask"
+
+  /conversations/{id}/cron-tasks/{taskId}/cancel:
+    post:
+      summary: Cancel a cron task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Task cancelled
+        "404":
+          description: Task not found
+
   # ── Settings ──
   /settings:
     get:
@@ -607,13 +678,13 @@ paths:
               properties:
                 model_tier:
                   type: string
-                  enum: [haiku, sonnet, opus]
+                  enum: [ haiku, sonnet, opus ]
                 locale:
                   type: string
-                  enum: [en, zh]
+                  enum: [ en, zh ]
                 theme:
                   type: string
-                  enum: [light, dark]
+                  enum: [ light, dark ]
       responses:
         "200":
           description: Updated settings
@@ -633,13 +704,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [models]
+                required: [ models ]
                 properties:
                   models:
                     type: array
                     items:
                       type: object
-                      required: [name, base_url, model]
+                      required: [ name, base_url, model ]
                       properties:
                         name:
                           type: string
@@ -654,7 +725,7 @@ components:
 
     User:
       type: object
-      required: [id]
+      required: [ id ]
       properties:
         id:
           type: string
@@ -669,7 +740,7 @@ components:
 
     MeResponse:
       type: object
-      required: [id, settings]
+      required: [ id, settings ]
       properties:
         id:
           type: string
@@ -686,7 +757,7 @@ components:
 
     Template:
       type: object
-      required: [id, name, description]
+      required: [ id, name, description ]
       properties:
         id:
           type: string
@@ -700,11 +771,11 @@ components:
             type: string
         difficulty:
           type: string
-          enum: [beginner, intermediate, advanced]
+          enum: [ beginner, intermediate, advanced ]
 
     Project:
       type: object
-      required: [id, user_id, template_id, name]
+      required: [ id, user_id, template_id, name ]
       properties:
         id:
           type: string
@@ -724,7 +795,7 @@ components:
 
     Conversation:
       type: object
-      required: [id, project_id, user_id]
+      required: [ id, project_id, user_id ]
       properties:
         id:
           type: string
@@ -762,7 +833,7 @@ components:
 
     Message:
       type: object
-      required: [id, conversation_id, seq, sender_role, content]
+      required: [ id, conversation_id, seq, sender_role, content ]
       properties:
         id:
           type: string
@@ -772,7 +843,7 @@ components:
           type: integer
         sender_role:
           type: string
-          enum: [user, assistant, system, tool]
+          enum: [ user, assistant, system, tool ]
         sender_id:
           type: string
         content:
@@ -824,24 +895,24 @@ components:
       properties:
         model_tier:
           type: string
-          enum: [haiku, sonnet, opus]
+          enum: [ haiku, sonnet, opus ]
         locale:
           type: string
-          enum: [en, zh]
+          enum: [ en, zh ]
         theme:
           type: string
-          enum: [light, dark]
+          enum: [ light, dark ]
         updated_at:
           type: string
           format: date-time
 
     ErrorResponse:
       type: object
-      required: [error]
+      required: [ error ]
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [ code, message ]
           properties:
             code:
               type: string
@@ -853,22 +924,22 @@ components:
 
     WSClientFrame:
       type: object
-      required: [type, payload]
+      required: [ type, payload ]
       properties:
         type:
           type: string
-          enum: [ping]
+          enum: [ ping ]
           description: Client→Server frames. Only heartbeat.
         payload:
           $ref: "#/components/schemas/PingPayload"
 
     WSServerFrame:
       type: object
-      required: [type, payload]
+      required: [ type, payload ]
       properties:
         type:
           type: string
-          enum: [updates, connected]
+          enum: [ updates, connected ]
           description: Server→Client frame types.
         payload:
           oneOf:
@@ -882,13 +953,13 @@ components:
     PingPayload:
       type: object
       description: Client heartbeat. Sent every 30 seconds.
-      properties: {}
+      properties: { }
 
     # ── Connection ──
 
     ConnectedPayload:
       type: object
-      required: [user_id, server_time, max_seq]
+      required: [ user_id, server_time, max_seq ]
       properties:
         user_id:
           type: string
@@ -906,11 +977,11 @@ components:
     EmptyPayload:
       type: object
       description: Seq gap filler. No data.
-      properties: {}
+      properties: { }
 
     MessageNewPayload:
       type: object
-      required: [conversation_id, message_id, seq, role, sender_id, addr]
+      required: [ conversation_id, message_id, seq, role, sender_id, addr ]
       properties:
         conversation_id:
           type: string
@@ -923,7 +994,7 @@ components:
           format: int64
         role:
           type: string
-          enum: [user, assistant, system, tool]
+          enum: [ user, assistant, system, tool ]
         sender_id:
           type: string
         addr:
@@ -938,7 +1009,7 @@ components:
 
     MessageDeltaPayload:
       type: object
-      required: [conversation_id, message_id, delta, addr]
+      required: [ conversation_id, message_id, delta, addr ]
       properties:
         conversation_id:
           type: string
@@ -952,7 +1023,7 @@ components:
 
     MessageDonePayload:
       type: object
-      required: [conversation_id, message_id, role, sender_id, content, reasoning_content, addr, seq]
+      required: [ conversation_id, message_id, role, sender_id, content, reasoning_content, addr, seq ]
       properties:
         conversation_id:
           type: string
@@ -976,7 +1047,7 @@ components:
 
     MessageToolCallPayload:
       type: object
-      required: [conversation_id, message_id, tool_name, content, seq, addr]
+      required: [ conversation_id, message_id, tool_name, content, seq, addr ]
       properties:
         conversation_id:
           type: string
@@ -995,7 +1066,7 @@ components:
 
     MessageThinkingPayload:
       type: object
-      required: [conversation_id, message_id, delta, addr]
+      required: [ conversation_id, message_id, delta, addr ]
       properties:
         conversation_id:
           type: string
@@ -1009,7 +1080,7 @@ components:
 
     MessageErrorPayload:
       type: object
-      required: [conversation_id, error, seq]
+      required: [ conversation_id, error, seq ]
       properties:
         conversation_id:
           type: string
@@ -1027,7 +1098,7 @@ components:
 
     MessageStopPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [ conversation_id, seq ]
       properties:
         conversation_id:
           type: string
@@ -1040,7 +1111,7 @@ components:
 
     ConversationUpdatedPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [ conversation_id, seq ]
       properties:
         conversation_id:
           type: string
@@ -1063,7 +1134,7 @@ components:
 
     ConversationCreatedPayload:
       type: object
-      required: [id, project_id, seq]
+      required: [ id, project_id, seq ]
       properties:
         id:
           type: string
@@ -1081,7 +1152,7 @@ components:
 
     ConversationDeletedPayload:
       type: object
-      required: [id, project_id, seq]
+      required: [ id, project_id, seq ]
       properties:
         id:
           type: string
@@ -1093,7 +1164,7 @@ components:
 
     ConversationCompactingPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [ conversation_id, seq ]
       properties:
         conversation_id:
           type: string
@@ -1104,7 +1175,7 @@ components:
 
     ConversationCompactedPayload:
       type: object
-      required: [old_conv_id, new_conv_id, project_id, seq]
+      required: [ old_conv_id, new_conv_id, project_id, seq ]
       properties:
         old_conv_id:
           type: string
@@ -1121,7 +1192,7 @@ components:
 
     ConversationCompressedPayload:
       type: object
-      required: [conversation_id, min_seq, seq]
+      required: [ conversation_id, min_seq, seq ]
       properties:
         conversation_id:
           type: string
@@ -1142,7 +1213,7 @@ components:
 
     ConversationArchivedPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [ conversation_id, seq ]
       properties:
         conversation_id:
           type: string
@@ -1152,7 +1223,7 @@ components:
 
     ProjectCreatedPayload:
       type: object
-      required: [id, template_id, name, seq]
+      required: [ id, template_id, name, seq ]
       properties:
         id:
           type: string
@@ -1167,7 +1238,7 @@ components:
 
     ProjectDeletedPayload:
       type: object
-      required: [id, seq]
+      required: [ id, seq ]
       properties:
         id:
           type: string
@@ -1177,20 +1248,20 @@ components:
 
     SettingsChangedPayload:
       type: object
-      required: [seq, model_tier, locale, theme, changed]
+      required: [ seq, model_tier, locale, theme, changed ]
       properties:
         seq:
           type: integer
           format: int64
         model_tier:
           type: string
-          enum: [haiku, sonnet, opus]
+          enum: [ haiku, sonnet, opus ]
         locale:
           type: string
-          enum: [en, zh]
+          enum: [ en, zh ]
         theme:
           type: string
-          enum: [light, dark]
+          enum: [ light, dark ]
         changed:
           type: array
           items:
@@ -1199,7 +1270,7 @@ components:
 
     HumanInTheLoop:
       type: object
-      required: [id, conversation_id, question, answer_type, status, created_at]
+      required: [ id, conversation_id, question, answer_type, status, created_at ]
       properties:
         id:
           type: string
@@ -1217,7 +1288,7 @@ components:
           type: array
           items:
             type: object
-            required: [title]
+            required: [ title ]
             properties:
               title:
                 type: string
@@ -1225,20 +1296,20 @@ components:
                 type: string
         answer_type:
           type: string
-          enum: [single, multi, text]
+          enum: [ single, multi, text ]
         answer:
           type: string
           nullable: true
         status:
           type: string
-          enum: [pending, answered, expired]
+          enum: [ pending, answered, expired ]
         created_at:
           type: string
           format: date-time
 
     Todo:
       type: object
-      required: [id, conversation_id, content, completed, created_at, updated_at]
+      required: [ id, conversation_id, content, completed, created_at, updated_at ]
       properties:
         id:
           type: string
@@ -1260,9 +1331,35 @@ components:
           type: string
           format: date-time
 
+    CronTask:
+      type: object
+      required: [ id, conversation_id,sender_role, content, schedule, next_run_at, status, created_at ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        sender_role:
+          type: string
+          enum: [ "assistant", "user", "system", "tool" ]
+        content:
+          type: string
+        schedule:
+          type: string
+        next_run_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
     HumanInPermission:
       type: object
-      required: [id, conversation_id, tool_name, action, content, safety_level, status, created_at]
+      required: [ id, conversation_id, tool_name, action, content, safety_level, status, created_at ]
       properties:
         id:
           type: string
@@ -1293,17 +1390,17 @@ components:
         decision:
           type: string
           nullable: true
-          enum: [approved, approved_exact, approved_wildcard, denied]
+          enum: [ approved, approved_exact, approved_wildcard, denied ]
         status:
           type: string
-          enum: [pending, answered]
+          enum: [ pending, answered ]
         created_at:
           type: string
           format: date-time
 
     HumanInTheLoopCreatedPayload:
       type: object
-      required: [conversation_id, id, question, choices, answer_type, seq]
+      required: [ conversation_id, id, question, choices, answer_type, seq ]
       properties:
         conversation_id:
           type: string
@@ -1322,7 +1419,7 @@ components:
           type: array
           items:
             type: object
-            required: [title]
+            required: [ title ]
             properties:
               title:
                 type: string
@@ -1336,7 +1433,7 @@ components:
 
     HumanInTheLoopAnsweredPayload:
       type: object
-      required: [conversation_id, id, answer, seq]
+      required: [ conversation_id, id, answer, seq ]
       properties:
         conversation_id:
           type: string
@@ -1350,7 +1447,7 @@ components:
 
     PermissionPendingPayload:
       type: object
-      required: [conversation_id, permission_id, tool_name, action, content, safety_level, safety_reason, seq]
+      required: [ conversation_id, permission_id, tool_name, action, content, safety_level, safety_reason, seq ]
       properties:
         conversation_id: { type: string }
         permission_id: { type: string }
@@ -1367,16 +1464,16 @@ components:
 
     PermissionDecidedPayload:
       type: object
-      required: [conversation_id, permission_id, decision, seq]
+      required: [ conversation_id, permission_id, decision, seq ]
       properties:
         conversation_id: { type: string }
         permission_id: { type: string }
-        decision: { type: string, enum: [approved, approved_exact, approved_wildcard, denied] }
+        decision: { type: string, enum: [ approved, approved_exact, approved_wildcard, denied ] }
         seq: { type: integer, format: int64 }
 
     TodoSyncPayload:
       type: object
-      required: [conversation_id, seq]
+      required: [ conversation_id, seq ]
       properties:
         conversation_id:
           type: string
@@ -1392,7 +1489,7 @@ components:
 
     Update:
       type: object
-      required: [seq, type, payload]
+      required: [ seq, type, payload ]
       properties:
         seq:
           type: integer

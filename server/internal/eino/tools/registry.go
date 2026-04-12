@@ -84,6 +84,13 @@ func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
 		} else {
 			tools = append(tools, todoWrite)
 		}
+
+		cronTask, err := NewCronTaskTool(r.db, r.conversationID)
+		if err != nil {
+			// Tool creation failure is non-fatal; skip the tool silently.
+		} else {
+			tools = append(tools, cronTask)
+		}
 	}
 
 	return tools
@@ -97,7 +104,7 @@ func (r *ToolRegistry) GetWeatherTool() *WeatherTool {
 // ListToolNames returns all registered tool names for agent config.
 func (r *ToolRegistry) ListToolNames() []string {
 	if r.conversationID != uuid.Nil {
-		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write"}
+		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task"}
 	}
 	return []string{"weather", "tavily_search", "ask_user_question"}
 }

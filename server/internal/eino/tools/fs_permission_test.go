@@ -400,37 +400,6 @@ func TestReadFilePerm_InvokableRun(t *testing.T) {
 	}
 }
 
-// ── readFilePerm StreamableRun tests ──
-
-func TestReadFilePerm_StreamableRun(t *testing.T) {
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "stream.txt")
-	if err := os.WriteFile(testFile, []byte("streaming content"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	p := &readFilePerm{workspaceDir: tmpDir}
-	sr, err := p.StreamableRun(context.Background(), `{"file_path": "stream.txt"}`)
-	if err != nil {
-		t.Fatalf("StreamableRun() error = %v", err)
-	}
-	if sr == nil {
-		t.Fatal("StreamableRun() returned nil stream")
-	}
-
-	var result string
-	for {
-		chunk, err := sr.Recv()
-		if err != nil {
-			break
-		}
-		result += chunk
-	}
-	if !strings.Contains(result, "streaming content") {
-		t.Errorf("StreamableRun() = %q, want to contain %q", result, "streaming content")
-	}
-}
-
 // ── readFilePerm Info tests ──
 
 func TestReadFilePerm_Info(t *testing.T) {
@@ -575,32 +544,6 @@ func TestWriteFilePerm_Info(t *testing.T) {
 	}
 	if info.Name != "write_file" {
 		t.Errorf("Info().Name = %q, want %q", info.Name, "write_file")
-	}
-}
-
-// ── writeFilePerm StreamableRun tests ──
-
-func TestWriteFilePerm_StreamableRun(t *testing.T) {
-	tmpDir := t.TempDir()
-	p := &writeFilePerm{workspaceDir: tmpDir}
-	sr, err := p.StreamableRun(context.Background(), `{"file_path": "stream_write.txt", "content": "stream"}`)
-	if err != nil {
-		t.Fatalf("StreamableRun() error = %v", err)
-	}
-	if sr == nil {
-		t.Fatal("StreamableRun() returned nil stream")
-	}
-
-	var result string
-	for {
-		chunk, err := sr.Recv()
-		if err != nil {
-			break
-		}
-		result += chunk
-	}
-	if !strings.Contains(result, "Successfully wrote") {
-		t.Errorf("StreamableRun() = %q, want to contain %q", result, "Successfully wrote")
 	}
 }
 

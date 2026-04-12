@@ -185,6 +185,20 @@ func ToTodo(m model.Todo) types.Todo {
 	}
 }
 
+// ToCronTask converts a GORM CronTask model to the OpenAPI CronTask type.
+func ToCronTask(m model.CronTask) types.CronTask {
+	return types.CronTask{
+		Id:             toUUID(m.ID),
+		ConversationId: toUUID(m.ConversationID),
+		Content:        m.Content,
+		SenderRole:     types.CronTaskSenderRole(m.SenderRole),
+		Schedule:       m.Schedule,
+		NextRunAt:      m.NextRunAt,
+		Status:         m.Status,
+		CreatedAt:      m.CreatedAt,
+	}
+}
+
 // ToHumanInTheLoop converts a GORM HumanInTheLoop model to the OpenAPI HumanInTheLoop type.
 func ToHumanInTheLoop(m model.HumanInTheLoop) types.HumanInTheLoop {
 	var choices *[]struct {

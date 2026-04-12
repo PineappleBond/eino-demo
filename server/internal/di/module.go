@@ -3,14 +3,16 @@ package di
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	// Import templates package to trigger init() registration.
 	_ "github.com/PineappleBond/eino-demo-dev/server/internal/templates"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/ws"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
@@ -43,6 +45,7 @@ var Module = fx.Options(
 		service.NewConversationService,
 		service.NewChatService,
 		service.NewTodoService,
+		service.NewCronService,
 	),
 	// Handler modules — register Gin routes
 	fx.Invoke(RegisterRoutes),
@@ -71,6 +74,7 @@ func RegisterRoutes(
 	convSvc *service.ConversationService,
 	chatSvc *service.ChatService,
 	todoSvc *service.TodoService,
+	cronSvc *service.CronService,
 ) {
 	r := handler.NewRouter(cfg, log)
 
@@ -82,6 +86,7 @@ func RegisterRoutes(
 	handler.RegisterConversationRoutes(api, convSvc, chatSvc, wsManager)
 	handler.RegisterChatRoutes(api, chatSvc, wsManager)
 	handler.RegisterTodoRoutes(api, todoSvc, wsManager, db)
+	handler.RegisterCronTaskRoutes(api, cronSvc, wsManager, db)
 	handler.RegisterModelRoutes(api, cfg)
 
 	// WebSocket upgrade endpoint (not under /api/v1)
@@ -96,6 +101,51 @@ func RegisterRoutes(
 					log.Error("server error", zap.Error(err))
 				}
 			}()
+
+			// Wire cron service: register message sender + start scheduler
+			cronSvc.RegisterMessageSender(func(
+				ctx context.Context,
+				userID, conversationID uuid.UUID,
+				content string,
+				senderRole string,
+			) (*service.SendMessageResponse, error) {
+				// For tool-sent messages (cron tasks), create a tool-role message
+				// which triggers the full AI agent response flow.
+				if senderRole == "tool" {
+					return chatSvc.CompleteToolMessage(
+						ctx,
+						userID, conversationID,
+						content,
+						wsManager.NextSeq,
+						func(userID uuid.UUID, update model.UserUpdate) {
+							wsUpdate := convert.ToUpdate(update)
+							wsManager.PushToUserConnections(userID, wsUpdate)
+						},
+					)
+				}
+				return chatSvc.CompleteSendMessage(
+					ctx,
+					userID, conversationID,
+					service.SendMessageRequest{Content: content},
+					wsManager.NextSeq,
+					func(userID uuid.UUID, update model.UserUpdate) {
+						wsUpdate := convert.ToUpdate(update)
+						wsManager.PushToUserConnections(userID, wsUpdate)
+					},
+				)
+			})
+
+			// Wire the register callback so the cron tool can register tasks
+			// with the scheduler after creating them in the DB.
+			tools.CronTaskRegisterFunc = cronSvc.RegisterTask
+			if err := cronSvc.Start(ctx); err != nil {
+				log.Error("cron service start failed", zap.Error(err))
+			}
+
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			cronSvc.Stop()
 			return nil
 		},
 	})

@@ -2,7 +2,9 @@ package tools
 
 import (
 	"context"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino-ext/components/tool/httprequest"
 	"github.com/cloudwego/eino/components/tool"
@@ -100,7 +102,10 @@ func extractMethod(name string) string {
 
 // NewHTTPTools creates httprequest tools with permission support.
 func NewHTTPTools() []tool.BaseTool {
-	rawTools, err := httprequest.NewToolKit(context.Background(), nil)
+	client := &http.Client{Timeout: 30 * time.Second}
+	rawTools, err := httprequest.NewToolKit(context.Background(), &httprequest.Config{
+		HttpClient: client,
+	})
 	if err != nil {
 		return nil
 	}

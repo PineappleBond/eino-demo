@@ -8,7 +8,6 @@ import type { components } from '@/types/api';
 const { Text, Paragraph } = Typography;
 
 const safetyColors: Record<number, string> = { 1: 'green', 2: 'blue', 3: 'orange', 4: 'red' };
-const safetyLabels: Record<number, string> = { 1: '低', 2: '中', 3: '高', 4: '严重' };
 
 interface PermissionRequestCardProps {
   permission: components['schemas']['PermissionPendingPayload'];
@@ -18,6 +17,8 @@ interface PermissionRequestCardProps {
 
 export function PermissionRequestCard({ permission, onAnswer, loading = false }: PermissionRequestCardProps) {
   const t = useTranslations('permission');
+  const tHitl = useTranslations('hitl');
+  const riskLabels: Record<number, string> = { 1: tHitl('low'), 2: tHitl('medium'), 3: tHitl('high'), 4: tHitl('critical') };
 
   return (
     <Card
@@ -32,7 +33,7 @@ export function PermissionRequestCard({ permission, onAnswer, loading = false }:
           <LockOutlined />
           <Text strong>{t('title')}</Text>
           <Tag color={safetyColors[permission.safety_level] || 'default'}>
-            {t('risk')} {permission.safety_level} ({safetyLabels[permission.safety_level] || '?'})
+            {t('risk')} {permission.safety_level} ({riskLabels[permission.safety_level] || '?'})
           </Tag>
         </Space>
       }
