@@ -75,10 +75,20 @@ func (b *SkillFileBackend) loadAll() ([]skill.Skill, error) {
 
 	var skills []skill.Skill
 	for _, entry := range entries {
+		skillDir := filepath.Join(b.baseDir, entry.Name())
+
+		// entry.IsDir() returns false for symlinks even if they point to directories.
+		// os.Stat follows symlinks, so we use it as a fallback.
+		// Hardlinks are indistinguishable from regular files/directories on Unix,
+		// so no special handling is needed for them.
 		if !entry.IsDir() {
-			continue
+			info, err := os.Stat(skillDir)
+			if err != nil || !info.IsDir() {
+				continue
+			}
 		}
-		skillPath := filepath.Join(b.baseDir, entry.Name(), skillFileName)
+
+		skillPath := filepath.Join(skillDir, skillFileName)
 		s, err := b.loadSkillFromFile(skillPath)
 		if err != nil {
 			// Skip invalid skill directories

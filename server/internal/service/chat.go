@@ -723,74 +723,74 @@ func (s *ChatService) runAgent(
 						)
 					}
 
-						// Extract permission data from the root cause interrupt context.
-						// The Data field is *adk.ChatModelAgentInterruptInfo (serialized),
-						// but InterruptContexts[i].Info contains the original map[string]any
-						// passed to tool.Interrupt.
-						ctxs := event.Action.Interrupted.InterruptContexts
-						// Find the root cause context (leaf of the interrupt chain).
-						leafIdx := 0
-						for i, ic := range ctxs {
-							if ic != nil && ic.IsRootCause {
-								leafIdx = i
-								break
-							}
+					// Extract permission data from the root cause interrupt context.
+					// The Data field is *adk.ChatModelAgentInterruptInfo (serialized),
+					// but InterruptContexts[i].Info contains the original map[string]any
+					// passed to tool.Interrupt.
+					ctxs := event.Action.Interrupted.InterruptContexts
+					// Find the root cause context (leaf of the interrupt chain).
+					leafIdx := 0
+					for i, ic := range ctxs {
+						if ic != nil && ic.IsRootCause {
+							leafIdx = i
+							break
 						}
-						if data, ok := ctxs[leafIdx].Info.(map[string]any); ok {
-							if permID, ok := data["permission_id"].(string); ok && permID != "" {
-								// Update the pending permission record with checkpoint_id
-								if err := s.db.WithContext(ctx).
-									Model(&model.HumanInPermission{}).
-									Where("id = ? AND status = 'pending'", permID).
-									Update("checkpoint_id", checkpointKey).Error; err != nil {
-									s.log.Error("failed to update permission checkpoint_id",
-										zap.String("permission_id", permID),
-										zap.Error(err),
-									)
-								}
-
-								// interrupt_id from the last context in the chain
-								interruptID := ctxs[len(ctxs)-1].ID
-
-								s.log.Info("runAgent: pushing permission.pending from event loop",
+					}
+					if data, ok := ctxs[leafIdx].Info.(map[string]any); ok {
+						if permID, ok := data["permission_id"].(string); ok && permID != "" {
+							// Update the pending permission record with checkpoint_id
+							if err := s.db.WithContext(ctx).
+								Model(&model.HumanInPermission{}).
+								Where("id = ? AND status = 'pending'", permID).
+								Update("checkpoint_id", checkpointKey).Error; err != nil {
+								s.log.Error("failed to update permission checkpoint_id",
 									zap.String("permission_id", permID),
-									zap.String("checkpoint_id", checkpointKey),
-									zap.String("interrupt_id", interruptID),
+									zap.Error(err),
 								)
+							}
 
-								// Push permission.pending update with valid IDs
-								seq, seqErr := nextSeq(ctx, userID)
-								if seqErr != nil {
-									s.log.Error("seq assignment failed for permission.pending", zap.Error(seqErr))
-								} else if seq > 0 {
-									update := model.UserUpdate{
-										UserID: userID,
-										Seq:    seq,
-										Type:   "permission.pending",
-										Payload: model.JSONMap{
-											"conversation_id": conversationID.String(),
-											"permission_id":   permID,
-											"checkpoint_id":   checkpointKey,
-											"interrupt_id":    interruptID,
-											"tool_name":       getString(data, "tool_name"),
-											"action":          getString(data, "action"),
-											"content":         getString(data, "content"),
-											"tool_desc":       getString(data, "tool_desc"),
-											"args_summary":    getString(data, "args_summary"),
-											"safety_level":    getInt(data, "safety_level"),
-											"safety_reason":   getString(data, "safety_reason"),
-											"seq":             seq,
-										},
-									}
-									if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
-										s.log.Error("persist permission.pending update", zap.Error(dbErr))
-									} else {
-										pushUpdate(userID, update)
-									}
+							// interrupt_id from the last context in the chain
+							interruptID := ctxs[len(ctxs)-1].ID
+
+							s.log.Info("runAgent: pushing permission.pending from event loop",
+								zap.String("permission_id", permID),
+								zap.String("checkpoint_id", checkpointKey),
+								zap.String("interrupt_id", interruptID),
+							)
+
+							// Push permission.pending update with valid IDs
+							seq, seqErr := nextSeq(ctx, userID)
+							if seqErr != nil {
+								s.log.Error("seq assignment failed for permission.pending", zap.Error(seqErr))
+							} else if seq > 0 {
+								update := model.UserUpdate{
+									UserID: userID,
+									Seq:    seq,
+									Type:   "permission.pending",
+									Payload: model.JSONMap{
+										"conversation_id": conversationID.String(),
+										"permission_id":   permID,
+										"checkpoint_id":   checkpointKey,
+										"interrupt_id":    interruptID,
+										"tool_name":       getString(data, "tool_name"),
+										"action":          getString(data, "action"),
+										"content":         getString(data, "content"),
+										"tool_desc":       getString(data, "tool_desc"),
+										"args_summary":    getString(data, "args_summary"),
+										"safety_level":    getInt(data, "safety_level"),
+										"safety_reason":   getString(data, "safety_reason"),
+										"seq":             seq,
+									},
+								}
+								if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
+									s.log.Error("persist permission.pending update", zap.Error(dbErr))
+								} else {
+									pushUpdate(userID, update)
 								}
 							}
 						}
-						callbacks.OnInterrupted(event.Action.Interrupted)
+					}
+					callbacks.OnInterrupted(event.Action.Interrupted)
 					break
 				}
 			}
@@ -1109,6 +1109,7 @@ func (s *ChatService) resumeAgent(
 		s.runAgent(context.WithoutCancel(ctx), userID, conversationID, "", nextSeq, pushUpdate)
 	}()
 }
+
 func (s *ChatService) ListPendingHITL(userID, conversationID uuid.UUID) ([]model.HumanInTheLoop, error) {
 	ctx := context.Background()
 	var conv model.Conversation
