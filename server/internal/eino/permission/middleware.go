@@ -58,6 +58,7 @@ type MiddlewareConfig struct {
 	Tools          []tool.BaseTool
 	PushUpdate     func(userID uuid.UUID, update model.UserUpdate)
 	NextSeq        func(ctx context.Context, userID uuid.UUID) (int64, error)
+	Mode           ConversationMode
 }
 
 // Middleware implements ChatModelAgentMiddleware to intercept tool calls for permission checks.
@@ -141,6 +142,23 @@ func (m *Middleware) checkPermission(ctx context.Context, toolName, argumentsInJ
 		return true, nil
 	}
 
+	// Mode-based behavior.
+	switch m.cfg.Mode {
+	case ModeBypassPermissions:
+		return true, nil
+	case ModePlanMode:
+		// TODO: implement plan_mode behavior
+		return true, nil
+	case ModeAskBeforeEdits:
+		return m.checkPermissionAskBeforeEdits(ctx, toolName, np, argumentsInJSON)
+	case ModeEditAutomatically, "":
+		// Fall through to existing threshold + whitelist + AI eval logic.
+	default:
+		// Unknown mode — treat as edit_automatically (safe fallback).
+	}
+
+	// --- Existing logic for edit_automatically mode (unchanged) ---
+
 	// Check if resuming from a permission interrupt.
 	wasInterrupted, _, _ := tool.GetInterruptState[any](ctx)
 	if wasInterrupted {
@@ -179,6 +197,88 @@ func (m *Middleware) checkPermission(ctx context.Context, toolName, argumentsInJ
 
 	// Exceeds threshold — interrupt for human approval.
 	return false, m.interruptForPermission(ctx, req, eval)
+}
+
+// checkPermissionAskBeforeEdits always interrupts for human approval.
+// Skips whitelist and safety evaluation — every tool call requiring permission
+// is presented to the user for explicit approval.
+func (m *Middleware) checkPermissionAskBeforeEdits(ctx context.Context, toolName string, np NeedPermissioner, argumentsInJSON string) (bool, error) {
+	// Check if resuming from a permission interrupt.
+	wasInterrupted, _, _ := tool.GetInterruptState[any](ctx)
+	if wasInterrupted {
+		return m.handleResume(ctx, toolName, argumentsInJSON)
+	}
+
+	// Get permission request from tool.
+	var args map[string]any
+	_ = json.Unmarshal([]byte(argumentsInJSON), &args)
+	req := np.NeedPermission(args)
+	if req == nil {
+		return true, nil
+	}
+
+	// Fill metadata.
+	req.ToolName = toolName
+	if req.ArgsSummary == "" {
+		req.ArgsSummary = truncateJSON(argumentsInJSON, 200)
+	}
+
+	// Always interrupt — no whitelist, no safety eval.
+	question := fmt.Sprintf("Agent 想要调用 %s（%s），是否允许？\n\n操作类型: %s\n详情: %s",
+		req.ToolName, req.ToolDesc, req.Action, req.Content)
+
+	choices := []ChoiceOption{
+		{Title: "同意", Desc: "允许此次操作"},
+		{Title: "拒绝", Desc: "不允许此次操作"},
+	}
+
+	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, 0, "ask_before_edits 模式：每次操作都需要确认")
+	if err != nil {
+		// Continue anyway
+	}
+
+	interruptErr := tool.Interrupt(ctx, map[string]any{
+		"type":          "permission_request",
+		"tool_name":     req.ToolName,
+		"action":        req.Action,
+		"content":       req.Content,
+		"tool_desc":     req.ToolDesc,
+		"args_summary":  req.ArgsSummary,
+		"safety_level":  0,
+		"safety_reason": "ask_before_edits 模式",
+		"question":      question,
+		"answer_type":   "single",
+		"choices":       choices,
+		"permission_id": perm.ID.String(),
+	})
+
+	// Push permission.pending update.
+	if m.cfg.PushUpdate != nil && m.cfg.NextSeq != nil {
+		seq, _ := m.cfg.NextSeq(ctx, m.cfg.UserID)
+		if seq > 0 {
+			m.cfg.PushUpdate(m.cfg.UserID, model.UserUpdate{
+				UserID: m.cfg.UserID,
+				Seq:    seq,
+				Type:   "permission.pending",
+				Payload: model.JSONMap{
+					"conversation_id": m.cfg.ConversationID.String(),
+					"permission_id":   perm.ID.String(),
+					"checkpoint_id":   perm.CheckpointID,
+					"interrupt_id":    "",
+					"tool_name":       req.ToolName,
+					"action":          req.Action,
+					"content":         req.Content,
+					"tool_desc":       req.ToolDesc,
+					"args_summary":    req.ArgsSummary,
+					"safety_level":    0,
+					"safety_reason":   "ask_before_edits 模式",
+					"seq":             seq,
+				},
+			})
+		}
+	}
+
+	return false, interruptErr
 }
 
 func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON string) (bool, error) {

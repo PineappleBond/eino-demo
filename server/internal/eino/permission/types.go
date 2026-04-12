@@ -35,6 +35,20 @@ const (
 	DecisionDenied           Decision = "denied"
 )
 
+// ConversationMode controls how tool calls are permission-checked.
+type ConversationMode string
+
+const (
+	// ModeAskBeforeEdits interrupts for every tool call that needs permission.
+	ModeAskBeforeEdits ConversationMode = "ask_before_edits"
+	// ModeEditAutomatically uses threshold + whitelist + AI safety eval (existing behavior).
+	ModeEditAutomatically ConversationMode = "edit_automatically"
+	// ModeBypassPermissions skips all permission checking.
+	ModeBypassPermissions ConversationMode = "bypass_permissions"
+	// ModePlanMode is reserved for future planning-mode implementation.
+	ModePlanMode ConversationMode = "plan_mode"
+)
+
 // SafetyEvaluator assesses the risk level of a tool call.
 type SafetyEvaluator interface {
 	Evaluate(ctx context.Context, req *PermissionRequest) (*SafetyEvaluation, error)
