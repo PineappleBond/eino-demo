@@ -103,10 +103,12 @@ func (s *CronService) CreateTask(ctx context.Context, userID, conversationID uui
 	}
 
 	if err := s.registerTask(task); err != nil {
+		s.db.WithContext(ctx).Model(&task).Update("status", "cancelled")
 		s.log.Error("CreateTask: failed to register with scheduler",
 			zap.String("task_id", task.ID.String()),
 			zap.Error(err),
 		)
+		return nil, fmt.Errorf("failed to register task with scheduler: %w", err)
 	}
 
 	return &task, nil
@@ -246,10 +248,14 @@ func parseSchedule(schedule string) (string, time.Time, error) {
 			return "", time.Time{}, fmt.Errorf("invalid once duration %q: %w", schedule[5:], err)
 		}
 		nextRun := time.Now().Add(d)
-		return fmt.Sprintf("@at %s", nextRun.Format(time.RFC3339)), nextRun, nil
+		// Generate a 6-field cron expression (sec min hour day month dow) that fires at the exact time.
+		sched := fmt.Sprintf("%d %d %d %d %d *",
+			nextRun.Second(), nextRun.Minute(), nextRun.Hour(),
+			nextRun.Day(), int(nextRun.Month()))
+		return sched, nextRun, nil
 	}
 
-	p := cron.NewParser(cron.SecondOptional)
+	p := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	spec, err := p.Parse(schedule)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("invalid cron expression %q: %w", schedule, err)

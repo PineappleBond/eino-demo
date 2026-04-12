@@ -102,7 +102,9 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 		// Register with the scheduler so it actually fires.
 		if CronTaskRegisterFunc != nil {
 			if err := CronTaskRegisterFunc(ctx, task.ID, nextRun); err != nil {
-				return CronTaskOutput{Success: false, Message: "created task but failed to register with scheduler: " + err.Error()}, nil
+				// Rollback the DB task to avoid zombie entries.
+				t.db.WithContext(ctx).Model(&task).Update("status", "cancelled")
+				return CronTaskOutput{Success: false, Message: "failed to register task with scheduler: " + err.Error()}, nil
 			}
 		}
 
@@ -194,7 +196,12 @@ func parseCronSchedule(schedule string) (string, time.Time, error) {
 			return "", time.Time{}, fmt.Errorf("invalid once duration %q: %w", schedule[5:], err)
 		}
 		nextRun := time.Now().Add(d)
-		return schedule, nextRun, nil
+		// Generate a 6-field cron expression (sec min hour day month dow) that fires at the exact time.
+		// The scheduler expects 6 fields (created with cron.WithSeconds()).
+		sched := fmt.Sprintf("%d %d %d %d %d *",
+			nextRun.Second(), nextRun.Minute(), nextRun.Hour(),
+			nextRun.Day(), int(nextRun.Month()))
+		return sched, nextRun, nil
 	}
 
 	p := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
