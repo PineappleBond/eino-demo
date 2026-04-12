@@ -28,11 +28,17 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		projectID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("list conversations: invalid project ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
 		conversations, err := svc.ListConversations(userID, projectID)
 		if err != nil {
+			log.Error("list conversations failed",
+				zap.String("user_id", userID.String()),
+				zap.String("project_id", projectID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list conversations")
 			return
 		}
@@ -47,6 +53,7 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		projectID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("create conversation: invalid project ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
@@ -56,6 +63,10 @@ func RegisterConversationRoutes(
 				// Empty body — use defaults
 				req = types.PostProjectsIdConversationsJSONBody{}
 			} else {
+				log.Warn("create conversation: invalid request body",
+					zap.String("user_id", userID.String()),
+					zap.Error(err),
+				)
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
 				return
 			}
@@ -75,9 +86,19 @@ func RegisterConversationRoutes(
 			},
 		)
 		if err != nil {
+			log.Error("create conversation failed",
+				zap.String("user_id", userID.String()),
+				zap.String("project_id", projectID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "failed to create conversation")
 			return
 		}
+		log.Info("conversation created",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+			zap.String("conv_id", conv.ID.String()),
+		)
 		respondJSON(c, http.StatusCreated, convert.ToConversation(*conv))
 	})
 
@@ -85,6 +106,7 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("delete conversation: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
@@ -98,9 +120,18 @@ func RegisterConversationRoutes(
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		); err != nil {
+			log.Error("delete conversation failed",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			return
 		}
+		log.Info("conversation deleted",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
 		c.JSON(http.StatusNoContent, nil)
 	})
 
@@ -109,11 +140,16 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("rename conversation: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
 		var req types.PatchConversationsIdJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn("rename conversation: invalid request body",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
 			return
 		}
@@ -132,9 +168,19 @@ func RegisterConversationRoutes(
 			},
 		)
 		if err != nil {
+			log.Error("rename conversation failed",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			return
 		}
+		log.Info("conversation renamed",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.String("title", conv.Title),
+		)
 		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
 	})
 
@@ -143,11 +189,16 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("update conversation status: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
 		var req types.PutConversationsIdJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn("update conversation status: invalid request body",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
 			return
 		}
@@ -166,9 +217,19 @@ func RegisterConversationRoutes(
 			},
 		)
 		if err != nil {
+			log.Error("update conversation status failed",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			return
 		}
+		log.Info("conversation status updated",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.String("status", conv.Status),
+		)
 		respondJSON(c, http.StatusOK, convert.ToConversation(*conv))
 	})
 
@@ -177,11 +238,17 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("list members: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
 		members, err := svc.ListMembers(userID, conversationID)
 		if err != nil {
+			log.Error("list members failed",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list members")
 			return
 		}
@@ -197,6 +264,7 @@ func RegisterConversationRoutes(
 		userID := getUserID(c)
 		conversationID, err := uuid.Parse(c.Param("id"))
 		if err != nil {
+			log.Warn("compact conversation: invalid conversation ID", zap.String("id", c.Param("id")))
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
 			return
 		}
@@ -205,12 +273,25 @@ func RegisterConversationRoutes(
 			wsManager.PushToUserConnections(userID, wsUpdate)
 		}); err != nil {
 			if errors.Is(err, service.ErrConversationNotFound) {
+				log.Warn("compact conversation: not found",
+					zap.String("user_id", userID.String()),
+					zap.String("conv_id", conversationID.String()),
+				)
 				respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
 			} else {
+				log.Error("compact conversation failed",
+					zap.String("user_id", userID.String()),
+					zap.String("conv_id", conversationID.String()),
+					zap.Error(err),
+				)
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			}
 			return
 		}
+		log.Info("conversation compaction started",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+		)
 		respondJSON(c, http.StatusOK, gin.H{
 			"conversation_id": conversationID.String(),
 			"status":          "compacting",
