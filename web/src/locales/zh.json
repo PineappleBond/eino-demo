@@ -106,7 +106,8 @@
       "edit_automatically": "自动编辑",
       "bypass_permissions": "跳过权限检查",
       "plan_mode": "计划模式（开发中）"
-    }
+    },
+    "modeUpdated": "模式已更新"
   },
   "tools": {
     "input": "输入",

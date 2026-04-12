@@ -9,6 +9,7 @@ import { api, Message as MessageType } from '@/lib/api';
 import type { components } from '@/types/api';
 
 type Member = components['schemas']['Member'];
+type Conversation = components['schemas']['Conversation'];
 import { MessageList } from '@/components/chat/MessageList';
 import { ConvInfoPanel } from '@/components/chat/ConvInfoPanel';
 import { HitlModal } from '@/components/chat/HitlModal';
@@ -34,6 +35,8 @@ interface ChatState {
   // Conversation-level token stats from backend updates
   convTokenPrompt: number;
   convTokenCompletion: number;
+  // Conversation mode
+  mode: string;
   // HITL state
   pendingHitl: {
     id: string;
@@ -69,6 +72,7 @@ type ChatAction =
   | { type: 'CLEAR_MENTIONS' }
   | { type: 'STOP_STREAMING' }
   | { type: 'SET_CONV_TOKENS'; payload: { tokenPrompt?: number; tokenCompletion?: number } }
+  | { type: 'SET_MODE'; payload: string }
   | { type: 'SET_PENDING_HITL'; payload: ChatState['pendingHitl'] }
   | { type: 'SET_HITL_MODAL_OPEN'; payload: boolean }
   | { type: 'CLEAR_PENDING_HITL' }
@@ -151,6 +155,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         convTokenCompletion: p.tokenCompletion !== undefined ? p.tokenCompletion : state.convTokenCompletion,
       };
     }
+    case 'SET_MODE':
+      return { ...state, mode: action.payload };
     case 'SET_PENDING_HITL':
       return { ...state, pendingHitl: action.payload, hitlModalOpen: action.payload !== null };
     case 'SET_HITL_MODAL_OPEN':
@@ -187,6 +193,7 @@ const initialState: ChatState = {
   mentions: [],
   convTokenPrompt: 0,
   convTokenCompletion: 0,
+  mode: 'ask_before_edits',
   pendingHitl: null,
   hitlModalOpen: false,
   pendingPermissions: new Map(),
@@ -352,6 +359,11 @@ export default function ConvChatPage() {
             tokenCompletion: payload.token_completion,
           },
         });
+        // Sync mode from WS push if present
+        const modeFromPayload = (payload as Record<string, unknown>).mode as string | undefined;
+        if (modeFromPayload) {
+          dispatch({ type: 'SET_MODE', payload: modeFromPayload });
+        }
         break;
       }
       case 'human_in_the_loop.created': {
@@ -485,6 +497,16 @@ export default function ConvChatPage() {
               };
               dispatch({ type: 'ADD_PENDING_PERMISSION', payload: permPayload });
             }
+          }
+        })
+        .catch(() => {});
+
+      // Fetch conversation mode
+      api.get<Conversation>(`/conversations/${convId}`)
+        .then((conv) => {
+          if (cancelled) return;
+          if (conv.mode) {
+            dispatch({ type: 'SET_MODE', payload: conv.mode });
           }
         })
         .catch(() => {});
@@ -644,6 +666,18 @@ export default function ConvChatPage() {
     dispatch({ type: 'REMOVE_MENTION', payload: id });
   }, []);
 
+  // ─── Mode change ───
+
+  const handleModeChange = useCallback(async (newMode: string) => {
+    try {
+      await api.patch(`/conversations/${convId}`, { mode: newMode });
+      dispatch({ type: 'SET_MODE', payload: newMode });
+      message.success(t('modeUpdated') || 'Mode updated');
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Failed to update mode');
+    }
+  }, [convId, message]);
+
   // ─── Context menu ───
 
   const getMessageContextMenu = useCallback((msg: MessageType): MenuProps['items'] => {
@@ -745,6 +779,8 @@ export default function ConvChatPage() {
           members={state.members}
           stats={stats}
           model="Sonnet"
+          mode={state.mode}
+          onModeChange={handleModeChange}
           onMemberMention={handleMemberMention}
           conversationId={convId}
         />

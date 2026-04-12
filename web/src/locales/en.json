@@ -106,7 +106,8 @@
       "edit_automatically": "Edit automatically",
       "bypass_permissions": "Bypass permissions",
       "plan_mode": "Plan mode (coming soon)"
-    }
+    },
+    "modeUpdated": "Mode updated"
   },
   "tools": {
     "input": "Input",
