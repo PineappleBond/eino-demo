@@ -67,11 +67,15 @@ type readFileInput struct {
 type readFilePerm struct{ workspaceDir string }
 
 func (p *readFilePerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "read_file",
-		Desc: "Read the content of a file with optional line offset and limit",
+		Desc: fmt.Sprintf("Read the content of a file at path 'file_path'. If not absolute, it is resolved relative to workspace %q.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"file_path": {Type: schema.String, Desc: "Absolute path to the file to read", Required: true},
+			"file_path": {Type: schema.String, Desc: "File path (absolute or relative to workspace " + ws + ")", Required: true},
 			"offset":    {Type: schema.Integer, Desc: "Starting line number (1-based, default 1)"},
 			"limit":     {Type: schema.Integer, Desc: "Maximum number of lines to read (default 2000)"},
 		}),
@@ -159,11 +163,15 @@ type writeFileInput struct {
 type writeFilePerm struct{ workspaceDir string }
 
 func (p *writeFilePerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "write_file",
-		Desc: "Create a new file or overwrite an existing file with the given content",
+		Desc: fmt.Sprintf("Create a new file or overwrite an existing file. Path is resolved relative to workspace %q.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"file_path": {Type: schema.String, Desc: "Absolute path to the file to create", Required: true},
+			"file_path": {Type: schema.String, Desc: "File path (absolute or relative to workspace " + ws + ")", Required: true},
 			"content":   {Type: schema.String, Desc: "Content to write to the file", Required: true},
 		}),
 	}, nil
@@ -227,11 +235,15 @@ type editFileInput struct {
 type editFilePerm struct{ workspaceDir string }
 
 func (p *editFilePerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "edit_file",
-		Desc: "Find and replace text in an existing file",
+		Desc: fmt.Sprintf("Find and replace text in a file. Path is resolved relative to workspace %q.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"file_path":   {Type: schema.String, Desc: "Absolute path to the file to edit", Required: true},
+			"file_path":   {Type: schema.String, Desc: "File path (absolute or relative to workspace " + ws + ")", Required: true},
 			"old_string":  {Type: schema.String, Desc: "The text to replace", Required: true},
 			"new_string":  {Type: schema.String, Desc: "The replacement text", Required: true},
 			"replace_all": {Type: schema.Boolean, Desc: "Replace all occurrences (default false)"},
@@ -320,12 +332,16 @@ type globInput struct {
 type globPerm struct{ workspaceDir string }
 
 func (p *globPerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "glob",
-		Desc: "Find files matching a glob pattern recursively",
+		Desc: fmt.Sprintf("Find files matching a glob pattern. Search starts from workspace %q.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path":    {Type: schema.String, Desc: "Directory to start searching from"},
-			"pattern": {Type: schema.String, Desc: "Glob pattern to match files", Required: true},
+			"path":    {Type: schema.String, Desc: "Directory to search from (defaults to workspace " + ws + ")"},
+			"pattern": {Type: schema.String, Desc: "Glob pattern to match files (e.g. '*.go', '**/*.ts')", Required: true},
 		}),
 	}, nil
 }
@@ -411,14 +427,18 @@ type grepInput struct {
 type grepPerm struct{ workspaceDir string }
 
 func (p *grepPerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "grep",
-		Desc: "Search for a pattern in files using ripgrep (rg)",
+		Desc: fmt.Sprintf("Search for a pattern in files using ripgrep (rg). Search starts from workspace %q.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path":             {Type: schema.String, Desc: "Directory or file to search in"},
+			"path":             {Type: schema.String, Desc: "Directory or file to search (defaults to workspace " + ws + ")"},
 			"pattern":          {Type: schema.String, Desc: "Regex pattern to search for", Required: true},
 			"case_insensitive": {Type: schema.Boolean, Desc: "Enable case-insensitive search"},
-			"glob":             {Type: schema.String, Desc: "Optional glob to filter files"},
+			"glob":             {Type: schema.String, Desc: "Optional glob to filter files (e.g. '*.go')"},
 		}),
 	}, nil
 }

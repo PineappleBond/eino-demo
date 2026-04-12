@@ -26,11 +26,15 @@ type executeInput struct {
 type executePerm struct{ workspaceDir string }
 
 func (p *executePerm) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	ws := p.workspaceDir
+	if ws == "" {
+		ws = "/"
+	}
 	return &schema.ToolInfo{
 		Name: "execute",
-		Desc: "Execute a shell command and return the output",
+		Desc: fmt.Sprintf("Execute a shell command. The working directory is set to workspace %q. Use relative paths from that directory, or absolute paths.", ws),
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"command": {Type: schema.String, Desc: "Shell command to execute", Required: true},
+			"command": {Type: schema.String, Desc: "Shell command to execute (run from workspace " + ws + ")", Required: true},
 		}),
 	}, nil
 }
