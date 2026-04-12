@@ -72,16 +72,6 @@ func (p *executePerm) InvokableRun(ctx context.Context, argumentsInJSON string, 
 	return result, nil
 }
 
-func (p *executePerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, _ := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		sw.Send(result, nil)
-	}()
-	return sr, nil
-}
-
 func (p *executePerm) NeedPermission(input any) *permission.PermissionRequest {
 	args, _ := input.(map[string]any)
 	command := getStringAny(args, "command")
@@ -109,15 +99,15 @@ type commandAnalysisResult struct {
 // safeNoPathCommands are commands that don't touch the filesystem at all.
 // They are always safe regardless of workspaceDir.
 var safeNoPathCommands = map[string]bool{
-	"echo":  true,
-	"date":  true,
+	"echo":   true,
+	"date":   true,
 	"whoami": true,
-	"uname": true,
-	"id":    true,
-	"true":  true,
-	"false": true,
-	"sleep": true,
-	"pwd":   true,
+	"uname":  true,
+	"id":     true,
+	"true":   true,
+	"false":  true,
+	"sleep":  true,
+	"pwd":    true,
 }
 
 // safeReadCommands are read-only filesystem commands that are low-risk
@@ -135,12 +125,12 @@ var safeReadCommands = map[string]bool{
 // writeCommands modify the filesystem and require permission approval
 // even when paths are within the workspace.
 var writeCommands = map[string]bool{
-	"mkdir":  true,
-	"touch":  true,
-	"cp":     true,
-	"mv":     true,
-	"chmod":  true,
-	"chown":  true,
+	"mkdir": true,
+	"touch": true,
+	"cp":    true,
+	"mv":    true,
+	"chmod": true,
+	"chown": true,
 }
 
 // systemReadCommands are system information commands that may read outside
@@ -154,16 +144,16 @@ var systemReadCommands = map[string]bool{
 
 // dangerousCommands are always blocked regardless of workspace.
 var dangerousCommands = map[string]bool{
-	"rm":     true,
-	"dd":     true,
-	"mkfs":   true,
-	"fdisk":  true,
-	"curl":   true,
-	"wget":   true,
-	"ssh":    true,
-	"scp":    true,
-	"rsync":  true,
-	"git":    true,
+	"rm":    true,
+	"dd":    true,
+	"mkfs":  true,
+	"fdisk": true,
+	"curl":  true,
+	"wget":  true,
+	"ssh":   true,
+	"scp":   true,
+	"rsync": true,
+	"git":   true,
 }
 
 // isDangerousCommand checks if a command is dangerous, including prefix matches

@@ -72,10 +72,19 @@ func (h *RootRunnerHandler) OnEndWithStreamOutput(ctx context.Context, info *cal
 			}
 			break
 		}
+		// StreamableTool output: forward each chunk to OnOutputToolCalling.
+		// Must check before ConvCallbackOutput, which only recognizes
+		// *model.CallbackOutput and *schema.Message (returns nil for tool strings).
+		if info != nil && info.Component == components.ComponentOfTool {
+			h.callback.OnOutputToolCalling(ctx, info, compose.GetCurrentAddress(ctx), chunk)
+			continue
+		}
+
 		modelOutput := einomodel.ConvCallbackOutput(chunk)
 		if modelOutput == nil {
 			continue
 		}
+
 		msg := modelOutput.Message // 不能为nil
 		if msg == nil {
 			continue

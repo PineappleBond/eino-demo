@@ -59,9 +59,9 @@ func NewMiddleware(cfg MiddlewareConfig) *Middleware {
 
 	return &Middleware{
 		BaseChatModelAgentMiddleware: &adk.BaseChatModelAgentMiddleware{},
-		cfg:       cfg,
-		checker:   checker,
-		permTools: permTools,
+		cfg:                          cfg,
+		checker:                      checker,
+		permTools:                    permTools,
 	}
 }
 
@@ -76,7 +76,7 @@ func (m *Middleware) WrapInvokableToolCall(ctx context.Context, next adk.Invokab
 		if !allowed {
 			return "", nil // Interrupt was called, return empty.
 		}
-		return next(ctx, argumentsInJSON)
+		return next(ctx, argumentsInJSON, opts...)
 	}, nil
 }
 
@@ -89,9 +89,15 @@ func (m *Middleware) WrapStreamableToolCall(ctx context.Context, next adk.Stream
 			return nil, err
 		}
 		if !allowed {
-			return nil, nil
+			// Return a stream with a single empty chunk instead of nil.
+			// Eino's callback framework calls Copy() on the returned reader (nil would panic),
+			// and concatStreamReader requires at least 1 chunk (empty stream would fail).
+			sr, sw := schema.Pipe[string](1)
+			sw.Send("", nil)
+			sw.Close()
+			return sr, nil
 		}
-		return next(ctx, argumentsInJSON)
+		return next(ctx, argumentsInJSON, opts...)
 	}, nil
 }
 
@@ -226,17 +232,17 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 	// We must extract it and include in the permission.pending update so the frontend can
 	// pass it back as the resume target.
 	interruptErr := tool.Interrupt(ctx, map[string]any{
-		"type":           "permission_request",
-		"tool_name":      req.ToolName,
-		"action":         req.Action,
-		"content":        req.Content,
-		"tool_desc":      req.ToolDesc,
-		"args_summary":   req.ArgsSummary,
-		"safety_level":   eval.Level,
-		"safety_reason":  eval.Reason,
-		"question":       question,
-		"answer_type":    "single",
-		"choices":        choices,
+		"type":          "permission_request",
+		"tool_name":     req.ToolName,
+		"action":        req.Action,
+		"content":       req.Content,
+		"tool_desc":     req.ToolDesc,
+		"args_summary":  req.ArgsSummary,
+		"safety_level":  eval.Level,
+		"safety_reason": eval.Reason,
+		"question":      question,
+		"answer_type":   "single",
+		"choices":       choices,
 	})
 
 	// Extract the InterruptSignal ID from the returned error.

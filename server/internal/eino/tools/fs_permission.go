@@ -96,21 +96,6 @@ func (p *readFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string,
 	return content, nil
 }
 
-func (p *readFilePerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, err := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		if err != nil {
-			chunk := fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error())
-			sw.Send(chunk, nil)
-		} else {
-			sw.Send(result, nil)
-		}
-	}()
-	return sr, nil
-}
-
 func (p *readFilePerm) NeedPermission(input any) *permission.PermissionRequest {
 	args, _ := input.(map[string]any)
 	filePath := getStringAny(args, "file_path")
@@ -204,16 +189,6 @@ func (p *writeFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string
 		return fmt.Sprintf("<tool_error>\nfailed to write file: %s\n</tool_error>", err.Error()), nil
 	}
 	return fmt.Sprintf("Successfully wrote %d bytes to %s", len(input.Content), resolvedPath), nil
-}
-
-func (p *writeFilePerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, _ := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		sw.Send(result, nil)
-	}()
-	return sr, nil
 }
 
 func (p *writeFilePerm) NeedPermission(input any) *permission.PermissionRequest {
@@ -311,16 +286,6 @@ func (p *editFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string,
 	return fmt.Sprintf("Replaced %d occurrence(s) in %s", replacements, resolvedPath), nil
 }
 
-func (p *editFilePerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, _ := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		sw.Send(result, nil)
-	}()
-	return sr, nil
-}
-
 func (p *editFilePerm) NeedPermission(input any) *permission.PermissionRequest {
 	args, _ := input.(map[string]any)
 	filePath := getStringAny(args, "file_path")
@@ -406,16 +371,6 @@ func (p *globPerm) InvokableRun(ctx context.Context, argumentsInJSON string, opt
 	}
 
 	return strings.Join(matches, "\n"), nil
-}
-
-func (p *globPerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, _ := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		sw.Send(result, nil)
-	}()
-	return sr, nil
 }
 
 func (p *globPerm) NeedPermission(input any) *permission.PermissionRequest {
@@ -513,16 +468,6 @@ func (p *grepPerm) InvokableRun(ctx context.Context, argumentsInJSON string, opt
 	}
 
 	return string(output), nil
-}
-
-func (p *grepPerm) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	sr, sw := schema.Pipe[string](1)
-	go func() {
-		defer sw.Close()
-		result, _ := p.InvokableRun(ctx, argumentsInJSON, opts...)
-		sw.Send(result, nil)
-	}()
-	return sr, nil
 }
 
 func (p *grepPerm) NeedPermission(input any) *permission.PermissionRequest {

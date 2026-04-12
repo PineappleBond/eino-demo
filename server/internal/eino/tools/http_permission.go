@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino-ext/components/tool/httprequest"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/permission"
@@ -28,13 +28,6 @@ func (w *httpPermWrapper) InvokableRun(ctx context.Context, argumentsInJSON stri
 		return inv.InvokableRun(ctx, argumentsInJSON, opts...)
 	}
 	return "", nil
-}
-
-func (w *httpPermWrapper) StreamableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-	if sr, ok := w.tool.(tool.StreamableTool); ok {
-		return sr.StreamableRun(ctx, argumentsInJSON, opts...)
-	}
-	return nil, nil
 }
 
 func (w *httpPermWrapper) NeedPermission(input any) *permission.PermissionRequest {
