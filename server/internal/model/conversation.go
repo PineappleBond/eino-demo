@@ -24,6 +24,7 @@ type Conversation struct {
 	ParentConversationID *uuid.UUID `gorm:"type:uuid"`
 	UpdatedAt            time.Time  `gorm:"not null;autoUpdateTime;index"`
 	CheckpointID         string     `gorm:"type:varchar(255);not null;default:''"` // Eino checkpoint for resume
+	Mode                 string     `gorm:"type:varchar(30);not null;default:'ask_before_edits'"` // conversation interaction mode
 }
 
 func (Conversation) TableName() string { return "conversations" }
