@@ -718,7 +718,7 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		}
 		hitl := model.HumanInTheLoop{
 			ConversationID: c.cfg.ConversationID,
-			CheckpointID:   checkpointID,
+			CheckpointID:   c.cfg.ConversationID.String(),
 			InterruptID:    interruptID,
 			Question:       hitlData.Question,
 			Choices:        model.JSONMap{"choices": choicesAny},

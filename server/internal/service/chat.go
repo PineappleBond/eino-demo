@@ -954,20 +954,18 @@ func (s *ChatService) AnswerQuestion(
 	}
 
 	// 6. Set resume params and trigger a new agent run.
-	// Use checkpoint from request if provided, otherwise fall back to DB.
-	cpID := req.CheckpointID
-	if cpID == "" && conv.CheckpointID != "" {
-		cpID = conv.CheckpointID
-	}
+	// Always use conversationID.String() as the checkpoint key — this is the same
+	// key passed to RootRunner.Run via WithCheckPointID. The DB checkpoint_id may
+	// contain stale address-derived values from before the fix, which don't match
+	// any entry in the checkpoint store.
+	checkpointKey := conversationID.String()
 
 	// Clear the DB checkpoint — it will be re-set by the next interrupt if needed.
-	if cpID != "" {
-		if err := s.db.WithContext(ctx).
-			Model(&model.Conversation{}).
-			Where("id = ?", conversationID).
-			Update("checkpoint_id", "").Error; err != nil {
-			s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
-		}
+	if err := s.db.WithContext(ctx).
+		Model(&model.Conversation{}).
+		Where("id = ?", conversationID).
+		Update("checkpoint_id", "").Error; err != nil {
+		s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
 	}
 
 	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
@@ -976,10 +974,9 @@ func (s *ChatService) AnswerQuestion(
 		},
 	})
 
-	// Also store the checkpoint in the session (same rationale as AnswerPermission).
-	if cpID != "" {
-		s.runSessionMgr.SetCheckpointID(conversationID, cpID)
-	}
+	// Also store the checkpoint in the session so runAgent's GetCheckpointID
+	// returns true.
+	s.runSessionMgr.SetCheckpointID(conversationID, checkpointKey)
 
 	go func() {
 		defer func() {
