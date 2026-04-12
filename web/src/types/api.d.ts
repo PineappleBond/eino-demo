@@ -433,6 +433,11 @@ export interface paths {
                 content: {
                     "application/json": {
                         title?: string;
+                        /**
+                         * @default ask_before_edits
+                         * @enum {string}
+                         */
+                        mode?: "ask_before_edits" | "edit_automatically" | "bypass_permissions" | "plan_mode";
                     };
                 };
             };
@@ -448,6 +453,7 @@ export interface paths {
                             project_id?: string;
                             user_id?: string;
                             title?: string;
+                            mode?: string;
                             status?: string;
                             /** Format: date-time */
                             created_at?: string;
@@ -550,11 +556,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody: {
+            requestBody?: {
                 content: {
                     "application/json": {
                         /** @description New conversation title */
-                        title: string;
+                        title?: string;
+                        /** @enum {string} */
+                        mode?: "ask_before_edits" | "edit_automatically" | "bypass_permissions" | "plan_mode";
                     };
                 };
             };
@@ -1416,6 +1424,11 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * @default ask_before_edits
+             * @enum {string}
+             */
+            mode: "ask_before_edits" | "edit_automatically" | "bypass_permissions" | "plan_mode";
         };
         Message: {
             id: string;
@@ -1580,6 +1593,8 @@ export interface components {
              * @description Estimated completion token count for the conversation.
              */
             token_completion?: number;
+            /** @description Conversation permission mode. */
+            mode?: string;
         };
         ConversationCreatedPayload: {
             /** @description UUID of the conversation. */
