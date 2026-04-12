@@ -11,6 +11,10 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
 
+// TodoSyncFunc is a callback that pushes a todo.sync update to the user.
+// This is set by module.go to avoid import cycles.
+var TodoSyncFunc func(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID)
+
 // TodoReadInput is the input schema for the todo_read tool.
 type TodoReadInput struct{}
 
@@ -93,6 +97,13 @@ func NewTodoWriteTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool
 				if err := t.db.Create(&todo).Error; err != nil {
 					return TodoWriteOutput{Success: false, Message: "failed to create todo: " + err.Error()}, nil
 				}
+
+				// Notify the frontend via todo.sync so the todo panel refreshes.
+				var conv model.Conversation
+				if err := t.db.WithContext(ctx).Where("id = ?", t.ConversationID).First(&conv).Error; err == nil && TodoSyncFunc != nil {
+					TodoSyncFunc(ctx, conv.UserID, t.ConversationID)
+				}
+
 				return TodoWriteOutput{
 					Success: true,
 					Message: "Created todo: " + input.Content,
@@ -123,6 +134,13 @@ func NewTodoWriteTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool
 						return TodoWriteOutput{Success: false, Message: "failed to update todo: " + err.Error()}, nil
 					}
 				}
+
+				// Notify the frontend via todo.sync so the todo panel refreshes.
+				var conv model.Conversation
+				if err := t.db.WithContext(ctx).Where("id = ?", t.ConversationID).First(&conv).Error; err == nil && TodoSyncFunc != nil {
+					TodoSyncFunc(ctx, conv.UserID, t.ConversationID)
+				}
+
 				return TodoWriteOutput{
 					Success: true,
 					Message: "Updated todo",
@@ -144,6 +162,13 @@ func NewTodoWriteTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool
 				if result.RowsAffected == 0 {
 					return TodoWriteOutput{Success: false, Message: "todo not found"}, nil
 				}
+
+				// Notify the frontend via todo.sync so the todo panel refreshes.
+				var conv model.Conversation
+				if err := t.db.WithContext(ctx).Where("id = ?", t.ConversationID).First(&conv).Error; err == nil && TodoSyncFunc != nil {
+					TodoSyncFunc(ctx, conv.UserID, t.ConversationID)
+				}
+
 				return TodoWriteOutput{
 					Success: true,
 					Message: "Deleted todo",
