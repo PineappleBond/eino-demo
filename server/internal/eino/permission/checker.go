@@ -149,11 +149,11 @@ func (c *Checker) WriteWhitelist(ctx context.Context, req *PermissionRequest, wi
 // MapAnswerToDecision maps the user's answer text to a Decision.
 func MapAnswerToDecision(answer string) Decision {
 	switch answer {
-	case "同意":
+	case "同意", string(DecisionApproved):
 		return DecisionApproved
-	case "同意并记住":
+	case "同意并记住", string(DecisionApprovedExact):
 		return DecisionApprovedExact
-	case "同意并通配记住":
+	case "同意并通配记住", string(DecisionApprovedWildcard):
 		return DecisionApprovedWildcard
 	default:
 		return DecisionDenied

@@ -692,11 +692,15 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 		for _, ictx := range info.InterruptContexts {
 			if m, ok := ictx.Info.(map[string]any); ok {
 				if typ, _ := m["type"].(string); typ == "permission_request" {
+					// Use conversationID as the checkpoint key (same key passed to
+					// RootRunner.Run via WithCheckPointID). InterruptContexts[0].ID
+					// is an address-derived string, not the store key.
+					checkpointKey := c.cfg.ConversationID.String()
 					c.cfg.DB.WithContext(ctx).Table("human_in_permissions").
 						Where("conversation_id = ? AND checkpoint_id = '' AND interrupt_id = '' AND status = 'pending'",
 							c.cfg.ConversationID).
 						Updates(map[string]interface{}{
-							"checkpoint_id": checkpointID,
+							"checkpoint_id": checkpointKey,
 							"interrupt_id":  interruptID,
 						})
 					break
@@ -863,7 +867,9 @@ func (c *RootRunnerCallbacks) Set(ctx context.Context, checkpointID string, data
 	cp.State = data
 
 	if err == gorm.ErrRecordNotFound {
-		return c.cfg.DB.WithContext(ctx).Create(&cp).Error
+		cp.ID = uuid.New()
+		err := c.cfg.DB.WithContext(ctx).Create(&cp).Error
+		return err
 	}
 	if err != nil {
 		return fmt.Errorf("checkpoint set failed: %w", err)

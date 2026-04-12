@@ -44,6 +44,55 @@ func LoadTemplate(name string) (*template.Template, error) {
 	return tmpl, nil
 }
 
+// RenderSelect loads a template with en/zh variants (separated by "---"),
+// selects the correct language, and executes it.
+// Returns the rendered string.
+func RenderSelect(name string, data any, useChinese bool) (string, error) {
+	path := "templates/" + name + ".tmpl"
+	content, err := fs.ReadFile(TemplatesFS, path)
+	if err != nil {
+		return "", fmt.Errorf("read prompt template %q: %w", path, err)
+	}
+
+	enContent, zhContent, err := splitVariants(string(content))
+	if err != nil {
+		return "", fmt.Errorf("split variants for %q: %w", path, err)
+	}
+
+	selected := enContent
+	if useChinese {
+		selected = zhContent
+	}
+
+	tmpl, err := template.New(name).Parse(selected)
+	if err != nil {
+		return "", fmt.Errorf("parse template %q: %w", path, err)
+	}
+
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("execute template %q: %w", path, err)
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
+
+// splitVariants splits template content on "---" separator into en/zh parts.
+// If no separator is found, the entire content is returned as both en and zh.
+func splitVariants(content string) (en, zh string, err error) {
+	content = strings.TrimSpace(content)
+	// Find "---" on its own line
+	idx := strings.Index(content, "\n---\n")
+	if idx == -1 {
+		return content, content, nil
+	}
+	en = strings.TrimSpace(content[:idx])
+	zh = strings.TrimSpace(content[idx+len("\n---\n"):])
+	if zh == "" {
+		return en, en, nil
+	}
+	return en, zh, nil
+}
+
 // Render executes the named template with the given data and returns the rendered string.
 func Render(name string, data any) (string, error) {
 	tmpl, err := LoadTemplate(name)

@@ -23,6 +23,7 @@ type Conversation struct {
 	MemberCount          int        `gorm:"not null;default:0"`
 	ParentConversationID *uuid.UUID `gorm:"type:uuid"`
 	UpdatedAt            time.Time  `gorm:"not null;autoUpdateTime;index"`
+	CheckpointID         string     `gorm:"type:varchar(255);not null;default:''"` // Eino checkpoint for resume
 }
 
 func (Conversation) TableName() string { return "conversations" }

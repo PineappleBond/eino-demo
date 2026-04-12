@@ -2,10 +2,18 @@ package tools
 
 import (
 	"context"
+	"encoding/gob"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
 )
+
+func init() {
+	// Eino's checkpoint serialization uses gob. When tool.Interrupt is called
+	// with map[string]any containing []HitlChoice, gob needs to know the type.
+	gob.Register(HitlChoice{})
+	gob.Register([]HitlChoice{})
+}
 
 // HitlChoice represents a single choice option for the ask_user_question tool.
 type HitlChoice struct {

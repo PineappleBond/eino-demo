@@ -23,6 +23,15 @@ func ProvideDB(databaseURL string, log *zap.Logger) *gorm.DB {
 		log.Fatal("db: failed to setup pgvector", zap.Error(err))
 	}
 
+	// Before AutoMigrate: alter checkpoints.message_id to nullable.
+	// The ADK CheckPointStore.Set callback doesn't receive message info, so new
+	// checkpoints have a nil MessageID. AutoMigrate won't drop NOT NULL on
+	// existing columns, so we do it manually here.
+	_ = db.Exec("ALTER TABLE checkpoints ALTER COLUMN message_id DROP NOT NULL").Error
+	// Also change the FK from CASCADE to SET NULL (ignore "already exists" errors).
+	_ = db.Exec("ALTER TABLE checkpoints DROP CONSTRAINT IF EXISTS fk_checkpoints_message_id").Error
+	_ = db.Exec("ALTER TABLE checkpoints ADD CONSTRAINT fk_checkpoints_message_id FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL").Error
+
 	// AutoMigrate all models
 	if err := db.AutoMigrate(
 		&model.User{},
@@ -86,7 +95,7 @@ func setupForeignKeys(db *gorm.DB, log *zap.Logger) error {
 		`ALTER TABLE checkpoints ADD CONSTRAINT fk_checkpoints_conversation_id
 			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
 		`ALTER TABLE checkpoints ADD CONSTRAINT fk_checkpoints_message_id
-			 FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE`,
+			 FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL`,
 		`ALTER TABLE human_in_the_loops ADD CONSTRAINT fk_hitl_conversation_id
 			 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE`,
 		`ALTER TABLE todos ADD CONSTRAINT fk_todos_conversation_id

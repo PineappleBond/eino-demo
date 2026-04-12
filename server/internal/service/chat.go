@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner/skill"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
-	"github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
@@ -65,13 +65,13 @@ func NewChatService(
 	}
 
 	return &ChatService{
-		db:             db,
-		log:            log,
-		modelProvider:  modelProvider,
-		toolRegistry:   toolRegistry,
-		runSessionMgr:  runSessionMgr,
-		messageQueue:   messageQueue,
-		compressionSvc: compressionSvc,
+		db:              db,
+		log:             log,
+		modelProvider:   modelProvider,
+		toolRegistry:    toolRegistry,
+		runSessionMgr:   runSessionMgr,
+		messageQueue:    messageQueue,
+		compressionSvc:  compressionSvc,
 		evalModelConfig: evalCfg,
 	}
 }
@@ -474,6 +474,12 @@ func (s *ChatService) runAgent(
 	// 7. Check for existing checkpoint to resume
 	checkpointID, hasCheckpoint := s.runSessionMgr.GetCheckpointID(conversationID)
 
+	// Fall back to DB checkpoint if session was cleaned up (e.g., after interrupt).
+	if !hasCheckpoint && conv.CheckpointID != "" {
+		checkpointID = conv.CheckpointID
+		hasCheckpoint = true
+	}
+
 	var iter *adk.AsyncIterator[*adk.AgentEvent]
 
 	// 6. Load conversation history — shared function handles tool_calling and tool messages.
@@ -540,17 +546,23 @@ func (s *ChatService) runAgent(
 			iter, err = rootRunner.ResumeWithParams(runCtx, checkpointID, resumeParams, handler)
 			if err != nil {
 				s.log.Error("runAgent: resumeWithParams failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
-				iter = rootRunner.Run(runCtx, messages, "", handler)
+				// Pass conversationID as checkpoint key so the compose layer saves state
+				iter = rootRunner.Run(runCtx, messages, conversationID.String(), handler)
 			}
 		} else {
 			iter, err = rootRunner.Resume(runCtx, checkpointID, handler)
 			if err != nil {
 				s.log.Error("runAgent: resume failed, falling back to fresh run", zap.Error(err), zap.String("checkpoint", checkpointID))
-				iter = rootRunner.Run(runCtx, messages, "", handler)
+				// Pass conversationID as checkpoint key so the compose layer saves state
+				iter = rootRunner.Run(runCtx, messages, conversationID.String(), handler)
 			}
 		}
 	} else {
-		iter = rootRunner.Run(runCtx, messages, "", handler)
+		// Pass conversationID as checkpoint key so the compose layer saves state
+		// to the store on interrupt. Without this, WithCheckPointID is not set,
+		// the checkpoint is never persisted, and ResumeWithParams fails with
+		// "checkpoint not exist".
+		iter = rootRunner.Run(runCtx, messages, conversationID.String(), handler)
 	}
 
 	// 8. Consume events in goroutine with timeout protection and panic recovery
@@ -690,12 +702,95 @@ func (s *ChatService) runAgent(
 					break
 				}
 				if event.Action != nil && event.Action.Interrupted != nil {
-					// Store checkpoint ID for resume
-					if len(event.Action.Interrupted.InterruptContexts) > 0 {
-						cpID := event.Action.Interrupted.InterruptContexts[0].ID
-						s.runSessionMgr.SetCheckpointID(conversationID, cpID)
+					s.log.Info("runAgent: received interrupted event",
+						zap.String("conv", conversationID.String()),
+						zap.Int("interrupt_contexts", len(event.Action.Interrupted.InterruptContexts)),
+					)
+					// Use conversationID as the checkpoint key — this is the same key
+					// passed to RootRunner.Run via WithCheckPointID. The InterruptContexts[0].ID
+					// is an address-derived string that is NOT the checkpoint store key.
+					checkpointKey := conversationID.String()
+					s.runSessionMgr.SetCheckpointID(conversationID, checkpointKey)
+
+					// Persist checkpoint to DB so it survives session cleanup.
+					if err := s.db.WithContext(ctx).
+						Model(&model.Conversation{}).
+						Where("id = ?", conversationID).
+						Update("checkpoint_id", checkpointKey).Error; err != nil {
+						s.log.Error("failed to persist checkpoint_id to conversation",
+							zap.String("conv", conversationID.String()),
+							zap.Error(err),
+						)
 					}
-					callbacks.OnInterrupted(event.Action.Interrupted)
+
+						// Extract permission data from the root cause interrupt context.
+						// The Data field is *adk.ChatModelAgentInterruptInfo (serialized),
+						// but InterruptContexts[i].Info contains the original map[string]any
+						// passed to tool.Interrupt.
+						ctxs := event.Action.Interrupted.InterruptContexts
+						// Find the root cause context (leaf of the interrupt chain).
+						leafIdx := 0
+						for i, ic := range ctxs {
+							if ic != nil && ic.IsRootCause {
+								leafIdx = i
+								break
+							}
+						}
+						if data, ok := ctxs[leafIdx].Info.(map[string]any); ok {
+							if permID, ok := data["permission_id"].(string); ok && permID != "" {
+								// Update the pending permission record with checkpoint_id
+								if err := s.db.WithContext(ctx).
+									Model(&model.HumanInPermission{}).
+									Where("id = ? AND status = 'pending'", permID).
+									Update("checkpoint_id", checkpointKey).Error; err != nil {
+									s.log.Error("failed to update permission checkpoint_id",
+										zap.String("permission_id", permID),
+										zap.Error(err),
+									)
+								}
+
+								// interrupt_id from the last context in the chain
+								interruptID := ctxs[len(ctxs)-1].ID
+
+								s.log.Info("runAgent: pushing permission.pending from event loop",
+									zap.String("permission_id", permID),
+									zap.String("checkpoint_id", checkpointKey),
+									zap.String("interrupt_id", interruptID),
+								)
+
+								// Push permission.pending update with valid IDs
+								seq, seqErr := nextSeq(ctx, userID)
+								if seqErr != nil {
+									s.log.Error("seq assignment failed for permission.pending", zap.Error(seqErr))
+								} else if seq > 0 {
+									update := model.UserUpdate{
+										UserID: userID,
+										Seq:    seq,
+										Type:   "permission.pending",
+										Payload: model.JSONMap{
+											"conversation_id": conversationID.String(),
+											"permission_id":   permID,
+											"checkpoint_id":   checkpointKey,
+											"interrupt_id":    interruptID,
+											"tool_name":       getString(data, "tool_name"),
+											"action":          getString(data, "action"),
+											"content":         getString(data, "content"),
+											"tool_desc":       getString(data, "tool_desc"),
+											"args_summary":    getString(data, "args_summary"),
+											"safety_level":    getInt(data, "safety_level"),
+											"safety_reason":   getString(data, "safety_reason"),
+											"seq":             seq,
+										},
+									}
+									if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
+										s.log.Error("persist permission.pending update", zap.Error(dbErr))
+									} else {
+										pushUpdate(userID, update)
+									}
+								}
+							}
+						}
+						callbacks.OnInterrupted(event.Action.Interrupted)
 					break
 				}
 			}
@@ -859,12 +954,32 @@ func (s *ChatService) AnswerQuestion(
 	}
 
 	// 6. Set resume params and trigger a new agent run.
-	// The runAgent method detects ResumeParams and uses ResumeWithParams.
+	// Use checkpoint from request if provided, otherwise fall back to DB.
+	cpID := req.CheckpointID
+	if cpID == "" && conv.CheckpointID != "" {
+		cpID = conv.CheckpointID
+	}
+
+	// Clear the DB checkpoint — it will be re-set by the next interrupt if needed.
+	if cpID != "" {
+		if err := s.db.WithContext(ctx).
+			Model(&model.Conversation{}).
+			Where("id = ?", conversationID).
+			Update("checkpoint_id", "").Error; err != nil {
+			s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
+		}
+	}
+
 	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
 		Targets: map[string]any{
 			req.InterruptID: req.Answer,
 		},
 	})
+
+	// Also store the checkpoint in the session (same rationale as AnswerPermission).
+	if cpID != "" {
+		s.runSessionMgr.SetCheckpointID(conversationID, cpID)
+	}
 
 	go func() {
 		defer func() {
@@ -994,11 +1109,29 @@ func (s *ChatService) AnswerPermission(
 	}
 
 	// 7. Set ResumeParams and restart agent.
+	// Always use conversationID.String() as the checkpoint key — this is the same
+	// key passed to RootRunner.Run via WithCheckPointID. The DB checkpoint_id may
+	// contain stale address-derived values from before the fix, which don't match
+	// any entry in the checkpoint store.
+	checkpointKey := conversationID.String()
+
+	// Clear the DB checkpoint — it will be re-set by the next interrupt if needed.
+	if err := s.db.WithContext(ctx).
+		Model(&model.Conversation{}).
+		Where("id = ?", conversationID).
+		Update("checkpoint_id", "").Error; err != nil {
+		s.log.Error("failed to clear conversation checkpoint", zap.Error(err))
+	}
+
 	s.runSessionMgr.SetResumeParams(conversationID, &adk.ResumeParams{
 		Targets: map[string]any{
 			req.InterruptID: req.Decision,
 		},
 	})
+
+	// Also store the checkpoint in the session so runAgent's GetCheckpointID
+	// returns true.
+	s.runSessionMgr.SetCheckpointID(conversationID, checkpointKey)
 
 	go func() {
 		defer func() {
@@ -1199,4 +1332,31 @@ func parseToolCalls(toolCalling model.JSONMap) []schema.ToolCall {
 	var toolCalls []schema.ToolCall
 	_ = json.Unmarshal(b, &toolCalls)
 	return toolCalls
+}
+
+// getString safely extracts a string value from a map.
+func getString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// getInt safely extracts an int value from a map.
+func getInt(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	switch v := m[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	case int64:
+		return int(v)
+	}
+	return 0
 }

@@ -2,8 +2,8 @@ package permission
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -16,6 +16,36 @@ import (
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 )
+
+func init() {
+	// Eino's checkpoint serialization uses gob. When tool.Interrupt is called
+	// with map[string]any, gob needs to know the concrete types. Without these
+	// registrations, saveCheckPoint fails with "type not registered for interface".
+	gob.Register(map[string]interface{}{})
+	gob.Register(ChoiceOption{})
+	gob.Register([]ChoiceOption{})
+
+	// HitlChoice is defined in ../tools/ask_user_question.go but we can't import
+	// that package here (import cycle). Since gob registers by struct name, we
+	// define a local struct with the same fields — gob encodes field names, so
+	// the serialized output is identical.
+	gob.Register(hitlChoice{})
+	gob.Register([]hitlChoice{})
+}
+
+// ChoiceOption represents a single choice in a permission interrupt prompt.
+// Uses a concrete struct type instead of map[string]string so gob can serialize it.
+type ChoiceOption struct {
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
+}
+
+// hitlChoice mirrors tools.HitlChoice from ask_user_question.go.
+// Gob serializes by field name, so this must have identical fields to HitlChoice.
+type hitlChoice struct {
+	Title string
+	Desc  string
+}
 
 // MiddlewareConfig holds all inputs for the permission middleware.
 type MiddlewareConfig struct {
@@ -216,11 +246,11 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 	question := fmt.Sprintf("Agent 想要调用 %s（%s），是否允许？\n\n操作类型: %s\n详情: %s\n安全评估: 等级 %d — %s",
 		req.ToolName, req.ToolDesc, req.Action, req.Content, eval.Level, eval.Reason)
 
-	choices := []map[string]string{
-		{"title": "同意", "desc": "允许此次操作"},
-		{"title": "同意并记住", "desc": "允许，且同一 Project 下该操作不再询问（精确匹配）"},
-		{"title": "同意并通配记住", "desc": "允许，且同类操作不再询问（通配符匹配）"},
-		{"title": "拒绝", "desc": "不允许此次操作"},
+	choices := []ChoiceOption{
+		{Title: "同意", Desc: "允许此次操作"},
+		{Title: "同意并记住", Desc: "允许，且同一 Project 下该操作不再询问（精确匹配）"},
+		{Title: "同意并通配记住", Desc: "允许，且同类操作不再询问（通配符匹配）"},
+		{Title: "拒绝", Desc: "不允许此次操作"},
 	}
 
 	// Create HumanInPermission record.
@@ -248,23 +278,14 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		"permission_id": perm.ID.String(),
 	})
 
-	// Extract the InterruptSignal ID from the returned error.
-	// The error implements adk.InterruptContextsProvider (GetInterruptContexts()).
-	var interruptID string
-	if interruptErr != nil {
-		var provider interface {
-			GetInterruptContexts() []*adk.InterruptCtx
-		}
-		if ok := errors.As(interruptErr, &provider); ok && provider != nil {
-			ctxs := provider.GetInterruptContexts()
-			if len(ctxs) > 0 {
-				// Last context is the most specific — the actual interrupt source.
-				interruptID = ctxs[len(ctxs)-1].ID
-			}
-		}
-	}
+	// NOTE: Do NOT push permission.pending here. The runner saves the checkpoint
+	// AFTER this function returns (in handleIter), so checkpoint_id is empty at
+	// this point. The event loop pushes permission.pending after OnInterrupted,
+	// at which point both checkpoint_id and interrupt_id are available.
 
-	// Push permission.pending update with Eino's InterruptSignal.ID.
+	// For now, push here with empty IDs to maintain immediate delivery.
+	// The event loop will push a replacement update with real IDs.
+	// TODO: remove this once event loop push is verified.
 	if m.cfg.PushUpdate != nil && m.cfg.NextSeq != nil {
 		seq, _ := m.cfg.NextSeq(ctx, m.cfg.UserID)
 		if seq > 0 {
@@ -276,7 +297,7 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 					"conversation_id": m.cfg.ConversationID.String(),
 					"permission_id":   perm.ID.String(),
 					"checkpoint_id":   perm.CheckpointID,
-					"interrupt_id":    interruptID,
+					"interrupt_id":    "",
 					"tool_name":       req.ToolName,
 					"action":          req.Action,
 					"content":         req.Content,

@@ -89,9 +89,6 @@ func (p *readFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string,
 	}
 
 	resolvedPath := resolveFilePath(input.FilePath, p.workspaceDir)
-	if err := checkFileWorkspaceBounds(resolvedPath, p.workspaceDir); err != nil {
-		return fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()), nil
-	}
 
 	content, err := readFileContent(resolvedPath, input.Offset, input.Limit)
 	if err != nil {
@@ -184,9 +181,6 @@ func (p *writeFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string
 	}
 
 	resolvedPath := resolveFilePath(input.FilePath, p.workspaceDir)
-	if err := checkFileWorkspaceBounds(resolvedPath, p.workspaceDir); err != nil {
-		return fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()), nil
-	}
 
 	parentDir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
@@ -258,9 +252,6 @@ func (p *editFilePerm) InvokableRun(ctx context.Context, argumentsInJSON string,
 	}
 
 	resolvedPath := resolveFilePath(input.FilePath, p.workspaceDir)
-	if err := checkFileWorkspaceBounds(resolvedPath, p.workspaceDir); err != nil {
-		return fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()), nil
-	}
 
 	if input.OldString == "" {
 		return fmt.Sprintf("<tool_error>\nold_string is required\n</tool_error>"), nil
@@ -355,9 +346,6 @@ func (p *globPerm) InvokableRun(ctx context.Context, argumentsInJSON string, opt
 	searchPath := resolveFilePath(input.Path, p.workspaceDir)
 	if searchPath == "" || input.Path == "" {
 		searchPath = "/"
-	}
-	if err := checkFileWorkspaceBounds(searchPath, p.workspaceDir); err != nil {
-		return fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()), nil
 	}
 
 	var matches []string
@@ -456,9 +444,6 @@ func (p *grepPerm) InvokableRun(ctx context.Context, argumentsInJSON string, opt
 	searchPath := resolveFilePath(input.Path, p.workspaceDir)
 	if searchPath == "" {
 		searchPath = "."
-	}
-	if err := checkFileWorkspaceBounds(searchPath, p.workspaceDir); err != nil {
-		return fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()), nil
 	}
 
 	cmdArgs := []string{"rg", "--json", "--no-heading"}

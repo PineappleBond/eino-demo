@@ -50,13 +50,24 @@ func (m *RunSessionManager) Start(conversationID uuid.UUID, cancel context.Cance
 }
 
 // TryStart registers a new agent run only if no active session exists.
-// Returns true if the session was registered, false if one already exists.
-// This prevents concurrent agent runs for the same conversation.
+// If a placeholder session exists (created by SetResumeParams with IsRunning=false),
+// it will be replaced with a real session, preserving checkpoint and resume params.
+// Returns true if the session was registered or replaced, false if an active session
+// already exists. This prevents concurrent agent runs for the same conversation.
 func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.sessions[conversationID]; ok {
-		return false
+	if existing, ok := m.sessions[conversationID]; ok {
+		// If an active agent is already running, don't replace it.
+		if existing.IsRunning {
+			return false
+		}
+		// Replace placeholder (e.g., from SetResumeParams) with a real session,
+		// preserving checkpoint and resume params.
+		m.createSession(conversationID, cancel, stopFunc)
+		m.sessions[conversationID].CheckpointID = existing.CheckpointID
+		m.sessions[conversationID].ResumeParams = existing.ResumeParams
+		return true
 	}
 	m.createSession(conversationID, cancel, stopFunc)
 	return true
@@ -138,12 +149,23 @@ func (m *RunSessionManager) GetCheckpointID(conversationID uuid.UUID) (string, b
 }
 
 // SetResumeParams stores resume params for targeted resume with ResumeWithParams.
+// If no session exists (e.g., already cleaned up by a previous run), it creates a
+// minimal session so that params are not silently dropped.
 func (m *RunSessionManager) SetResumeParams(conversationID uuid.UUID, params *adk.ResumeParams) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if s, ok := m.sessions[conversationID]; ok {
-		s.ResumeParams = params
+	s, ok := m.sessions[conversationID]
+	if !ok {
+		// Session was already cleaned up — create a minimal placeholder so
+		// params survive until runAgent picks them up.
+		s = &AgentRunSession{
+			IsRunning: false,
+			done:      make(chan struct{}),
+		}
+		close(s.done) // mark as already done so no one waits on it
+		m.sessions[conversationID] = s
 	}
+	s.ResumeParams = params
 }
 
 // GetResumeParams returns the stored resume params, if any.

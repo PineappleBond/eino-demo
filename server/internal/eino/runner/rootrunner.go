@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner/skill"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/middlewares/reduction"
-	"github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/adk/middlewares/summarization"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/tool"
@@ -297,6 +297,7 @@ func (r *RootRunner) Run(ctx context.Context, messages []*schema.Message, checkp
 func (r *RootRunner) Resume(ctx context.Context, checkpointID string, handler *RootRunnerHandler) (*adk.AsyncIterator[*adk.AgentEvent], error) {
 	opts := []adk.AgentRunOption{
 		adk.WithCallbacks(handler),
+		adk.WithCheckPointID(checkpointID),
 	}
 	return r.runner.Resume(ctx, checkpointID, opts...)
 }
@@ -305,6 +306,7 @@ func (r *RootRunner) Resume(ctx context.Context, checkpointID string, handler *R
 func (r *RootRunner) ResumeWithParams(ctx context.Context, checkpointID string, params *adk.ResumeParams, handler *RootRunnerHandler) (*adk.AsyncIterator[*adk.AgentEvent], error) {
 	opts := []adk.AgentRunOption{
 		adk.WithCallbacks(handler),
+		adk.WithCheckPointID(checkpointID),
 	}
 	return r.runner.ResumeWithParams(ctx, checkpointID, params, opts...)
 }
