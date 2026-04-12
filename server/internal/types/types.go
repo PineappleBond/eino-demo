@@ -443,6 +443,30 @@ func (e WSServerFrameType) Valid() bool {
 	}
 }
 
+// Defines values for GetConversationsIdCronTasksParamsStatus.
+const (
+	GetConversationsIdCronTasksParamsStatusActive    GetConversationsIdCronTasksParamsStatus = "active"
+	GetConversationsIdCronTasksParamsStatusCancelled GetConversationsIdCronTasksParamsStatus = "cancelled"
+	GetConversationsIdCronTasksParamsStatusCompleted GetConversationsIdCronTasksParamsStatus = "completed"
+	GetConversationsIdCronTasksParamsStatusPending   GetConversationsIdCronTasksParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetConversationsIdCronTasksParamsStatus enum.
+func (e GetConversationsIdCronTasksParamsStatus) Valid() bool {
+	switch e {
+	case GetConversationsIdCronTasksParamsStatusActive:
+		return true
+	case GetConversationsIdCronTasksParamsStatusCancelled:
+		return true
+	case GetConversationsIdCronTasksParamsStatusCompleted:
+		return true
+	case GetConversationsIdCronTasksParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PostConversationsIdCronTasksJSONBodySenderRole.
 const (
 	PostConversationsIdCronTasksJSONBodySenderRoleAssistant PostConversationsIdCronTasksJSONBodySenderRole = "assistant"
@@ -469,16 +493,16 @@ func (e PostConversationsIdCronTasksJSONBodySenderRole) Valid() bool {
 
 // Defines values for GetConversationsIdPermissionsParamsStatus.
 const (
-	Answered GetConversationsIdPermissionsParamsStatus = "answered"
-	Pending  GetConversationsIdPermissionsParamsStatus = "pending"
+	GetConversationsIdPermissionsParamsStatusAnswered GetConversationsIdPermissionsParamsStatus = "answered"
+	GetConversationsIdPermissionsParamsStatusPending  GetConversationsIdPermissionsParamsStatus = "pending"
 )
 
 // Valid indicates whether the value is a known member of the GetConversationsIdPermissionsParamsStatus enum.
 func (e GetConversationsIdPermissionsParamsStatus) Valid() bool {
 	switch e {
-	case Answered:
+	case GetConversationsIdPermissionsParamsStatusAnswered:
 		return true
-	case Pending:
+	case GetConversationsIdPermissionsParamsStatusPending:
 		return true
 	default:
 		return false
@@ -1119,6 +1143,15 @@ type PostConversationsIdAnswerJSONBody struct {
 	// InterruptId Eino interrupt signal ID for targeted resume
 	InterruptId string `json:"interrupt_id"`
 }
+
+// GetConversationsIdCronTasksParams defines parameters for GetConversationsIdCronTasks.
+type GetConversationsIdCronTasksParams struct {
+	// Status Filter tasks by status. Defaults to 'active' if omitted.
+	Status *GetConversationsIdCronTasksParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetConversationsIdCronTasksParamsStatus defines parameters for GetConversationsIdCronTasks.
+type GetConversationsIdCronTasksParamsStatus string
 
 // PostConversationsIdCronTasksJSONBody defines parameters for PostConversationsIdCronTasks.
 type PostConversationsIdCronTasksJSONBody struct {

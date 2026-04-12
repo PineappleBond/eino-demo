@@ -16,12 +16,14 @@ import (
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/permission"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/skills"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/tools"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/templates"
@@ -381,6 +383,19 @@ func (s *ChatService) runAgent(
 		ConversationID:   conversationID,
 		MessageQueue:     s.messageQueue,
 		ReductionEnabled: true,
+		SkillBackend: func() skill.Backend {
+			skillsDir := filepath.Join(workspaceDir, ".skills")
+			if _, err := os.Stat(skillsDir); err != nil {
+				return nil // no skills dir, skip skill support
+			}
+			b, err := skills.NewSkillFileBackend(skillsDir)
+			if err != nil {
+				s.log.Warn("runAgent: failed to create skill backend, disabling skills", zap.Error(err))
+				return nil
+			}
+			return b
+		}(),
+		ModelHub: skills.NewModelHub(s.modelProvider),
 		TokenCheck: &runner.TokenCheckConfig{
 			Counter:   tokenCounter,
 			MaxTokens: maxPromptTokens,

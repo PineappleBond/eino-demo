@@ -1139,7 +1139,10 @@ export interface paths {
         /** List cron tasks for a conversation */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Filter tasks by status. Defaults to 'active' if omitted. */
+                    status?: "active" | "pending" | "completed" | "cancelled";
+                };
                 header?: never;
                 path: {
                     id: string;

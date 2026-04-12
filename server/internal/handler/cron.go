@@ -53,7 +53,13 @@ func RegisterCronTaskRoutes(
 			return
 		}
 
-		tasks, err := cronSvc.ListTasks(c.Request.Context(), userID, conversationID)
+		// Default to "active" if no status filter provided
+		status := c.Query("status")
+		if status == "" {
+			status = "active"
+		}
+
+		tasks, err := cronSvc.ListTasks(c.Request.Context(), userID, conversationID, status)
 		if err != nil {
 			if err.Error() == "conversation not found" {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())

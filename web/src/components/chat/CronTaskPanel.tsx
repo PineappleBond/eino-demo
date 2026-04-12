@@ -40,18 +40,21 @@ export function CronTaskPanel({ conversationId, collapsible = false }: CronTaskP
   const [newSchedule, setNewSchedule] = useState('');
   const [newSenderRole, setNewSenderRole] = useState<string>('user');
   const [collapsed, setCollapsed] = useState(collapsible);
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const topic = `conv:${conversationId}`;
 
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await api.get<CronTask[]>(`/conversations/${conversationId}/cron-tasks`);
+      const params = new URLSearchParams();
+      params.set('status', statusFilter);
+      const data = await api.get<CronTask[]>(`/conversations/${conversationId}/cron-tasks?${params.toString()}`);
       setTasks(data);
     } catch {
       // Silently fail
     } finally {
       setLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, statusFilter]);
 
   useEffect(() => {
     fetchTasks();
@@ -81,7 +84,8 @@ export function CronTaskPanel({ conversationId, collapsible = false }: CronTaskP
         schedule: newSchedule.trim(),
         sender_role: newSenderRole,
       });
-      setTasks((prev) => [...prev, task]);
+      // Refetch to ensure consistent state
+      fetchTasks();
       setNewContent('');
       setNewSchedule('');
     } catch {
@@ -92,7 +96,7 @@ export function CronTaskPanel({ conversationId, collapsible = false }: CronTaskP
   const handleCancel = async (taskId: string) => {
     try {
       await api.post(`/conversations/${conversationId}/cron-tasks/${taskId}/cancel`);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      fetchTasks();
     } catch {
       // Silently fail
     }

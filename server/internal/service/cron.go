@@ -116,18 +116,19 @@ func (s *CronService) CreateTask(ctx context.Context, userID, conversationID uui
 	return &task, nil
 }
 
-// ListTasks returns all cron tasks for a conversation.
-func (s *CronService) ListTasks(ctx context.Context, userID, conversationID uuid.UUID) ([]model.CronTask, error) {
+// ListTasks returns cron tasks for a conversation, optionally filtered by status.
+func (s *CronService) ListTasks(ctx context.Context, userID, conversationID uuid.UUID, status string) ([]model.CronTask, error) {
 	var conv model.Conversation
 	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
 		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
 	}
 
+	q := s.db.WithContext(ctx).Where("conversation_id = ?", conversationID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
 	var tasks []model.CronTask
-	if err := s.db.WithContext(ctx).
-		Where("conversation_id = ?", conversationID).
-		Order("created_at DESC").
-		Find(&tasks).Error; err != nil {
+	if err := q.Order("next_run_at ASC").Find(&tasks).Error; err != nil {
 		return nil, fmt.Errorf("failed to list cron tasks: %w", err)
 	}
 	return tasks, nil
@@ -203,17 +204,17 @@ func (s *CronService) ExecuteTask(ctx context.Context, taskID uuid.UUID) error {
 }
 
 // isOneTimeTask checks if a schedule is a one-time 6-field cron expression.
+// One-time tasks are stored as "SEC MIN HOUR DOM MONTH *" — 6 fields with
+// all numeric values and "*" as day-of-week.
 func (s *CronService) isOneTimeTask(schedule string) bool {
-	// One-time tasks are stored as 6-field cron expressions generated from a specific timestamp.
-	// They have a fixed day-of-month and day-of-week (always * for dow).
 	fields := strings.Fields(schedule)
 	if len(fields) != 6 {
 		return false
 	}
-	// Check if this is NOT a recurring pattern: if minute, hour, dom, month are
-	// specific values (not */N, ranges, or lists) and dow is *, it's one-time.
+	// All fields must be pure numbers except DOW which must be "*"
 	return isSpecificField(fields[0]) && isSpecificField(fields[1]) &&
-		isSpecificField(fields[2]) && isSpecificField(fields[3]) && fields[4] == "*"
+		isSpecificField(fields[2]) && isSpecificField(fields[3]) &&
+		isSpecificField(fields[4]) && fields[5] == "*"
 }
 
 func isSpecificField(f string) bool {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/middlewares/reduction"
+	"github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/adk/middlewares/summarization"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/tool"
@@ -132,6 +133,12 @@ type RootRunnerConfig struct {
 	WorkspaceDir string
 	// IsGitRepo indicates whether the workspace contains a .git directory.
 	IsGitRepo bool
+	// SkillBackend provides skill definitions for the skill tool.
+	// Nil disables skill support.
+	SkillBackend skill.Backend
+	// ModelHub resolves model instances by name for skills that override the model.
+	// Nil means skills with model overrides are ignored.
+	ModelHub skill.ModelHub
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.
@@ -173,7 +180,7 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 	}
 
 	// 3. Build handlers (middleware chain).
-	// Order: Summarization → Context injection → Reduction
+	// Order: Summarization → Skill → Permission → Context injection → Reduction
 	var handlers []adk.ChatModelAgentMiddleware
 
 	// 3a. Summarization middleware — auto-compresses conversation history when tokens
@@ -206,17 +213,29 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		handlers = append(handlers, summarizationMW)
 	}
 
-	// 3b. Permission middleware — intercepts tool calls for permission checks.
+	// 3b. Skill middleware — enables loading and executing SKILL.md skills.
+	if cfg.SkillBackend != nil {
+		skillMW, err := skill.NewMiddleware(ctx, &skill.Config{
+			Backend:  cfg.SkillBackend,
+			ModelHub: cfg.ModelHub,
+		})
+		if err != nil {
+			return nil, err
+		}
+		handlers = append(handlers, skillMW)
+	}
+
+	// 3c. Permission middleware — intercepts tool calls for permission checks.
 	if cfg.PermissionMW != nil {
 		handlers = append(handlers, cfg.PermissionMW)
 	}
 
-	// 3c. Context injection middleware (message injection from queue + token check).
+	// 3d. Context injection middleware (message injection from queue + token check).
 	if cfg.MessageQueue != nil && cfg.ConversationID != uuid.Nil {
 		handlers = append(handlers, NewContextInjectionMiddleware(cfg.MessageQueue, cfg.ConversationID, cfg.TokenCheck))
 	}
 
-	// 3c. Reduction middleware (proactively clears old tool results).
+	// 3e. Reduction middleware (proactively clears old tool results).
 	if cfg.ReductionEnabled {
 		reductionMW, err := reduction.New(ctx, &reduction.Config{
 			SkipTruncation:            true, // token overflow check is the primary defense; reduction only clears old tool results
