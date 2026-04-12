@@ -20,6 +20,10 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 		userID := getUserID(c)
 		settings, err := svc.GetSettings(userID)
 		if err != nil {
+			log.Error("get settings failed",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch settings")
 			return
 		}
@@ -30,6 +34,10 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 		userID := getUserID(c)
 		var req types.PutSettingsJSONBody
 		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn("update settings: invalid request body",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 			return
 		}
@@ -49,9 +57,16 @@ func RegisterSettingsRoutes(api *gin.RouterGroup, svc *service.SettingsService, 
 			},
 		)
 		if err != nil {
+			log.Error("update settings failed",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update settings")
 			return
 		}
+		log.Info("settings updated",
+			zap.String("user_id", userID.String()),
+		)
 		respondJSON(c, http.StatusOK, convert.ToSettings(*settings))
 	})
 }

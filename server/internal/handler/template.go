@@ -18,6 +18,7 @@ import (
 func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, wsManager *ws.Manager, log *zap.Logger) {
 	api.GET("/templates", func(c *gin.Context) {
 		list := svc.ListTemplates()
+		log.Debug("list templates", zap.Int("count", len(list)))
 		result := make([]types.Template, len(list))
 		for i, t := range list {
 			result[i] = convert.ToTemplate(t)
@@ -29,6 +30,7 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, 
 		id := c.Param("id")
 		t, err := svc.GetTemplate(id)
 		if err != nil {
+			log.Warn("get template not found", zap.String("template_id", id))
 			respondError(c, http.StatusNotFound, "NOT_FOUND", "template not found")
 			return
 		}
@@ -44,6 +46,10 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, 
 			Config map[string]any `json:"config"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn("create project from template: invalid request body",
+				zap.String("template_id", templateID),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 			return
 		}
@@ -66,9 +72,19 @@ func RegisterTemplateRoutes(api *gin.RouterGroup, svc *service.TemplateService, 
 			},
 		)
 		if err != nil {
+			log.Error("create project from template failed",
+				zap.String("user_id", userID.String()),
+				zap.String("template_id", templateID),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "failed to create project from template")
 			return
 		}
+		log.Info("project created from template",
+			zap.String("user_id", userID.String()),
+			zap.String("template_id", templateID),
+			zap.String("project_id", project.ID.String()),
+		)
 		respondJSON(c, http.StatusCreated, convert.ToProject(*project))
 	})
 }

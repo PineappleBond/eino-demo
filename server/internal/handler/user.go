@@ -21,6 +21,10 @@ func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm
 		userID := getUserID(c)
 		user, settings, err := svc.GetMe(userID)
 		if err != nil {
+			log.Error("get me failed",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch user")
 			return
 		}
@@ -49,6 +53,10 @@ func RegisterUserRoutes(api *gin.RouterGroup, svc *service.UserService, db *gorm
 		}
 
 		var updates []model.UserUpdate
+		log.Debug("fetch updates",
+			zap.String("user_id", userID.String()),
+			zap.Int64("last_seq", lastSeq),
+		)
 		if err := db.Where("user_id = ? AND seq > ?", userID, lastSeq).
 			Order("seq ASC").
 			Limit(100).
