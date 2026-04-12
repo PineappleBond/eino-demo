@@ -26,6 +26,10 @@ func NewProjectService(db *gorm.DB, log *zap.Logger) *ProjectService {
 func (s *ProjectService) ListProjects(userID uuid.UUID) ([]model.Project, error) {
 	var projects []model.Project
 	if err := s.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&projects).Error; err != nil {
+		s.log.Error("list projects: query failed",
+			zap.String("user_id", userID.String()),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	return projects, nil
@@ -35,6 +39,10 @@ func (s *ProjectService) ListProjects(userID uuid.UUID) ([]model.Project, error)
 func (s *ProjectService) GetProject(userID, projectID uuid.UUID) (*model.Project, error) {
 	var project model.Project
 	if err := s.db.Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		s.log.Error("get project: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+		)
 		return nil, fmt.Errorf("project not found")
 	}
 	return &project, nil
@@ -50,15 +58,32 @@ func (s *ProjectService) UpdateProject(userID, projectID uuid.UUID, name string,
 		updates["config"] = config
 	}
 	if len(updates) == 0 {
+		s.log.Warn("update project: no fields to update",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+		)
 		return nil, fmt.Errorf("no fields to update")
 	}
 	result := s.db.Model(&model.Project{}).Where("id = ? AND user_id = ?", projectID, userID).Updates(updates)
 	if result.Error != nil {
+		s.log.Error("update project: database error",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+			zap.Error(result.Error),
+		)
 		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
+		s.log.Error("update project: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+		)
 		return nil, fmt.Errorf("project not found")
 	}
+	s.log.Info("project updated",
+		zap.String("user_id", userID.String()),
+		zap.String("project_id", projectID.String()),
+	)
 	return s.GetProject(userID, projectID)
 }
 
@@ -85,12 +110,21 @@ func (s *ProjectService) CompleteDeleteProject(
 	// 1. Verify ownership first — before allocating seq
 	var project model.Project
 	if err := s.db.Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		s.log.Error("delete project: not found",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+		)
 		return fmt.Errorf("project not found")
 	}
 
 	// 2. Allocate seq after ownership confirmed
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
+		s.log.Error("delete project: seq assignment failed",
+			zap.String("user_id", userID.String()),
+			zap.String("project_id", projectID.String()),
+			zap.Error(err),
+		)
 		return fmt.Errorf("seq assignment failed: %w", err)
 	}
 
@@ -122,6 +156,10 @@ func (s *ProjectService) CompleteDeleteProject(
 		return err
 	}
 
+	s.log.Info("project deleted",
+		zap.String("user_id", userID.String()),
+		zap.String("project_id", projectID.String()),
+	)
 	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,

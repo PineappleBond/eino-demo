@@ -32,6 +32,7 @@ func (s *TemplateService) ListTemplates() []templates.TemplateInfo {
 func (s *TemplateService) GetTemplate(id string) (templates.TemplateDetail, error) {
 	t, ok := templates.Get(id)
 	if !ok {
+		s.log.Warn("get template: not found", zap.String("template_id", id))
 		return t, fmt.Errorf("template %q not found", id)
 	}
 	return t, nil
@@ -50,6 +51,7 @@ func (s *TemplateService) CompleteCreateProjectFromTemplate(
 ) (*model.Project, error) {
 	t, ok := templates.Get(templateID)
 	if !ok {
+		s.log.Warn("create project from template: template not found", zap.String("template_id", templateID))
 		return nil, fmt.Errorf("template not found")
 	}
 
@@ -63,6 +65,11 @@ func (s *TemplateService) CompleteCreateProjectFromTemplate(
 	// Allocate seq before transaction
 	seq, err := nextSeq(ctx, userID)
 	if err != nil {
+		s.log.Error("create project from template: seq assignment failed",
+			zap.String("user_id", userID.String()),
+			zap.String("template_id", templateID),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("seq assignment failed: %w", err)
 	}
 
@@ -118,6 +125,11 @@ func (s *TemplateService) CompleteCreateProjectFromTemplate(
 		return nil, err
 	}
 
+	s.log.Info("project created from template",
+		zap.String("user_id", userID.String()),
+		zap.String("template_id", templateID),
+		zap.String("project_id", project.ID.String()),
+	)
 	pushUpdate(userID, model.UserUpdate{
 		UserID: userID,
 		Seq:    seq,
