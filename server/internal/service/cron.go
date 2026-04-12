@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
@@ -30,6 +31,7 @@ type CronService struct {
 	scheduler     *cron.Cron
 	taskEntries   map[uuid.UUID]cron.EntryID
 	messageSender MessageSender
+	pushSync      func(ctx context.Context, userID, conversationID uuid.UUID)
 }
 
 // NewCronService creates a CronService.
@@ -185,7 +187,55 @@ func (s *CronService) ExecuteTask(ctx context.Context, taskID uuid.UUID) error {
 		zap.String("task_id", task.ID.String()),
 		zap.Int64("seq", resp.Seq),
 	)
+
+	// For one-time tasks (6-field schedule that only fires once), mark as completed.
+	// For recurring tasks (cron expression or @-descriptor), the task stays active.
+	if s.isOneTimeTask(task.Schedule) {
+		if err := s.db.WithContext(ctx).Model(&task).Update("status", "completed").Error; err != nil {
+			s.log.Warn("ExecuteTask: failed to mark task as completed", zap.Error(err))
+		}
+	}
+
+	// Push cron_task.sync to notify the frontend.
+	s.pushTaskSync(ctx, conv.UserID, task.ConversationID)
+
 	return nil
+}
+
+// isOneTimeTask checks if a schedule is a one-time 6-field cron expression.
+func (s *CronService) isOneTimeTask(schedule string) bool {
+	// One-time tasks are stored as 6-field cron expressions generated from a specific timestamp.
+	// They have a fixed day-of-month and day-of-week (always * for dow).
+	fields := strings.Fields(schedule)
+	if len(fields) != 6 {
+		return false
+	}
+	// Check if this is NOT a recurring pattern: if minute, hour, dom, month are
+	// specific values (not */N, ranges, or lists) and dow is *, it's one-time.
+	return isSpecificField(fields[0]) && isSpecificField(fields[1]) &&
+		isSpecificField(fields[2]) && isSpecificField(fields[3]) && fields[4] == "*"
+}
+
+func isSpecificField(f string) bool {
+	// A specific field is a single number, not a wildcard, range, list, or step.
+	for _, c := range f {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(f) > 0
+}
+
+// RegisterPushFunc sets the callback used to push cron_task.sync updates to the user.
+func (s *CronService) RegisterPushFunc(fn func(ctx context.Context, userID, conversationID uuid.UUID)) {
+	s.pushSync = fn
+}
+
+// pushTaskSync pushes a cron_task.sync update to the user so the frontend panel refreshes.
+func (s *CronService) pushTaskSync(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID) {
+	if s.pushSync != nil {
+		s.pushSync(ctx, userID, conversationID)
+	}
 }
 
 // RegisterTask registers an existing DB task with the scheduler.

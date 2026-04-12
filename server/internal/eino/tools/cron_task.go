@@ -44,6 +44,10 @@ type CronTaskOutput struct {
 // This is set by module.go to avoid import cycles (tools → service → tools).
 var CronTaskRegisterFunc func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error
 
+// CronTaskSyncFunc is a callback that pushes a cron_task.sync update to the user.
+// This is set by module.go to avoid import cycles.
+var CronTaskSyncFunc func(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID)
+
 // NewCronTaskTool creates a cron_task tool scoped to a conversation.
 func NewCronTaskTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool, error) {
 	t := &cronTaskRunner{db: db, conversationID: conversationID}
@@ -108,6 +112,11 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 			}
 		}
 
+		// Notify the frontend via cron_task.sync so the cron panel refreshes.
+		if CronTaskSyncFunc != nil {
+			CronTaskSyncFunc(ctx, conv.UserID, t.conversationID)
+		}
+
 		return CronTaskOutput{
 			Success: true,
 			Message: "Created scheduled task. Message will be sent at " + nextRun.Format("2006-01-02 15:04:05"),
@@ -169,6 +178,12 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 		}
 		if result.RowsAffected == 0 {
 			return CronTaskOutput{Success: false, Message: "task not found"}, nil
+		}
+
+		// Notify the frontend via cron_task.sync so the cron panel refreshes.
+		var conv model.Conversation
+		if err := t.db.WithContext(ctx).Where("id = ?", t.conversationID).First(&conv).Error; err == nil && CronTaskSyncFunc != nil {
+			CronTaskSyncFunc(ctx, conv.UserID, t.conversationID)
 		}
 
 		return CronTaskOutput{
