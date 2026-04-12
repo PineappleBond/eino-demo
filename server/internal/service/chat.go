@@ -458,6 +458,7 @@ func (s *ChatService) runAgent(
 				}
 			}()
 		},
+		Log: s.log,
 	}
 
 	rootRunner, err := runner.NewRootRunner(runCtx, runCfg, callbacks)

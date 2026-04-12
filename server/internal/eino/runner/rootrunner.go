@@ -16,6 +16,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	openai "github.com/cloudwego/eino-ext/components/model/openai"
 
@@ -139,6 +140,8 @@ type RootRunnerConfig struct {
 	// ModelHub resolves model instances by name for skills that override the model.
 	// Nil means skills with model overrides are ignored.
 	ModelHub skill.ModelHub
+	// Log is the structured logger for this runner instance.
+	Log *zap.Logger
 }
 
 // RootRunner holds one execution instance. Created fresh per Run.
@@ -165,6 +168,12 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		Model:   mc.Model,
 	})
 	if err != nil {
+		if cfg.Log != nil {
+			cfg.Log.Error("root runner: failed to create chat model",
+				zap.String("tier", cfg.ModelTier),
+				zap.Error(err),
+			)
+		}
 		return nil, err
 	}
 
@@ -176,6 +185,12 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 	// 2. Render instruction — template includes SystemPrompt via {{ .SystemPrompt }}.
 	instruction, err := renderRootPrompt(cfg.Tools, cfg.SubAgents, cfg.SystemPrompt, cfg.WorkspaceDir, cfg.IsGitRepo)
 	if err != nil {
+		if cfg.Log != nil {
+			cfg.Log.Error("root runner: failed to render prompt",
+				zap.String("conv", cfg.ConversationID.String()),
+				zap.Error(err),
+			)
+		}
 		return nil, err
 	}
 
@@ -279,6 +294,17 @@ func NewRootRunner(ctx context.Context, cfg RootRunnerConfig, callback RootRunne
 		CheckPointStore: callback,
 	})
 
+	if cfg.Log != nil {
+		cfg.Log.Info("root runner: created",
+			zap.String("conv", cfg.ConversationID.String()),
+			zap.String("model_tier", cfg.ModelTier),
+			zap.Int("tool_count", len(cfg.Tools)),
+			zap.Int("sub_agent_count", len(cfg.SubAgents)),
+			zap.Bool("summarization", cfg.SummarizationCallback != nil),
+			zap.Bool("skills", cfg.SkillBackend != nil),
+			zap.Bool("permissions", cfg.PermissionMW != nil),
+		)
+	}
 	return &RootRunner{runner: runner}, nil
 }
 
