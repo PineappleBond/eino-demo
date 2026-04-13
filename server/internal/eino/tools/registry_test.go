@@ -86,7 +86,7 @@ func TestToolRegistry_ListToolNames_WithConversation(t *testing.T) {
 	registry.SetConversationID(uuid.New())
 
 	names := registry.ListToolNames()
-	expected := []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task"}
+	expected := []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
 
 	if len(names) != len(expected) {
 		t.Fatalf("ListToolNames() = %v, want %v", names, expected)
