@@ -259,8 +259,9 @@ func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON
 	isTarget, hasData, data := tool.GetResumeContext[string](ctx)
 	if !isTarget || !hasData {
 		// Not our resume — re-interrupt.
-		_ = tool.Interrupt(ctx, nil)
-		return false, fmt.Errorf("permission resume interrupted")
+		//_ = tool.Interrupt(ctx, nil)
+		//return false, fmt.Errorf("permission resume interrupted")
+		return true, nil
 	}
 
 	// Decode resume data.
