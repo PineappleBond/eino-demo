@@ -288,12 +288,14 @@ func (s *ChatService) sendMessageWithRole(
 }
 
 // runAgent starts the AI agent in a background goroutine and streams results via WS.
+// The optional parentID parameter records a parent-child relationship for cascading stop.
 func (s *ChatService) runAgent(
 	ctx context.Context,
 	userID, conversationID uuid.UUID,
 	userContent string,
 	nextSeq NextSeqFunc,
 	pushUpdate PushUpdateFunc,
+	parentID ...uuid.UUID,
 ) {
 	// 1. Resolve template config: conversation → project → template
 	var conv model.Conversation
@@ -357,7 +359,11 @@ func (s *ChatService) runAgent(
 	// 4. Register session (stop func marks in-progress messages as stopped in DB)
 	// TryStart is atomic: if another runAgent already registered, this returns false
 	// and we exit gracefully to prevent concurrent agent runs.
-	if !s.runSessionMgr.TryStart(conversationID, cancel, callbacks.Stop) {
+	pid := uuid.Nil
+	if len(parentID) > 0 {
+		pid = parentID[0]
+	}
+	if !s.runSessionMgr.TryStart(conversationID, cancel, callbacks.Stop, pid) {
 		// Another agent run is active — enqueue the message so it will be
 		// consumed by the context injection middleware at the next model call
 		// boundary, or by the deferred pending-check when the current run ends.
@@ -1366,14 +1372,17 @@ func (s *ChatService) RunSubAgent(
 	s.mu.Unlock()
 
 	// 5. Reuse runAgent with the child conversation ID.
-	// The runAgent handles: template resolution, model setup, callbacks, message persistence.
-	// Our OnComplete callback (registered above) will trigger the writeback.
-	s.runAgent(parentCtx, userID, childConvID, prompt, s.wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
+	// Use context.WithoutCancel so the sub-agent's callback context is independent
+	// of the parent's cancellation — the sub-agent writes to its own conversation.
+	// The parent-child relationship is recorded in RunSessionManager so that
+	// stopping the parent cascades to all child sessions.
+	subCtx := context.WithoutCancel(parentCtx)
+	s.runAgent(subCtx, userID, childConvID, prompt, s.wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
 		// For sub-agent runs, we push updates via wsManager directly.
 		// The wsManager expects the converted update format.
 		wsUpdate := s.convertFn(update)
 		s.wsManager.PushToUserConnections(userID, wsUpdate)
-	})
+	}, parentConvID)
 }
 
 // writeSubAgentResultToParent writes a system message to the parent conversation
