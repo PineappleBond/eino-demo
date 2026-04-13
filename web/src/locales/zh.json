@@ -131,7 +131,11 @@
     "approveAndRemember": "同意并记住（精确匹配）",
     "approveAndWildcard": "同意并通配记住（同类操作）",
     "deny": "拒绝",
-    "permissionAnswered": "权限已处理"
+    "permissionAnswered": "权限已处理",
+    "answerSubmitted": "回答已提交",
+    "subPermissionRequests": "子对话权限请求",
+    "subHitlQuestions": "子对话问题",
+    "subHitlClickToAnswer": "点击回答"
   },
   "notFound": {
     "title": "404",

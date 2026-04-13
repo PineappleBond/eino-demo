@@ -131,7 +131,11 @@
     "approveAndRemember": "Approve & Remember (Exact)",
     "approveAndWildcard": "Approve & Remember (Wildcard)",
     "deny": "Deny",
-    "permissionAnswered": "Permission answered"
+    "permissionAnswered": "Permission answered",
+    "answerSubmitted": "Answer submitted",
+    "subPermissionRequests": "Sub-conversation permission requests",
+    "subHitlQuestions": "Sub-conversation questions",
+    "subHitlClickToAnswer": "Click to answer"
   },
   "notFound": {
     "title": "404",

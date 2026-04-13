@@ -863,7 +863,7 @@ func (s *ConversationService) GetSubInterrupts(
 
 	// 4. Query pending permissions from sub-conversations
 	if err := s.db.WithContext(ctx).
-		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Where("source_conversation_id IN ? AND status = 'pending'", subConvIDs).
 		Order("created_at DESC").
 		Find(&result.Permissions).Error; err != nil {
 		return nil, fmt.Errorf("failed to query sub permissions: %w", err)
@@ -871,7 +871,7 @@ func (s *ConversationService) GetSubInterrupts(
 
 	// 5. Query pending HITLs from sub-conversations
 	if err := s.db.WithContext(ctx).
-		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Where("source_conversation_id IN ? AND status = 'pending'", subConvIDs).
 		Order("created_at DESC").
 		Find(&result.HITLs).Error; err != nil {
 		return nil, fmt.Errorf("failed to query sub hitls: %w", err)

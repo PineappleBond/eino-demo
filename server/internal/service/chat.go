@@ -757,73 +757,7 @@ func (s *ChatService) runAgent(
 						)
 					}
 
-					// Extract permission data from the root cause interrupt context.
-					// The Data field is *adk.ChatModelAgentInterruptInfo (serialized),
-					// but InterruptContexts[i].Info contains the original map[string]any
-					// passed to tool.Interrupt.
-					ctxs := event.Action.Interrupted.InterruptContexts
-					// Find the root cause context (leaf of the interrupt chain).
-					leafIdx := 0
-					for i, ic := range ctxs {
-						if ic != nil && ic.IsRootCause {
-							leafIdx = i
-							break
-						}
-					}
-					if data, ok := ctxs[leafIdx].Info.(map[string]any); ok {
-						if permID, ok := data["permission_id"].(string); ok && permID != "" {
-							// Update the pending permission record with checkpoint_id
-							if err := s.db.WithContext(ctx).
-								Model(&model.HumanInPermission{}).
-								Where("id = ? AND status = 'pending'", permID).
-								Update("checkpoint_id", checkpointKey).Error; err != nil {
-								s.log.Error("failed to update permission checkpoint_id",
-									zap.String("permission_id", permID),
-									zap.Error(err),
-								)
-							}
-
-							// interrupt_id from the last context in the chain
-							interruptID := ctxs[len(ctxs)-1].ID
-
-							s.log.Info("runAgent: pushing permission.pending from event loop",
-								zap.String("permission_id", permID),
-								zap.String("checkpoint_id", checkpointKey),
-								zap.String("interrupt_id", interruptID),
-							)
-
-							// Push permission.pending update with valid IDs
-							seq, seqErr := nextSeq(ctx, userID)
-							if seqErr != nil {
-								s.log.Error("seq assignment failed for permission.pending", zap.Error(seqErr))
-							} else if seq > 0 {
-								update := model.UserUpdate{
-									UserID: userID,
-									Seq:    seq,
-									Type:   "permission.pending",
-									Payload: model.JSONMap{
-										"conversation_id": conversationID.String(),
-										"permission_id":   permID,
-										"checkpoint_id":   checkpointKey,
-										"interrupt_id":    interruptID,
-										"tool_name":       getString(data, "tool_name"),
-										"action":          getString(data, "action"),
-										"content":         getString(data, "content"),
-										"tool_desc":       getString(data, "tool_desc"),
-										"args_summary":    getString(data, "args_summary"),
-										"safety_level":    getInt(data, "safety_level"),
-										"safety_reason":   getString(data, "safety_reason"),
-										"seq":             seq,
-									},
-								}
-								if dbErr := s.db.WithContext(ctx).Create(&update).Error; dbErr != nil {
-									s.log.Error("persist permission.pending update", zap.Error(dbErr))
-								} else {
-									pushUpdate(userID, update)
-								}
-							}
-						}
-					}
+					// OnInterrupted callback handles permission/HITL record updates and WS pushes
 					callbacks.OnInterrupted(event.Action.Interrupted)
 					break
 				}
@@ -905,20 +839,29 @@ func (s *ChatService) AnswerQuestion(
 		return err
 	}
 
-	// 2. Find the pending HITL record
-	var hitl model.HumanInTheLoop
-	if err := s.db.WithContext(ctx).Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
-		conversationID, req.CheckpointID, req.InterruptID).First(&hitl).Error; err != nil {
-		return fmt.Errorf("pending HITL request not found: %w", ErrHITLNotFound)
+	// 2. Atomically transition the HITL record from pending to answered.
+	// Uses RowsAffected to detect double-resume (concurrent requests).
+	result := s.db.WithContext(ctx).Model(&model.HumanInTheLoop{}).
+		Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ? AND status = 'pending'",
+			conversationID, req.CheckpointID, req.InterruptID).
+		Updates(map[string]interface{}{
+			"status": "answered",
+			"answer": model.JSONMap{"text": req.Answer},
+		})
+	if result.Error != nil {
+		return fmt.Errorf("failed to update HITL: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("HITL request already resolved: %w", ErrHITLNotFound)
 	}
 
-	// 3. Update HITL to answered
-	answerJSON := model.JSONMap{"text": req.Answer}
-	if err := s.db.WithContext(ctx).Model(&hitl).Updates(map[string]interface{}{
-		"status": "answered",
-		"answer": answerJSON,
-	}).Error; err != nil {
-		return fmt.Errorf("failed to update HITL: %w", err)
+	// Load the record for display in WS events.
+	var hitl model.HumanInTheLoop
+	if err := s.db.WithContext(ctx).
+		Where("conversation_id = ? AND checkpoint_id = ? AND interrupt_id = ?",
+			conversationID, req.CheckpointID, req.InterruptID).
+		First(&hitl).Error; err != nil {
+		return fmt.Errorf("HITL record not found after update: %w", ErrHITLNotFound)
 	}
 
 	// 4. Push human_in_the_loop.answered Update
@@ -1019,13 +962,7 @@ func (s *ChatService) AnswerPermission(
 		return fmt.Errorf("project not found")
 	}
 
-	// 2. Find the pending permission record by ID.
-	var perm model.HumanInPermission
-	if err := s.db.WithContext(ctx).Where("id = ? AND status = 'pending'", permissionID).First(&perm).Error; err != nil {
-		return fmt.Errorf("pending permission request not found: %w", ErrPermissionNotFound)
-	}
-
-	// 3. Validate decision.
+	// 2. Validate decision before mutating state.
 	validDecisions := map[string]bool{
 		"approved": true, "approved_exact": true,
 		"approved_wildcard": true, "denied": true,
@@ -1034,11 +971,22 @@ func (s *ChatService) AnswerPermission(
 		return fmt.Errorf("invalid decision: %s", req.Decision)
 	}
 
-	// 4. Update record.
-	if err := s.db.WithContext(ctx).Model(&perm).Updates(map[string]interface{}{
-		"status": "answered", "decision": req.Decision,
-	}).Error; err != nil {
-		return fmt.Errorf("update permission: %w", err)
+	// 3. Atomically transition the permission record from pending to answered.
+	// Uses RowsAffected to detect double-resume (concurrent requests).
+	result := s.db.WithContext(ctx).Model(&model.HumanInPermission{}).
+		Where("id = ? AND status = 'pending'", permissionID).
+		Updates(map[string]interface{}{"status": "answered", "decision": req.Decision})
+	if result.Error != nil {
+		return fmt.Errorf("update permission: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("permission request already resolved: %w", ErrPermissionNotFound)
+	}
+
+	// Load the record for display in WS events.
+	var perm model.HumanInPermission
+	if err := s.db.WithContext(ctx).Where("id = ?", permissionID).First(&perm).Error; err != nil {
+		return fmt.Errorf("permission record not found after update: %w", ErrPermissionNotFound)
 	}
 
 	// 5. Write whitelist if applicable.
@@ -1345,33 +1293,6 @@ func parseToolCalls(toolCalling model.JSONMap) []schema.ToolCall {
 	var toolCalls []schema.ToolCall
 	_ = json.Unmarshal(b, &toolCalls)
 	return toolCalls
-}
-
-// getString safely extracts a string value from a map.
-func getString(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-// getInt safely extracts an int value from a map.
-func getInt(m map[string]any, key string) int {
-	if m == nil {
-		return 0
-	}
-	switch v := m[key].(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	case int64:
-		return int(v)
-	}
-	return 0
 }
 
 // RunSubAgent spawns a sub-agent for a sub-conversation.

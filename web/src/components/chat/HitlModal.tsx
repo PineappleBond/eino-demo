@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Modal, Button, Input, Typography, List, Divider } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useTranslations } from 'next-intl';
 
 const { Text, Title } = Typography;
@@ -81,7 +83,9 @@ export function HitlModal({ open, question, choices, answerType, onAnswer, onCan
         </Button>,
       ]}
     >
-      <Title level={5} style={{ marginTop: 0, marginBottom: 16 }}>{question}</Title>
+      <Title level={5} style={{ marginTop: 0, marginBottom: 16 }}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{question}</ReactMarkdown>
+      </Title>
 
       {hasChoices && (
         <List
