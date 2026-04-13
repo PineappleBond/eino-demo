@@ -594,6 +594,29 @@ paths:
         "404":
           description: Conversation not found
 
+  /projects/{id}/hitls:
+    get:
+      summary: List all pending HITL requests across all conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ pending, answered ] }
+      responses:
+        "200":
+          description: List of HITL requests across the project's conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInTheLoop" }
+        "404": { description: Project not found }
+
   /conversations/{id}/permissions:
     get:
       summary: List permission requests for a conversation

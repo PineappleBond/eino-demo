@@ -626,18 +626,36 @@ func (e PostProjectsIdConversationsJSONBodyMode) Valid() bool {
 	}
 }
 
+// Defines values for GetProjectsIdHitlsParamsStatus.
+const (
+	GetProjectsIdHitlsParamsStatusAnswered GetProjectsIdHitlsParamsStatus = "answered"
+	GetProjectsIdHitlsParamsStatusPending  GetProjectsIdHitlsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetProjectsIdHitlsParamsStatus enum.
+func (e GetProjectsIdHitlsParamsStatus) Valid() bool {
+	switch e {
+	case GetProjectsIdHitlsParamsStatusAnswered:
+		return true
+	case GetProjectsIdHitlsParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetProjectsIdPermissionsParamsStatus.
 const (
-	Answered GetProjectsIdPermissionsParamsStatus = "answered"
-	Pending  GetProjectsIdPermissionsParamsStatus = "pending"
+	GetProjectsIdPermissionsParamsStatusAnswered GetProjectsIdPermissionsParamsStatus = "answered"
+	GetProjectsIdPermissionsParamsStatusPending  GetProjectsIdPermissionsParamsStatus = "pending"
 )
 
 // Valid indicates whether the value is a known member of the GetProjectsIdPermissionsParamsStatus enum.
 func (e GetProjectsIdPermissionsParamsStatus) Valid() bool {
 	switch e {
-	case Answered:
+	case GetProjectsIdPermissionsParamsStatusAnswered:
 		return true
-	case Pending:
+	case GetProjectsIdPermissionsParamsStatusPending:
 		return true
 	default:
 		return false
@@ -1370,6 +1388,14 @@ type PostProjectsIdConversationsJSONBody struct {
 
 // PostProjectsIdConversationsJSONBodyMode defines parameters for PostProjectsIdConversations.
 type PostProjectsIdConversationsJSONBodyMode string
+
+// GetProjectsIdHitlsParams defines parameters for GetProjectsIdHitls.
+type GetProjectsIdHitlsParams struct {
+	Status *GetProjectsIdHitlsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetProjectsIdHitlsParamsStatus defines parameters for GetProjectsIdHitls.
+type GetProjectsIdHitlsParamsStatus string
 
 // GetProjectsIdPermissionsParams defines parameters for GetProjectsIdPermissions.
 type GetProjectsIdPermissionsParams struct {

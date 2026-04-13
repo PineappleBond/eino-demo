@@ -1023,6 +1023,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/hitls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all pending HITL requests across all conversations in a project */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "pending" | "answered";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of HITL requests across the project's conversations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HumanInTheLoop"][];
+                    };
+                };
+                /** @description Project not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{id}/permissions": {
         parameters: {
             query?: never;

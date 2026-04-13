@@ -180,6 +180,29 @@ func (s *ChatService) ListProjectPermissions(userID, projectID uuid.UUID, status
 	return perms, nil
 }
 
+// ListProjectHITLs returns HITL requests across all conversations in a project.
+func (s *ChatService) ListProjectHITLs(userID, projectID uuid.UUID, status string) ([]model.HumanInTheLoop, error) {
+	ctx := context.Background()
+
+	// Verify project belongs to user
+	var project model.Project
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return nil, ErrProjectNotFound
+	}
+
+	var hitls []model.HumanInTheLoop
+	query := s.db.WithContext(ctx).
+		Where("conversation_id IN (SELECT id FROM conversations WHERE project_id = ? AND user_id = ?)", projectID, userID).
+		Order("created_at ASC")
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if err := query.Find(&hitls).Error; err != nil {
+		return nil, fmt.Errorf("list project HITLs: %w", err)
+	}
+	return hitls, nil
+}
+
 // GetConversationMessagesRequest holds the query params for listing messages.
 type GetConversationMessagesRequest struct {
 	AfterSeq int64 `form:"after_seq"`
