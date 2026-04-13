@@ -61,8 +61,9 @@ func TestToolRegistry_ListToolNames_WithConversation(t *testing.T) {
 	}
 	registry := NewToolRegistry(cfg, nil)
 
+	// With nil DB, conversation-scoped tools are NOT advertised (matches GetBaseTools behavior).
 	names := registry.ListToolNames(ToolBuildContext{ConversationID: uuid.New()})
-	expected := []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
+	expected := []string{"weather", "tavily_search", "ask_user_question"}
 
 	if len(names) != len(expected) {
 		t.Fatalf("ListToolNames() = %v, want %v", names, expected)

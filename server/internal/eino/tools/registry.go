@@ -128,8 +128,9 @@ func (r *ToolRegistry) GetWeatherTool() *WeatherTool {
 }
 
 // ListToolNames returns all registered tool names for agent config.
+// Matches GetBaseTools: conversation-scoped tools require both a conversationID and a non-nil DB.
 func (r *ToolRegistry) ListToolNames(bc ToolBuildContext) []string {
-	if bc.ConversationID != uuid.Nil {
+	if bc.ConversationID != uuid.Nil && r.db != nil {
 		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
 	}
 	return []string{"weather", "tavily_search", "ask_user_question"}

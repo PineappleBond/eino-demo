@@ -399,16 +399,17 @@ func (s *ChatService) runAgent(
 		}
 	}
 
+	bc := tools.ToolBuildContext{
+		ConversationID: conversationID,
+		UserID:         userID,
+		WorkspaceDir:   workspaceDir,
+	}
+
 	runCfg := runner.RootRunnerConfig{
 		ModelProvider: s.modelProvider,
 		ModelTier:     modelTier,
 		SystemPrompt:  systemPrompt,
 		Tools: func() []tool.BaseTool {
-			bc := tools.ToolBuildContext{
-				ConversationID: conversationID,
-				UserID:         userID,
-				WorkspaceDir:   workspaceDir,
-			}
 			tls := s.toolRegistry.GetBaseTools(bc)
 			// Append filesystem and HTTP tools (they implement NeedPermissioner).
 			tls = append(tls, s.toolRegistry.GetPermissionTools(workspaceDir)...)
@@ -463,11 +464,6 @@ func (s *ChatService) runAgent(
 				Threshold:      2,
 				Evaluator:      evaluator,
 				Tools: func() []tool.BaseTool {
-					bc := tools.ToolBuildContext{
-						ConversationID: conversationID,
-						UserID:         userID,
-						WorkspaceDir:   workspaceDir,
-					}
 					tls := s.toolRegistry.GetBaseTools(bc)
 					tls = append(tls, s.toolRegistry.GetPermissionTools(workspaceDir)...)
 					return tls
