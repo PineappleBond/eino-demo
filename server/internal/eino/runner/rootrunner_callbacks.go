@@ -846,11 +846,11 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 			ConversationID:       c.cfg.ConversationID,
 			SourceConversationID: &c.cfg.ConversationID,
 			CheckpointID:         c.cfg.ConversationID.String(),
-			InterruptID:    interruptID,
-			Question:       hitlData.Question,
-			Choices:        model.JSONMap{"choices": choicesAny},
-			AnswerType:     hitlData.AnswerType,
-			Status:         "pending",
+			InterruptID:          interruptID,
+			Question:             hitlData.Question,
+			Choices:              model.JSONMap{"choices": choicesAny},
+			AnswerType:           hitlData.AnswerType,
+			Status:               "pending",
 		}
 		if err := c.cfg.DB.WithContext(ctx).Create(&hitl).Error; err != nil {
 			c.cfg.Log.Error("failed to persist HITL record", zap.Error(err))

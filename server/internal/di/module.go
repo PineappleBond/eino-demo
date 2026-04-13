@@ -175,7 +175,6 @@ func RegisterRoutes(
 				wsManager.PushToUserConnections(userID, convert.ToUpdate(update))
 			}
 
-			toolRegistry.SetUserID(uuid.Nil)
 			toolRegistry.SetSyncPushFn(syncFn)
 			toolRegistry.SetRegisterCronTaskFunc(cronSvc.RegisterTask)
 

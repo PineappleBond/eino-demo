@@ -44,9 +44,9 @@ func TestParseCronSchedule_SecondsOnly(t *testing.T) {
 
 func TestParseCronSchedule_Once(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		schedule string
-		wantErr bool
+		wantErr  bool
 	}{
 		{"once 5 minutes", "once:5m", false},
 		{"once 1 hour", "once:1h", false},
@@ -112,7 +112,7 @@ func TestCronTaskRunner_NilDB(t *testing.T) {
 	runner := &cronTaskRunner{db: nil, userID: testUUID(), syncFn: nil, regFn: nil}
 
 	tests := []struct {
-		name string
+		name  string
 		input CronTaskInput
 	}{
 		{

@@ -143,7 +143,7 @@ func (s *CompressionService) CompressConversation(
 		Name:        "compression",
 		Description: "Analyzes a conversation and generates a concise summary",
 		Instruction: instruction,
-		Model: chatModel,
+		Model:       chatModel,
 		ToolsConfig: adk.ToolsConfig{
 			ToolsNodeConfig: compose.ToolsNodeConfig{
 				Tools: []tool.BaseTool{compTool},
@@ -487,9 +487,9 @@ func (s *CompressionService) CompressMessagesToSummary(
 		return "", fmt.Errorf("failed to render compression_summary prompt: %w", err)
 	}
 	agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
-		Name:        "compression",
-		Description: "Generates a concise summary of a conversation",
-		Instruction: instruction,
+		Name:          "compression",
+		Description:   "Generates a concise summary of a conversation",
+		Instruction:   instruction,
 		Model:         chatModel,
 		MaxIterations: 5,
 	})

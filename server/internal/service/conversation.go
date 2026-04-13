@@ -661,21 +661,21 @@ func (s *ConversationService) BranchConversation(
 		// Copy messages with reassigned seq
 		for i, msg := range messages {
 			newMsg := model.Message{
-				ConversationID:  newConv.ID,
-				Seq:             int64(i + 1),
-				SenderRole:      msg.SenderRole,
-				SenderID:        msg.SenderID,
-				Content:         msg.Content,
-				ReasonContent:   msg.ReasonContent,
-				ReplyToSeq:      msg.ReplyToSeq,
+				ConversationID:   newConv.ID,
+				Seq:              int64(i + 1),
+				SenderRole:       msg.SenderRole,
+				SenderID:         msg.SenderID,
+				Content:          msg.Content,
+				ReasonContent:    msg.ReasonContent,
+				ReplyToSeq:       msg.ReplyToSeq,
 				MentionedMembers: msg.MentionedMembers,
-				Metadata:        msg.Metadata,
-				FinishReason:    msg.FinishReason,
-				ErrorMessage:    msg.ErrorMessage,
-				DurationMs:      msg.DurationMs,
-				TokenPrompt:     msg.TokenPrompt,
-				TokenCompletion: msg.TokenCompletion,
-				ToolCalling:     msg.ToolCalling,
+				Metadata:         msg.Metadata,
+				FinishReason:     msg.FinishReason,
+				ErrorMessage:     msg.ErrorMessage,
+				DurationMs:       msg.DurationMs,
+				TokenPrompt:      msg.TokenPrompt,
+				TokenCompletion:  msg.TokenCompletion,
+				ToolCalling:      msg.ToolCalling,
 			}
 			if err := tx.Create(&newMsg).Error; err != nil {
 				return err

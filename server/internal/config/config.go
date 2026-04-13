@@ -16,11 +16,11 @@ type ModelConfig struct {
 
 // Config holds all startup configuration.
 type Config struct {
-	ServerPort    string
-	DatabaseURL   string
-	RedisAddr     string
-	TavilyAPIKey  string
-	Models        map[string]ModelConfig // "haiku", "sonnet", "opus"
+	ServerPort   string
+	DatabaseURL  string
+	RedisAddr    string
+	TavilyAPIKey string
+	Models       map[string]ModelConfig // "haiku", "sonnet", "opus"
 }
 
 // Load reads configuration from flags and environment variables.

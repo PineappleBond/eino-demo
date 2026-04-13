@@ -404,12 +404,15 @@ func (s *ChatService) runAgent(
 		ModelTier:     modelTier,
 		SystemPrompt:  systemPrompt,
 		Tools: func() []tool.BaseTool {
-			s.toolRegistry.SetConversationID(conversationID)
-			s.toolRegistry.SetWorkspaceDir(workspaceDir)
-			tools := s.toolRegistry.GetBaseTools()
+			bc := tools.ToolBuildContext{
+				ConversationID: conversationID,
+				UserID:         userID,
+				WorkspaceDir:   workspaceDir,
+			}
+			tls := s.toolRegistry.GetBaseTools(bc)
 			// Append filesystem and HTTP tools (they implement NeedPermissioner).
-			tools = append(tools, s.toolRegistry.GetPermissionTools()...)
-			return tools
+			tls = append(tls, s.toolRegistry.GetPermissionTools(workspaceDir)...)
+			return tls
 		}(),
 		MaxIteration:     maxIteration,
 		ConversationID:   conversationID,
@@ -460,10 +463,14 @@ func (s *ChatService) runAgent(
 				Threshold:      2,
 				Evaluator:      evaluator,
 				Tools: func() []tool.BaseTool {
-					s.toolRegistry.SetConversationID(conversationID)
-					tools := s.toolRegistry.GetBaseTools()
-					tools = append(tools, s.toolRegistry.GetPermissionTools()...)
-					return tools
+					bc := tools.ToolBuildContext{
+						ConversationID: conversationID,
+						UserID:         userID,
+						WorkspaceDir:   workspaceDir,
+					}
+					tls := s.toolRegistry.GetBaseTools(bc)
+					tls = append(tls, s.toolRegistry.GetPermissionTools(workspaceDir)...)
+					return tls
 				}(),
 				PushUpdate: pushUpdate,
 				NextSeq:    nextSeq,
@@ -974,7 +981,7 @@ func (s *ChatService) AnswerPermission(
 	// 3. Atomically transition the permission record from pending to answered.
 	// Uses RowsAffected to detect double-resume (concurrent requests).
 	result := s.db.WithContext(ctx).Model(&model.HumanInPermission{}).
-		Where("id = ? AND status = 'pending'", permissionID).
+		Where("id = ? AND conversation_id = ? AND status = 'pending'", permissionID, conversationID).
 		Updates(map[string]interface{}{"status": "answered", "decision": req.Decision})
 	if result.Error != nil {
 		return fmt.Errorf("update permission: %w", result.Error)
@@ -1405,14 +1412,14 @@ func (s *ChatService) writeSubAgentResultToParent(
 	}
 
 	payload := model.JSONMap{
-		"conversation_id": parentConvID.String(),
-		"message_id":      msg.ID.String(),
-		"seq":             seq,
-		"role":            "system",
-		"sender_id":       "sub-agent",
-		"content":         content,
+		"conversation_id":       parentConvID.String(),
+		"message_id":            msg.ID.String(),
+		"seq":                   seq,
+		"role":                  "system",
+		"sender_id":             "sub-agent",
+		"content":               content,
 		"child_conversation_id": childConvID.String(),
-		"success": success,
+		"success":               success,
 	}
 	update := model.UserUpdate{
 		UserID:  parentConv.UserID,
