@@ -29,7 +29,7 @@ type SubAgentOutput struct {
 // The caller (chat service) provides the actual agent execution logic.
 // parentConvID and childConvID are the parent and child conversation IDs.
 // prompt is the task description. logPath is the JSONL file path.
-type SpawnSubAgentFunc func(ctx context.Context, parentConvID, childConvID uuid.UUID, prompt, logPath string)
+type SpawnSubAgentFunc func(ctx context.Context, newConv *model.Conversation, prompt, logPath string)
 
 // SubAgentTool creates and runs a sub-agent in an isolated sub-conversation.
 type SubAgentTool struct {
@@ -103,12 +103,33 @@ func (t *SubAgentTool) Run(ctx context.Context, input SubAgentInput) (SubAgentOu
 		return SubAgentOutput{Success: false, Desc: "failed to add member: " + err.Error()}, nil
 	}
 
+	//seq, err := nextSeq(ctx, userID)
+	//if err != nil {
+	//	return nil, fmt.Errorf("seq assignment failed: %w", err)
+	//}
+	//
+	//update := model.UserUpdate{
+	//	UserID: t.userID,
+	//	Seq:    seq,
+	//	Type:   "conversation.created",
+	//	Payload: model.JSONMap{
+	//		"id":         childConv.ID.String(),
+	//		"project_id": childConv.ProjectID.String(),
+	//		"title":      childConv.Title,
+	//		"status":     childConv.Status,
+	//		"seq":        seq,
+	//	},
+	//}
+	//if err := t.db.WithContext(ctx).Create(&update).Error; err != nil {
+	//	return SubAgentOutput{Success: false, Desc: "failed to create update: " + err.Error()}, nil
+	//}
+
 	// 3. Create JSONL log file path
 	logPath := filepath.Join("/tmp", fmt.Sprintf("sub_conv_%s.jsonl", childConv.ID.String()))
 
 	// 4. Spawn sub-agent asynchronously
 	if t.spawnFn != nil {
-		go t.spawnFn(ctx, parentConv.ID, childConv.ID, input.Prompt, logPath)
+		go t.spawnFn(ctx, &childConv, input.Prompt, logPath)
 	}
 
 	return SubAgentOutput{

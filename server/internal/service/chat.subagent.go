@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/google/uuid"
@@ -33,6 +34,33 @@ func (s *ChatService) RunSubAgent(
 	}
 
 	userID := childConv.UserID
+
+	{
+		// 1.1. 推送新conv
+		seq, err := s.wsManager.NextSeq(parentCtx, userID)
+		if err != nil {
+			s.log.Error("RunSubAgent: next seq failed", zap.Error(err))
+		} else {
+			update := model.UserUpdate{
+				UserID: userID,
+				Seq:    seq,
+				Type:   "conversation.created",
+				Payload: model.JSONMap{
+					"id":         childConv.ID.String(),
+					"project_id": childConv.ProjectID.String(),
+					"title":      childConv.Title,
+					"status":     childConv.Status,
+					"seq":        seq,
+				},
+			}
+			if err := s.db.WithContext(parentCtx).Create(&update).Error; err != nil {
+				s.log.Error("RunSubAgent: create update failed", zap.Error(err))
+			}
+			// push
+			wsUpdate := convert.ToUpdate(update)
+			s.wsManager.PushToUserConnections(userID, wsUpdate)
+		}
+	}
 
 	// 2. Create JSONL logger
 	logger, err := runner.NewJSONLLogger(logPath)

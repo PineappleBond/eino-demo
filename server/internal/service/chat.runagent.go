@@ -18,6 +18,8 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -74,11 +76,31 @@ func (s *ChatService) runAgent(
 	callbackCfg := runner.RunCallbackConfig{
 		UserID:         userID,
 		ConversationID: conversationID,
-		DB:             s.db,
-		Log:            s.log,
-		NextSeq:        nextSeq,
-		PushUpdate:     pushUpdate,
-		ParentCtx:      ctx, // parent context, not cancelled — used for lifecycle methods
+		OnCompleteMessage: func(ctx context.Context, userID, subConvID uuid.UUID, role schema.RoleType, addr compose.Address, reasonContent string, outputContent string, usage *schema.TokenUsage) {
+			// 如果conversationID有父ID，最终结果应该以system role冒泡到主对话，并且递归runAgent
+			subConv := &model.Conversation{}
+			if err := s.db.Where("id = ?", subConvID).First(&subConv).Error; err != nil {
+				s.log.Error("runAgent: conversation not found", zap.Error(err))
+				return
+			}
+			if subConv.ParentConversationID == nil || *subConv.ParentConversationID == subConvID || *subConv.ParentConversationID == uuid.Nil {
+				// 没有父对话
+				return
+			}
+			conv := &model.Conversation{}
+			if err := s.db.Where("id = ?", *subConv.ParentConversationID).First(&conv).Error; err != nil {
+				s.log.Error("runAgent: parent conversation not found", zap.Error(err))
+				return
+			}
+			s.sendMessageWithRole(ctx, userID, conv.ID, "<sub_agent_result>\n"+
+				""+outputContent+
+				"\n</sub_agent_result>", "assistant", "sub_agent_result", nextSeq, pushUpdate)
+		},
+		DB:         s.db,
+		Log:        s.log,
+		NextSeq:    nextSeq,
+		PushUpdate: pushUpdate,
+		ParentCtx:  ctx, // parent context, not cancelled — used for lifecycle methods
 		OnComplete: func(success bool, summary string) {
 			s.mu.Lock()
 			cb, ok := s.runCompleteCallbacks[conversationID]
