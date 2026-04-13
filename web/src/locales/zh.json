@@ -152,5 +152,11 @@
   "ws": {
     "reconnecting": "连接已断开，正在重连...",
     "retryNow": "立即重试"
+  },
+  "notification": {
+    "newQuestion": "有新的问题待回答",
+    "newPermission": "有新的权限请求",
+    "navigate": "前往对话",
+    "dismiss": "关闭"
   }
 }

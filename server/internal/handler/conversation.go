@@ -496,6 +496,50 @@ func RegisterConversationRoutes(
 			"hitls":       hitls,
 		})
 	})
+
+	// List pending permissions across all conversations in a project.
+	api.GET("/projects/:id/permissions", func(c *gin.Context) {
+		userID := getUserID(c)
+		projectID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("list project permissions: invalid project ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
+			return
+		}
+
+		var params types.GetConversationsIdPermissionsParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid query params")
+			return
+		}
+
+		status := ""
+		if params.Status != nil {
+			status = string(*params.Status)
+		}
+
+		perms, err := chatSvc.ListProjectPermissions(userID, projectID, status)
+		if err != nil {
+			if errors.Is(err, service.ErrProjectNotFound) {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
+			} else {
+				log.Error("list project permissions failed",
+					zap.String("user_id", userID.String()),
+					zap.String("project_id", projectID.String()),
+					zap.Error(err),
+				)
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list project permissions")
+			}
+			return
+		}
+
+		result := make([]types.HumanInPermission, len(perms))
+		for i, p := range perms {
+			result[i] = convert.ToHumanInPermission(p)
+		}
+
+		respondJSON(c, http.StatusOK, result)
+	})
 }
 
 func valueOrZero[T any](v *T) T {

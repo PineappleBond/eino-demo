@@ -626,6 +626,24 @@ func (e PostProjectsIdConversationsJSONBodyMode) Valid() bool {
 	}
 }
 
+// Defines values for GetProjectsIdPermissionsParamsStatus.
+const (
+	Answered GetProjectsIdPermissionsParamsStatus = "answered"
+	Pending  GetProjectsIdPermissionsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetProjectsIdPermissionsParamsStatus enum.
+func (e GetProjectsIdPermissionsParamsStatus) Valid() bool {
+	switch e {
+	case Answered:
+		return true
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PutSettingsJSONBodyLocale.
 const (
 	En PutSettingsJSONBodyLocale = "en"
@@ -1352,6 +1370,14 @@ type PostProjectsIdConversationsJSONBody struct {
 
 // PostProjectsIdConversationsJSONBodyMode defines parameters for PostProjectsIdConversations.
 type PostProjectsIdConversationsJSONBodyMode string
+
+// GetProjectsIdPermissionsParams defines parameters for GetProjectsIdPermissions.
+type GetProjectsIdPermissionsParams struct {
+	Status *GetProjectsIdPermissionsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetProjectsIdPermissionsParamsStatus defines parameters for GetProjectsIdPermissions.
+type GetProjectsIdPermissionsParamsStatus string
 
 // PutSettingsJSONBody defines parameters for PutSettings.
 type PutSettingsJSONBody struct {

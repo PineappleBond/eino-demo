@@ -152,5 +152,11 @@
   "ws": {
     "reconnecting": "Connection lost, reconnecting...",
     "retryNow": "Retry Now"
+  },
+  "notification": {
+    "newQuestion": "New question waiting",
+    "newPermission": "New permission request",
+    "navigate": "Go to conversation",
+    "dismiss": "Close"
   }
 }

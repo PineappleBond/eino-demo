@@ -261,6 +261,29 @@ paths:
                     type: string
                     format: date-time
 
+  /projects/{id}/permissions:
+    get:
+      summary: List all pending permission requests across all conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ pending, answered ] }
+      responses:
+        "200":
+          description: List of permission requests across the project's conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInPermission" }
+        "404": { description: Project not found }
+
   /conversations/{id}:
     patch:
       summary: Update a conversation (title only)

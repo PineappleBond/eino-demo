@@ -157,6 +157,29 @@ func (s *ChatService) ListPendingPermissions(userID, conversationID uuid.UUID, s
 	return perms, nil
 }
 
+// ListProjectPermissions returns permission requests across all conversations in a project.
+func (s *ChatService) ListProjectPermissions(userID, projectID uuid.UUID, status string) ([]model.HumanInPermission, error) {
+	ctx := context.Background()
+
+	// Verify project belongs to user
+	var project model.Project
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return nil, ErrProjectNotFound
+	}
+
+	var perms []model.HumanInPermission
+	query := s.db.WithContext(ctx).
+		Where("conversation_id IN (SELECT id FROM conversations WHERE project_id = ? AND user_id = ?)", projectID, userID).
+		Order("created_at ASC")
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if err := query.Find(&perms).Error; err != nil {
+		return nil, fmt.Errorf("list project permissions: %w", err)
+	}
+	return perms, nil
+}
+
 // GetConversationMessagesRequest holds the query params for listing messages.
 type GetConversationMessagesRequest struct {
 	AfterSeq int64 `form:"after_seq"`
