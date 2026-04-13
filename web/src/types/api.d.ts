@@ -673,6 +673,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/{id}/branch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a branched conversation */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Branch from this message sequence number */
+                        input_seq: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Branched conversation created */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                            title: string;
+                            mode: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{id}/sub-interrupts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pending interrupts from sub-conversations */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of pending sub-conversation interrupts */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            permissions: components["schemas"]["SubInterruptPermission"][];
+                            hitls: components["schemas"]["SubInterruptHitl"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/conversations/{id}/messages": {
         parameters: {
             query?: never;
@@ -1743,6 +1834,42 @@ export interface components {
             status: "pending" | "answered";
             /** Format: date-time */
             created_at: string;
+        };
+        SubInterruptPermission: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The sub-conversation that triggered this interrupt
+             */
+            conversation_id: string;
+            tool_name: string;
+            action: string;
+            content: string;
+            tool_desc?: string;
+            args_summary?: string;
+            safety_level: number;
+            safety_reason?: string;
+            checkpoint_id?: string;
+            interrupt_id?: string;
+        };
+        SubInterruptHitl: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The sub-conversation that triggered this interrupt
+             */
+            conversation_id: string;
+            question: string;
+            choices: {
+                title: string;
+                desc?: string;
+            }[];
+            /** @enum {string} */
+            answer_type: "single" | "multi" | "text";
+            checkpoint_id?: string;
+            interrupt_id?: string;
         };
         HumanInTheLoopCreatedPayload: {
             conversation_id: string;

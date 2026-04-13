@@ -421,6 +421,35 @@ paths:
                   mode:
                     type: string
 
+  # ── Sub-Interrupts ──
+  /conversations/{id}/sub-interrupts:
+    get:
+      summary: List pending interrupts from sub-conversations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of pending sub-conversation interrupts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ permissions, hitls ]
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubInterruptPermission'
+                  hitls:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubInterruptHitl'
+
   # ── Messages ──
   /conversations/{id}/messages:
     get:
@@ -1508,6 +1537,67 @@ components:
         created_at:
           type: string
           format: date-time
+
+    SubInterruptPermission:
+      type: object
+      required: [ id, conversation_id, tool_name, action, content, safety_level ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+          description: The sub-conversation that triggered this interrupt
+        tool_name:
+          type: string
+        action:
+          type: string
+        content:
+          type: string
+        tool_desc:
+          type: string
+        args_summary:
+          type: string
+        safety_level:
+          type: integer
+        safety_reason:
+          type: string
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+
+    SubInterruptHitl:
+      type: object
+      required: [ id, conversation_id, question, choices, answer_type ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+          description: The sub-conversation that triggered this interrupt
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [ title ]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+          enum: [ single, multi, text ]
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
 
     HumanInTheLoopCreatedPayload:
       type: object

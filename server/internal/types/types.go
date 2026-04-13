@@ -103,19 +103,19 @@ func (e HumanInPermissionStatus) Valid() bool {
 
 // Defines values for HumanInTheLoopAnswerType.
 const (
-	Multi  HumanInTheLoopAnswerType = "multi"
-	Single HumanInTheLoopAnswerType = "single"
-	Text   HumanInTheLoopAnswerType = "text"
+	HumanInTheLoopAnswerTypeMulti  HumanInTheLoopAnswerType = "multi"
+	HumanInTheLoopAnswerTypeSingle HumanInTheLoopAnswerType = "single"
+	HumanInTheLoopAnswerTypeText   HumanInTheLoopAnswerType = "text"
 )
 
 // Valid indicates whether the value is a known member of the HumanInTheLoopAnswerType enum.
 func (e HumanInTheLoopAnswerType) Valid() bool {
 	switch e {
-	case Multi:
+	case HumanInTheLoopAnswerTypeMulti:
 		return true
-	case Single:
+	case HumanInTheLoopAnswerTypeSingle:
 		return true
-	case Text:
+	case HumanInTheLoopAnswerTypeText:
 		return true
 	default:
 		return false
@@ -323,6 +323,27 @@ func (e SettingsChangedPayloadTheme) Valid() bool {
 	case SettingsChangedPayloadThemeDark:
 		return true
 	case SettingsChangedPayloadThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubInterruptHitlAnswerType.
+const (
+	SubInterruptHitlAnswerTypeMulti  SubInterruptHitlAnswerType = "multi"
+	SubInterruptHitlAnswerTypeSingle SubInterruptHitlAnswerType = "single"
+	SubInterruptHitlAnswerTypeText   SubInterruptHitlAnswerType = "text"
+)
+
+// Valid indicates whether the value is a known member of the SubInterruptHitlAnswerType enum.
+func (e SubInterruptHitlAnswerType) Valid() bool {
+	switch e {
+	case SubInterruptHitlAnswerTypeMulti:
+		return true
+	case SubInterruptHitlAnswerTypeSingle:
+		return true
+	case SubInterruptHitlAnswerTypeText:
 		return true
 	default:
 		return false
@@ -1113,6 +1134,42 @@ type SettingsChangedPayloadModelTier string
 // SettingsChangedPayloadTheme defines model for SettingsChangedPayload.Theme.
 type SettingsChangedPayloadTheme string
 
+// SubInterruptHitl defines model for SubInterruptHitl.
+type SubInterruptHitl struct {
+	AnswerType   SubInterruptHitlAnswerType `json:"answer_type"`
+	CheckpointId *string                    `json:"checkpoint_id,omitempty"`
+	Choices      []struct {
+		Desc  *string `json:"desc,omitempty"`
+		Title string  `json:"title"`
+	} `json:"choices"`
+
+	// ConversationId The sub-conversation that triggered this interrupt
+	ConversationId openapi_types.UUID `json:"conversation_id"`
+	Id             openapi_types.UUID `json:"id"`
+	InterruptId    *string            `json:"interrupt_id,omitempty"`
+	Question       string             `json:"question"`
+}
+
+// SubInterruptHitlAnswerType defines model for SubInterruptHitl.AnswerType.
+type SubInterruptHitlAnswerType string
+
+// SubInterruptPermission defines model for SubInterruptPermission.
+type SubInterruptPermission struct {
+	Action       string  `json:"action"`
+	ArgsSummary  *string `json:"args_summary,omitempty"`
+	CheckpointId *string `json:"checkpoint_id,omitempty"`
+	Content      string  `json:"content"`
+
+	// ConversationId The sub-conversation that triggered this interrupt
+	ConversationId openapi_types.UUID `json:"conversation_id"`
+	Id             openapi_types.UUID `json:"id"`
+	InterruptId    *string            `json:"interrupt_id,omitempty"`
+	SafetyLevel    int                `json:"safety_level"`
+	SafetyReason   *string            `json:"safety_reason,omitempty"`
+	ToolDesc       *string            `json:"tool_desc,omitempty"`
+	ToolName       string             `json:"tool_name"`
+}
+
 // Template defines model for Template.
 type Template struct {
 	Description string              `json:"description"`
@@ -1228,6 +1285,12 @@ type PostConversationsIdAnswerJSONBody struct {
 	InterruptId string `json:"interrupt_id"`
 }
 
+// PostConversationsIdBranchJSONBody defines parameters for PostConversationsIdBranch.
+type PostConversationsIdBranchJSONBody struct {
+	// InputSeq Branch from this message sequence number
+	InputSeq int `json:"input_seq"`
+}
+
 // GetConversationsIdCronTasksParams defines parameters for GetConversationsIdCronTasks.
 type GetConversationsIdCronTasksParams struct {
 	// Status Filter tasks by status. Defaults to 'active' if omitted.
@@ -1328,6 +1391,9 @@ type PutConversationsIdJSONRequestBody PutConversationsIdJSONBody
 
 // PostConversationsIdAnswerJSONRequestBody defines body for PostConversationsIdAnswer for application/json ContentType.
 type PostConversationsIdAnswerJSONRequestBody PostConversationsIdAnswerJSONBody
+
+// PostConversationsIdBranchJSONRequestBody defines body for PostConversationsIdBranch for application/json ContentType.
+type PostConversationsIdBranchJSONRequestBody PostConversationsIdBranchJSONBody
 
 // PostConversationsIdCronTasksJSONRequestBody defines body for PostConversationsIdCronTasks for application/json ContentType.
 type PostConversationsIdCronTasksJSONRequestBody PostConversationsIdCronTasksJSONBody
