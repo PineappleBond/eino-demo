@@ -109,7 +109,7 @@ func TestParseCronSchedule_Invalid(t *testing.T) {
 // ── CronTaskTool with nil DB ──
 
 func TestCronTaskRunner_NilDB(t *testing.T) {
-	runner := &cronTaskRunner{db: nil}
+	runner := &cronTaskRunner{db: nil, userID: testUUID(), syncFn: nil, regFn: nil}
 
 	tests := []struct {
 		name string
@@ -148,7 +148,7 @@ func TestCronTaskRunner_NilDB(t *testing.T) {
 // ── NewCronTaskTool creation test ──
 
 func TestNewCronTaskTool(t *testing.T) {
-	tool, err := NewCronTaskTool(nil, testUUID())
+	tool, err := NewCronTaskTool(nil, testUUID(), testUUID(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewCronTaskTool() error = %v", err)
 	}

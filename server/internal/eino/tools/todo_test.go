@@ -19,7 +19,7 @@ func TestTodoReadTool_NilDB(t *testing.T) {
 }
 
 func TestTodoWriteTool_NilDB(t *testing.T) {
-	tool, err := NewTodoWriteTool(nil, testUUID())
+	tool, err := NewTodoWriteTool(nil, testUUID(), testUUID(), nil)
 	if err != nil {
 		t.Fatalf("NewTodoWriteTool() error = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestTodoReadTool_Creation(t *testing.T) {
 
 func TestTodoWriteTool_Creation(t *testing.T) {
 	convID := uuid.New()
-	tool, err := NewTodoWriteTool(nil, convID)
+	tool, err := NewTodoWriteTool(nil, convID, testUUID(), nil)
 	if err != nil {
 		t.Fatalf("NewTodoWriteTool() error = %v", err)
 	}
