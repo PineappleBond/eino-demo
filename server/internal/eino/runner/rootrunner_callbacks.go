@@ -790,8 +790,9 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 						Where("conversation_id = ? AND checkpoint_id = '' AND interrupt_id = '' AND status = 'pending'",
 							c.cfg.ConversationID).
 						Updates(map[string]interface{}{
-							"checkpoint_id": checkpointKey,
-							"interrupt_id":  interruptID,
+							"checkpoint_id":          checkpointKey,
+							"interrupt_id":           interruptID,
+							"source_conversation_id": c.cfg.ConversationID.String(),
 						})
 					break
 				}
@@ -807,8 +808,9 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 			choicesAny[i] = c
 		}
 		hitl := model.HumanInTheLoop{
-			ConversationID: c.cfg.ConversationID,
-			CheckpointID:   c.cfg.ConversationID.String(),
+			ConversationID:       c.cfg.ConversationID,
+			SourceConversationID: &c.cfg.ConversationID,
+			CheckpointID:         c.cfg.ConversationID.String(),
 			InterruptID:    interruptID,
 			Question:       hitlData.Question,
 			Choices:        model.JSONMap{"choices": choicesAny},

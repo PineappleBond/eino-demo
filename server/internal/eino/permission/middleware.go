@@ -232,7 +232,7 @@ func (m *Middleware) checkPermissionAskBeforeEdits(ctx context.Context, toolName
 		{Title: "拒绝", Desc: "不允许此次操作"},
 	}
 
-	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, 0, "ask_before_edits 模式：每次操作都需要确认")
+	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, 0, "ask_before_edits 模式：每次操作都需要确认", &m.cfg.ConversationID)
 	if err != nil {
 		// Continue anyway
 	}
@@ -354,7 +354,7 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 	}
 
 	// Create HumanInPermission record.
-	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, eval.Level, eval.Reason)
+	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, eval.Level, eval.Reason, &m.cfg.ConversationID)
 	if err != nil {
 		// Continue anyway — the interrupt will still work.
 	}

@@ -161,17 +161,18 @@ func MapAnswerToDecision(answer string) Decision {
 }
 
 // CreatePendingPerm creates a HumanInPermission record in the database.
-func CreatePendingPerm(db *gorm.DB, convID uuid.UUID, toolName, action, content, toolDesc, argsSummary string, safetyLevel int, safetyReason string) (*model.HumanInPermission, error) {
+func CreatePendingPerm(db *gorm.DB, convID uuid.UUID, toolName, action, content, toolDesc, argsSummary string, safetyLevel int, safetyReason string, sourceConversationID *uuid.UUID) (*model.HumanInPermission, error) {
 	perm := &model.HumanInPermission{
-		ConversationID: convID,
-		ToolName:       toolName,
-		Action:         action,
-		Content:        content,
-		ToolDesc:       toolDesc,
-		ArgsSummary:    argsSummary,
-		SafetyLevel:    safetyLevel,
-		SafetyReason:   safetyReason,
-		Status:         "pending",
+		ConversationID:       convID,
+		SourceConversationID: sourceConversationID,
+		ToolName:             toolName,
+		Action:               action,
+		Content:              content,
+		ToolDesc:             toolDesc,
+		ArgsSummary:          argsSummary,
+		SafetyLevel:          safetyLevel,
+		SafetyReason:         safetyReason,
+		Status:               "pending",
 	}
 	if err := db.Create(perm).Error; err != nil {
 		return nil, fmt.Errorf("create permission record: %w", err)
