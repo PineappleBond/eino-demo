@@ -2,8 +2,10 @@ package convert
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
@@ -101,4 +103,55 @@ func countNodesTypes(nodes []types.Conversation) int {
 		}
 	}
 	return n
+}
+
+func makeConvWithTime(id string, parentID *string, updatedAt time.Time) model.Conversation {
+	c := model.Conversation{
+		Title:     id,
+		Status:    "active",
+		UpdatedAt: updatedAt,
+	}
+	c.ID = uuid.MustParse(id)
+	if parentID != nil {
+		pid := uuid.MustParse(*parentID)
+		c.ParentConversationID = &pid
+	}
+	return c
+}
+
+func TestBuildConversationTree_OrderByUpdatedAt(t *testing.T) {
+	now := time.Now()
+	parentID := "00000000-0000-0000-0000-000000000001"
+	// Input simulates DB result (updated_at DESC): newest first
+	convs := []model.Conversation{
+		makeConvWithTime("00000000-0000-0000-0000-000000000002", &parentID, now),                // child of id1, newest
+		makeConvWithTime("00000000-0000-0000-0000-000000000004", nil, now),                       // root, newest
+		makeConvWithTime("00000000-0000-0000-0000-000000000003", nil, now.Add(-1*time.Hour)),     // root, 1h ago
+		makeConvWithTime(parentID, nil, now.Add(-2*time.Hour)),                                    // root, oldest
+	}
+
+	roots := BuildConversationTree(convs)
+
+	if len(roots) != 3 {
+		t.Fatalf("roots count = %d, want 3", len(roots))
+	}
+
+	// Roots should be ordered by UpdatedAt DESC: id4 (now), id3 (-1h), id1 (-2h)
+	lastChar := func(id openapi_types.UUID) string { s := id.String(); return s[len(s)-1:] }
+
+	if lastChar(roots[0].Id) != "4" {
+		t.Errorf("first root should be id=...4 (newest), got id=...%s", lastChar(roots[0].Id))
+	}
+	if lastChar(roots[1].Id) != "3" {
+		t.Errorf("second root should be id=...3, got id=...%s", lastChar(roots[1].Id))
+	}
+	if lastChar(roots[2].Id) != "1" {
+		t.Errorf("third root should be id=...1 (oldest), got id=...%s", lastChar(roots[2].Id))
+	}
+
+	// Children of id1 should also be ordered by UpdatedAt DESC
+	parent := roots[2]
+	if parent.Children == nil || len(*parent.Children) != 1 {
+		t.Fatalf("expected 1 child for id1")
+	}
 }

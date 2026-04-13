@@ -4,6 +4,7 @@ package convert
 
 import (
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -125,9 +126,17 @@ func BuildConversationTree(conversations []model.Conversation) []types.Conversat
 		}
 	}
 
-	// Collect roots
-	var roots []types.Conversation
+	// Sort each node's children by updated_at DESC
 	for _, entry := range index {
+		sort.Slice(entry.children, func(i, j int) bool {
+			return entry.children[i].UpdatedAt.After(entry.children[j].UpdatedAt)
+		})
+	}
+
+	// Collect roots in original order (preserves DB updated_at DESC)
+	var roots []types.Conversation
+	for i := range conversations {
+		entry := index[conversations[i].ID]
 		// Root if: no parent, parent is nil UUID, parent not in index, or cycle prevented
 		if entry.conv.ParentConversationID == nil || *entry.conv.ParentConversationID == uuid.Nil {
 			roots = append(roots, convertTreeEntry(*entry, index))
