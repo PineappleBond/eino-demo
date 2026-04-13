@@ -177,6 +177,7 @@ func RegisterRoutes(
 
 			toolRegistry.SetUserID(uuid.Nil)
 			toolRegistry.SetSyncPushFn(syncFn)
+			toolRegistry.SetRegisterCronTaskFunc(cronSvc.RegisterTask)
 
 			// Wire sub-agent spawn function for the sub_agent tool.
 			toolRegistry.SetSpawnSubAgentFunc(chatSvc.RunSubAgent)

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -20,7 +21,8 @@ type ToolRegistry struct {
 	workspaceDir   string    // Set per-run for filesystem tool working directory
 	userID         uuid.UUID // NEW: user ID for context-aware tools
 	syncFn         SyncPushFunc
-	spawnSubAgentFn SpawnSubAgentFunc // callback to spawn sub-agents
+	spawnSubAgentFn    SpawnSubAgentFunc // callback to spawn sub-agents
+	registerCronTaskFn func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error
 }
 
 // NewToolRegistry creates a tool registry.
@@ -82,6 +84,11 @@ func (r *ToolRegistry) SetSpawnSubAgentFunc(fn SpawnSubAgentFunc) {
 	r.spawnSubAgentFn = fn
 }
 
+// SetRegisterCronTaskFunc sets the callback for registering cron tasks with the scheduler.
+func (r *ToolRegistry) SetRegisterCronTaskFunc(fn func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error) {
+	r.registerCronTaskFn = fn
+}
+
 // GetBaseTools returns all tools as BaseTool instances for use in agents.
 // Includes conversation-scoped tools (todo_read, todo_write) if conversationID is set.
 func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
@@ -103,7 +110,7 @@ func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
 			tools = append(tools, todoWrite)
 		}
 
-		cronTask, err := NewCronTaskTool(r.db, r.conversationID, r.userID, r.syncFn, nil)
+		cronTask, err := NewCronTaskTool(r.db, r.conversationID, r.userID, r.syncFn, r.registerCronTaskFn)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {
