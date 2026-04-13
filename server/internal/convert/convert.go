@@ -96,6 +96,101 @@ func ToConversation(m model.Conversation) types.Conversation {
 	}
 }
 
+// treeEntry holds a conversation and its linked children during tree building.
+type treeEntry struct {
+	conv     model.Conversation
+	children []model.Conversation
+}
+
+// BuildConversationTree converts a flat list of conversations into a tree structure
+// based on ParentConversationID. Orphaned nodes (parent not in list) become roots.
+// Circular references are detected and broken by promoting the node to root.
+func BuildConversationTree(conversations []model.Conversation) []types.Conversation {
+	// Index all conversations
+	index := make(map[uuid.UUID]*treeEntry, len(conversations))
+	for i := range conversations {
+		conv := &conversations[i]
+		index[conv.ID] = &treeEntry{conv: *conv}
+	}
+
+	// Link children to parents
+	for _, entry := range index {
+		if entry.conv.ParentConversationID != nil && *entry.conv.ParentConversationID != uuid.Nil {
+			if parent, ok := index[*entry.conv.ParentConversationID]; ok {
+				// Cycle detection: skip if targetID is already an ancestor
+				if !hasAncestor(parent, entry.conv.ID, index) {
+					parent.children = append(parent.children, entry.conv)
+				}
+			}
+		}
+	}
+
+	// Collect roots
+	var roots []types.Conversation
+	for _, entry := range index {
+		// Root if: no parent, parent is nil UUID, parent not in index, or cycle prevented
+		if entry.conv.ParentConversationID == nil || *entry.conv.ParentConversationID == uuid.Nil {
+			roots = append(roots, convertTreeEntry(*entry, index))
+		} else if _, exists := index[*entry.conv.ParentConversationID]; !exists {
+			roots = append(roots, convertTreeEntry(*entry, index))
+		} else {
+			// Check if we were linked as a child (if not, it was a cycle — become root)
+			parent := index[*entry.conv.ParentConversationID]
+			linked := false
+			for _, c := range parent.children {
+				if c.ID == entry.conv.ID {
+					linked = true
+					break
+				}
+			}
+			if !linked {
+				roots = append(roots, convertTreeEntry(*entry, index))
+			}
+		}
+	}
+	return roots
+}
+
+// hasAncestor checks if any ancestor of entryID eventually reaches targetID.
+// Used for cycle detection during tree building.
+func hasAncestor(entry *treeEntry, targetID uuid.UUID, index map[uuid.UUID]*treeEntry) bool {
+	visited := make(map[uuid.UUID]bool)
+	current := entry
+	for current != nil {
+		if current.conv.ID == targetID {
+			return true
+		}
+		if visited[current.conv.ID] {
+			return false // cycle in traversal, stop
+		}
+		visited[current.conv.ID] = true
+		// Move up to parent
+		if current.conv.ParentConversationID == nil {
+			break
+		}
+		parentID := *current.conv.ParentConversationID
+		current = index[parentID]
+	}
+	return false
+}
+
+// convertTreeEntry recursively converts a treeEntry and its children to types.Conversation.
+func convertTreeEntry(entry treeEntry, index map[uuid.UUID]*treeEntry) types.Conversation {
+	result := ToConversation(entry.conv)
+	count := len(entry.children)
+	result.ChildrenCount = &count
+	if count > 0 {
+		childTypes := make([]types.Conversation, 0, count)
+		for _, child := range entry.children {
+			if childEntry, ok := index[child.ID]; ok {
+				childTypes = append(childTypes, convertTreeEntry(*childEntry, index))
+			}
+		}
+		result.Children = &childTypes
+	}
+	return result
+}
+
 // ToMessage converts a GORM Message model to the OpenAPI Message type.
 func ToMessage(m model.Message) types.Message {
 	msg := types.Message{

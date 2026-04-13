@@ -9,7 +9,9 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 )
 
 // ConversationService handles conversation CRUD logic.
@@ -38,10 +40,21 @@ func (s *ConversationService) ListConversations(userID, projectID uuid.UUID) ([]
 	return conversations, nil
 }
 
+// ListConversationsTree returns conversations organized as a tree structure
+// based on ParentConversationID. Roots are returned, with children recursively attached.
+func (s *ConversationService) ListConversationsTree(userID, projectID uuid.UUID) ([]types.Conversation, error) {
+	conversations, err := s.ListConversations(userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return convert.BuildConversationTree(conversations), nil
+}
+
 // CreateConversationRequest holds the fields for creating a conversation.
 type CreateConversationRequest struct {
-	Title string `json:"title"`
-	Mode  string `json:"mode"`
+	Title                string
+	Mode                 string
+	ParentConversationID *uuid.UUID
 }
 
 // CompleteCreateConversation handles conversation creation with seq assignment, user_update, and WS push.
@@ -74,11 +87,12 @@ func (s *ConversationService) CompleteCreateConversation(
 		}
 
 		conversation := model.Conversation{
-			ProjectID: projectID,
-			UserID:    userID,
-			Title:     req.Title,
-			Status:    "active",
-			Mode:      req.Mode,
+			ProjectID:            projectID,
+			UserID:               userID,
+			Title:                req.Title,
+			Status:               "active",
+			Mode:                 req.Mode,
+			ParentConversationID: req.ParentConversationID,
 		}
 		if conversation.Title == "" {
 			conversation.Title = "New Conversation"

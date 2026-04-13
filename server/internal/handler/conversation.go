@@ -32,9 +32,9 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
-		conversations, err := svc.ListConversations(userID, projectID)
+		conversations, err := svc.ListConversationsTree(userID, projectID)
 		if err != nil {
-			log.Error("list conversations failed",
+			log.Error("list conversations tree failed",
 				zap.String("user_id", userID.String()),
 				zap.String("project_id", projectID.String()),
 				zap.Error(err),
@@ -42,11 +42,7 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list conversations")
 			return
 		}
-		result := make([]types.Conversation, len(conversations))
-		for i, conv := range conversations {
-			result[i] = convert.ToConversation(conv)
-		}
-		respondJSON(c, http.StatusOK, result)
+		respondJSON(c, http.StatusOK, conversations)
 	})
 
 	api.POST("/projects/:id/conversations", func(c *gin.Context) {
@@ -72,8 +68,9 @@ func RegisterConversationRoutes(
 			}
 		}
 		svcReq := service.CreateConversationRequest{
-			Title: valueOrZero(req.Title),
-			Mode:  string(valueOrZero(req.Mode)),
+			Title:                valueOrZero(req.Title),
+			Mode:                 string(valueOrZero(req.Mode)),
+			ParentConversationID: req.ParentConversationId,
 		}
 		conv, err := svc.CompleteCreateConversation(
 			c.Request.Context(),
