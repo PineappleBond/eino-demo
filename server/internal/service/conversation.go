@@ -823,3 +823,59 @@ func (s *ConversationService) CompleteDeleteConversation(
 	})
 	return nil
 }
+
+// SubInterruptResult holds pending permissions and HITLs from sub-conversations.
+type SubInterruptResult struct {
+	Permissions []model.HumanInPermission
+	HITLs       []model.HumanInTheLoop
+}
+
+// GetSubInterrupts returns all pending permissions and HITLs from sub-conversations
+// of the given conversation. This enables the parent conversation page to display
+// and resolve sub-conversation interrupts.
+func (s *ConversationService) GetSubInterrupts(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+) (*SubInterruptResult, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
+
+	// 2. Find all sub-conversations
+	var subConvs []model.Conversation
+	if err := s.db.WithContext(ctx).Where("parent_conversation_id = ? AND user_id = ?", conversationID, userID).
+		Find(&subConvs).Error; err != nil {
+		return nil, fmt.Errorf("failed to find sub-conversations: %w", err)
+	}
+
+	result := &SubInterruptResult{}
+	if len(subConvs) == 0 {
+		return result, nil
+	}
+
+	// 3. Collect sub-conversation IDs
+	subConvIDs := make([]uuid.UUID, len(subConvs))
+	for i, sc := range subConvs {
+		subConvIDs[i] = sc.ID
+	}
+
+	// 4. Query pending permissions from sub-conversations
+	if err := s.db.WithContext(ctx).
+		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Order("created_at DESC").
+		Find(&result.Permissions).Error; err != nil {
+		return nil, fmt.Errorf("failed to query sub permissions: %w", err)
+	}
+
+	// 5. Query pending HITLs from sub-conversations
+	if err := s.db.WithContext(ctx).
+		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Order("created_at DESC").
+		Find(&result.HITLs).Error; err != nil {
+		return nil, fmt.Errorf("failed to query sub hitls: %w", err)
+	}
+
+	return result, nil
+}
