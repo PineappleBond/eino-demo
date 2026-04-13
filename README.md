@@ -176,7 +176,8 @@ User Message
 
 - **Project Template System** — Browse and instantiate pre-built project blueprints; each template defines Agent configs, Tools, and initial prompts
 - **Project Management** — Full CRUD with real-time sync via WebSocket push
-- **Conversation Management** — Create, list, delete, and branch conversations within projects
+- **Conversation Management** — Create, list, delete, and branch conversations within projects; supports parent-child conversation hierarchy with tree-structured list responses and cycle detection
+- **Conversation Hierarchy Tree** — Parent-child relationships via `parent_conversation_id`; sidebar renders an accordion tree component with auto-expand for selected child conversations
 - **Conversation Modes** — Switch between `ask_before_edits`, `edit_automatically`, `bypass_permissions`, and `plan_mode` per conversation
 - **Demo Authentication** — Stateless token-based auth with `FirstOrCreate` user resolution
 
@@ -188,7 +189,7 @@ User Message
 - **Tool Call Display** — Collapsible cards showing tool name, input args, result, status, and duration
 - **Interrupt & Stop** — Active streaming interruption with graceful cancellation
 - **Context Compression** — LLM-based history summarization when token count exceeds threshold
-- **Sub-Agent Spawning** — Spawn sub-conversations with async agent execution and result writeback to parent conversation; JSONL structured logging for sub-agent tracing
+- **Sub-Agent Spawning** — Spawn sub-conversations with async agent execution and result writeback to parent conversation; JSONL structured logging for sub-agent tracing; cascading stop for sub-agent sessions; context isolation to prevent callback event bubbling
 
 #### Permission & Safety
 
@@ -200,7 +201,8 @@ User Message
 
 #### Interactive Tools
 
-- **HITL (Human-in-the-Loop)** — `ask_user_question` tool with single-select, multi-select, and free-text answer types; modal UI with interrupt bubbling from sub-conversations
+- **HITL (Human-in-the-Loop)** — `ask_user_question` tool with single-select, multi-select, and free-text answer types; modal UI with interrupt bubbling from sub-conversations; project-level HITL sync for off-conversation update notifications
+- **Missed Update Notification** — `MissedUpdateNotification` component displayed when WebSocket pushes events outside the current conversation
 - **Todo Management** — Create, update, and delete conversation-scoped todos via tool calls; real-time panel sync
 - **Cron Scheduling** — Schedule tasks with cron expressions or `once:N` duration; execution tracking and result logging
 - **Weather Tool** — Mock weather API for tool demonstration
@@ -387,6 +389,7 @@ flowchart TD
 | `project.created` | `> 0` | Project created from template | WS + HTTP response |
 | `project.deleted` | `> 0` | Project deleted | WS |
 | `settings.changed` | `> 0` | Settings updated | WS |
+| `missed.update` | `> 0` | Off-conversation event notification | WS |
 | `empty` | `> 0` | Seq gap filler (INCR non-rollback) | WS + HTTP response |
 | `connected` | -- | WS connection established | WS only |
 
@@ -463,6 +466,7 @@ Telegram's Update mechanism is battle-tested at **800M+ users** handling **billi
 - **HITL Modal** — Interactive question prompts with choice types (single/multi/text)
 - **Permission Request Cards** — Visual approval UI for tool call decisions
 - **Sub-Conversation Interrupt Aggregation** — Bubble sub-agent interrupts to parent conversation UI
+- **Missed Update Notification** — Banner alert for off-conversation events with quick navigation
 - **IndexedDB Persistence** — Offline message caching and recovery
 - **Theme Support** — Light/dark mode via Ant Design `ConfigProvider` with localStorage persistence
 - **Settings Page** — Model tier, locale, and theme configuration
@@ -473,6 +477,7 @@ Telegram's Update mechanism is battle-tested at **800M+ users** handling **billi
 - **InferTool Auto-Schema** — Typed Go structs auto-generate JSON schemas for LLM tool selection
 - **Service-First Architecture** — One implementation, two consumers (HTTP + Eino Tool)
 - **Structured Logging** — JSONL logs for sub-agent tracing and debugging
+- **Tool Registry Refactor** — Per-request `ToolBuildContext` replaces `SetXXX` pattern for better request isolation
 - **Skill System** — Filesystem-backed `SKILL.md` loading for agent capability extension
 
 ### In Development
