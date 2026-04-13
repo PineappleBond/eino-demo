@@ -1372,11 +1372,12 @@ func (s *ChatService) RunSubAgent(
 	s.mu.Unlock()
 
 	// 5. Reuse runAgent with the child conversation ID.
-	// Use context.WithoutCancel so the sub-agent's callback context is independent
-	// of the parent's cancellation — the sub-agent writes to its own conversation.
-	// The parent-child relationship is recorded in RunSessionManager so that
-	// stopping the parent cascades to all child sessions.
-	subCtx := context.WithoutCancel(parentCtx)
+	// Use a clean context (context.Background) so the sub-agent gets its own
+	// Eino callback chain. If we inherited parentCtx, the Eino callback manager
+	// from the parent runner would be copied into the sub-agent's context,
+	// causing sub-agent LLM events to trigger the parent's handler and write
+	// messages to the parent conversation.
+	subCtx := context.Background()
 	s.runAgent(subCtx, userID, childConvID, prompt, s.wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
 		// For sub-agent runs, we push updates via wsManager directly.
 		// The wsManager expects the converted update format.
