@@ -92,9 +92,9 @@ func (s *ChatService) runAgent(
 				s.log.Error("runAgent: parent conversation not found", zap.Error(err))
 				return
 			}
-			s.sendMessageWithRole(ctx, userID, conv.ID, "<sub_agent_result>\n"+
+			s.sendMessageWithRole(context.Background(), userID, conv.ID, "<sub_agent_result>\n"+
 				""+outputContent+
-				"\n</sub_agent_result>", "assistant", "sub_agent_result", nextSeq, pushUpdate)
+				"\n</sub_agent_result>", "assistant", "sub_agent:root", nextSeq, pushUpdate)
 		},
 		DB:         s.db,
 		Log:        s.log,
@@ -477,6 +477,7 @@ func (s *ChatService) runAgent(
 						)
 						callbacks.Stop()
 					} else {
+						s.log.Error("runAgent: unexpected event.Err", zap.Error(event.Err))
 						callbacks.OnError(event.Err)
 						break
 					}
