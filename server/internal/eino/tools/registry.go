@@ -18,6 +18,8 @@ type ToolRegistry struct {
 	baseTools      []tool.BaseTool
 	conversationID uuid.UUID // Set per-run for context-aware tools
 	workspaceDir   string    // Set per-run for filesystem tool working directory
+	userID         uuid.UUID // NEW: user ID for context-aware tools
+	syncFn         SyncPushFunc
 }
 
 // NewToolRegistry creates a tool registry.
@@ -64,6 +66,16 @@ func (r *ToolRegistry) SetWorkspaceDir(workspaceDir string) {
 	r.workspaceDir = workspaceDir
 }
 
+// SetUserID sets the user ID for context-aware tools.
+func (r *ToolRegistry) SetUserID(userID uuid.UUID) {
+	r.userID = userID
+}
+
+// SetSyncPushFn sets the sync push function for tools that need to notify the frontend.
+func (r *ToolRegistry) SetSyncPushFn(syncFn SyncPushFunc) {
+	r.syncFn = syncFn
+}
+
 // GetBaseTools returns all tools as BaseTool instances for use in agents.
 // Includes conversation-scoped tools (todo_read, todo_write) if conversationID is set.
 func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
@@ -78,14 +90,14 @@ func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
 			tools = append(tools, todoRead)
 		}
 
-		todoWrite, err := NewTodoWriteTool(r.db, r.conversationID)
+		todoWrite, err := NewTodoWriteTool(r.db, r.conversationID, r.userID, r.syncFn)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {
 			tools = append(tools, todoWrite)
 		}
 
-		cronTask, err := NewCronTaskTool(r.db, r.conversationID)
+		cronTask, err := NewCronTaskTool(r.db, r.conversationID, r.userID, r.syncFn, nil)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {

@@ -40,17 +40,12 @@ type CronTaskOutput struct {
 	Tasks   []CronTaskInfo `json:"tasks,omitempty" jsonschema_description:"List of cron tasks (for list action)"`
 }
 
-// CronTaskRegisterFunc is a callback that registers a created task with the scheduler.
-// This is set by module.go to avoid import cycles (tools → service → tools).
-var CronTaskRegisterFunc func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error
-
-// CronTaskSyncFunc is a callback that pushes a cron_task.sync update to the user.
-// This is set by module.go to avoid import cycles.
-var CronTaskSyncFunc func(ctx context.Context, userID uuid.UUID, conversationID uuid.UUID)
+// RegisterFunc registers a created cron task with the scheduler.
+type RegisterFunc func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error
 
 // NewCronTaskTool creates a cron_task tool scoped to a conversation.
-func NewCronTaskTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool, error) {
-	t := &cronTaskRunner{db: db, conversationID: conversationID}
+func NewCronTaskTool(db *gorm.DB, conversationID uuid.UUID, userID uuid.UUID, syncFn SyncPushFunc, regFn RegisterFunc) (tool.InvokableTool, error) {
+	t := &cronTaskRunner{db: db, conversationID: conversationID, userID: userID, syncFn: syncFn, regFn: regFn}
 	return utils.InferTool("cron_task", "Schedule, list, or cancel timed messages in this conversation. Create: provide 'content' (message text) and 'schedule' ('once:2m' for 2 min from now, '0 9 * * *' for daily 9AM, or @hourly). Cancel: provide 'task_id'.",
 		func(ctx context.Context, input CronTaskInput) (CronTaskOutput, error) {
 			return t.Run(ctx, input)
@@ -60,6 +55,9 @@ func NewCronTaskTool(db *gorm.DB, conversationID uuid.UUID) (tool.InvokableTool,
 type cronTaskRunner struct {
 	db             *gorm.DB
 	conversationID uuid.UUID
+	userID         uuid.UUID
+	syncFn         SyncPushFunc
+	regFn          RegisterFunc
 }
 
 func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTaskOutput, error) {
@@ -79,7 +77,7 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 			return CronTaskOutput{Success: false, Message: "sender_role must is one of ('assistant', 'user', 'tool', 'system')"}, nil
 		}
 
-		// Verify conversation exists and get user_id
+		// Verify conversation exists.
 		var conv model.Conversation
 		if err := t.db.WithContext(ctx).Where("id = ?", t.conversationID).First(&conv).Error; err != nil {
 			return CronTaskOutput{Success: false, Message: "conversation not found"}, nil
@@ -104,8 +102,8 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 		}
 
 		// Register with the scheduler so it actually fires.
-		if CronTaskRegisterFunc != nil {
-			if err := CronTaskRegisterFunc(ctx, task.ID, nextRun); err != nil {
+		if t.regFn != nil {
+			if err := t.regFn(ctx, task.ID, nextRun); err != nil {
 				// Rollback the DB task to avoid zombie entries.
 				t.db.WithContext(ctx).Model(&task).Update("status", "cancelled")
 				return CronTaskOutput{Success: false, Message: "failed to register task with scheduler: " + err.Error()}, nil
@@ -113,8 +111,8 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 		}
 
 		// Notify the frontend via cron_task.sync so the cron panel refreshes.
-		if CronTaskSyncFunc != nil {
-			CronTaskSyncFunc(ctx, conv.UserID, t.conversationID)
+		if t.syncFn != nil {
+			t.syncFn(ctx, t.userID, t.conversationID, "cron_task.sync")
 		}
 
 		return CronTaskOutput{
@@ -181,9 +179,8 @@ func (t *cronTaskRunner) Run(ctx context.Context, input CronTaskInput) (CronTask
 		}
 
 		// Notify the frontend via cron_task.sync so the cron panel refreshes.
-		var conv model.Conversation
-		if err := t.db.WithContext(ctx).Where("id = ?", t.conversationID).First(&conv).Error; err == nil && CronTaskSyncFunc != nil {
-			CronTaskSyncFunc(ctx, conv.UserID, t.conversationID)
+		if t.syncFn != nil {
+			t.syncFn(ctx, t.userID, t.conversationID, "cron_task.sync")
 		}
 
 		return CronTaskOutput{

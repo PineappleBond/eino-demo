@@ -75,6 +75,7 @@ func RegisterRoutes(
 	chatSvc *service.ChatService,
 	todoSvc *service.TodoService,
 	cronSvc *service.CronService,
+	toolRegistry *tools.ToolRegistry,
 ) {
 	r := handler.NewRouter(cfg, log)
 
@@ -135,13 +136,8 @@ func RegisterRoutes(
 				)
 			})
 
-			// Wire the register callback so the cron tool can register tasks
-			// with the scheduler after creating them in the DB.
-			tools.CronTaskRegisterFunc = cronSvc.RegisterTask
-
-			// Wire the cron sync callback so cron_tool can push WS events
-			// on create/cancel actions, so the frontend panel refreshes.
-			tools.CronTaskSyncFunc = func(ctx context.Context, userID, conversationID uuid.UUID) {
+			// Unified sync function injected into tools via ToolRegistry.
+			syncFn := func(ctx context.Context, userID, conversationID uuid.UUID, updateType string) {
 				seq, err := wsManager.NextSeq(ctx, userID)
 				if err != nil {
 					return
@@ -153,7 +149,7 @@ func RegisterRoutes(
 				update := model.UserUpdate{
 					UserID:  userID,
 					Seq:     seq,
-					Type:    "cron_task.sync",
+					Type:    updateType,
 					Payload: payload,
 				}
 				if err := db.WithContext(ctx).Create(&update).Error; err != nil {
@@ -162,28 +158,8 @@ func RegisterRoutes(
 				wsManager.PushToUserConnections(userID, convert.ToUpdate(update))
 			}
 
-			// Wire the todo sync callback so todo_write tool can push WS events
-			// on create/update/delete actions, so the frontend panel refreshes.
-			tools.TodoSyncFunc = func(ctx context.Context, userID, conversationID uuid.UUID) {
-				seq, err := wsManager.NextSeq(ctx, userID)
-				if err != nil {
-					return
-				}
-				payload := model.JSONMap{
-					"conversation_id": conversationID.String(),
-					"seq":             seq,
-				}
-				update := model.UserUpdate{
-					UserID:  userID,
-					Seq:     seq,
-					Type:    "todo.sync",
-					Payload: payload,
-				}
-				if err := db.WithContext(ctx).Create(&update).Error; err != nil {
-					return
-				}
-				wsManager.PushToUserConnections(userID, convert.ToUpdate(update))
-			}
+			toolRegistry.SetUserID(uuid.Nil)
+			toolRegistry.SetSyncPushFn(syncFn)
 
 			// Wire the push callback so the cron service can push cron_task.sync
 			// when a task fires, so the frontend panel refreshes.
