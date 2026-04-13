@@ -1329,21 +1329,43 @@ func (s *ChatService) RunSubAgent(
 		return
 	}
 
-	// Log initial user message
+	// 3. Create the initial user message in DB so runAgent can load it.
+	// Without this, the sub-agent sees an empty conversation (no user prompt).
+	seq, err := s.wsManager.NextSeq(parentCtx, userID)
+	if err != nil {
+		s.log.Error("RunSubAgent: seq assignment failed", zap.Error(err))
+		seq = 1
+	}
+
+	userMsg := model.Message{
+		ConversationID: childConvID,
+		Seq:            seq,
+		SenderRole:     "user",
+		SenderID:       userID.String(),
+		Content:        prompt,
+		Metadata:       model.JSONMap{"source": "sub-agent"},
+	}
+	if err := s.db.WithContext(parentCtx).Create(&userMsg).Error; err != nil {
+		s.log.Error("RunSubAgent: failed to create initial user message", zap.Error(err))
+		s.writeSubAgentResultToParent(parentCtx, parentConvID, childConvID, false, "failed to create initial message", nil)
+		return
+	}
+
+	// Log initial user message to JSONL
 	_ = logger.Log(runner.JSONLLogEntry{
 		Type:    "message.new",
 		Role:    "user",
 		Content: prompt,
 	})
 
-	// 3. Register a completion callback that writes results to the parent conversation
+	// 4. Register a completion callback that writes results to the parent conversation
 	s.mu.Lock()
 	s.runCompleteCallbacks[childConvID] = func(success bool, summary string) {
 		s.writeSubAgentResultToParent(parentCtx, parentConvID, childConvID, success, summary, logger)
 	}
 	s.mu.Unlock()
 
-	// 4. Reuse runAgent with the child conversation ID.
+	// 5. Reuse runAgent with the child conversation ID.
 	// The runAgent handles: template resolution, model setup, callbacks, message persistence.
 	// Our OnComplete callback (registered above) will trigger the writeback.
 	s.runAgent(parentCtx, userID, childConvID, prompt, s.wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
