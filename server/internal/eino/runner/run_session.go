@@ -17,6 +17,7 @@ type AgentRunSession struct {
 	IsRunning    bool
 	StopFunc     func()        // marks in-progress messages as stopped in DB
 	done         chan struct{} // closed when the event loop goroutine fully drains
+	ParentID     uuid.UUID     // if set, this session is a sub-agent of ParentID
 }
 
 // RunSessionManager tracks active agent runs per conversation.
@@ -33,12 +34,13 @@ func NewRunSessionManager() *RunSessionManager {
 }
 
 // createSession is an internal helper. Caller must hold m.mu write lock.
-func (m *RunSessionManager) createSession(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) {
+func (m *RunSessionManager) createSession(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func(), parentID uuid.UUID) {
 	m.sessions[conversationID] = &AgentRunSession{
 		CancelFunc: cancel,
 		IsRunning:  true,
 		StopFunc:   stopFunc,
 		done:       make(chan struct{}),
+		ParentID:   parentID,
 	}
 }
 
@@ -46,17 +48,24 @@ func (m *RunSessionManager) createSession(conversationID uuid.UUID, cancel conte
 func (m *RunSessionManager) Start(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.createSession(conversationID, cancel, stopFunc)
+	m.createSession(conversationID, cancel, stopFunc, uuid.Nil)
 }
 
 // TryStart registers a new agent run only if no active session exists.
 // If a placeholder session exists (created by SetResumeParams with IsRunning=false),
 // it will be replaced with a real session, preserving checkpoint and resume params.
+// The optional parentID parameter records a parent-child relationship for cascading stop.
 // Returns true if the session was registered or replaced, false if an active session
 // already exists. This prevents concurrent agent runs for the same conversation.
-func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func()) bool {
+func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.CancelFunc, stopFunc func(), parentID ...uuid.UUID) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	pid := uuid.Nil
+	if len(parentID) > 0 {
+		pid = parentID[0]
+	}
+
 	if existing, ok := m.sessions[conversationID]; ok {
 		// If an active agent is already running, don't replace it.
 		if existing.IsRunning {
@@ -64,12 +73,12 @@ func (m *RunSessionManager) TryStart(conversationID uuid.UUID, cancel context.Ca
 		}
 		// Replace placeholder (e.g., from SetResumeParams) with a real session,
 		// preserving checkpoint and resume params.
-		m.createSession(conversationID, cancel, stopFunc)
+		m.createSession(conversationID, cancel, stopFunc, pid)
 		m.sessions[conversationID].CheckpointID = existing.CheckpointID
 		m.sessions[conversationID].ResumeParams = existing.ResumeParams
 		return true
 	}
-	m.createSession(conversationID, cancel, stopFunc)
+	m.createSession(conversationID, cancel, stopFunc, pid)
 	return true
 }
 
@@ -107,8 +116,26 @@ func (m *RunSessionManager) ClearCheckpointID(conversationID uuid.UUID) {
 }
 
 // Stop cancels a running agent and waits for the event loop to drain.
+// If the session has child sessions (sub-agents), they are cancelled first.
 // Safe to call when not running (no-op).
 func (m *RunSessionManager) Stop(conversationID uuid.UUID) {
+	m.stopWithLock(conversationID)
+}
+
+// stopWithLock cancels a session and all its descendants.
+// Caller must NOT hold the lock — it acquires/releases the lock internally
+// to avoid blocking the session map while calling cancel/stop/DB functions.
+func (m *RunSessionManager) stopWithLock(conversationID uuid.UUID) {
+	// First, collect all child session IDs to cascade stop.
+	m.mu.RLock()
+	childIDs := m.findChildrenLocked(conversationID)
+	m.mu.RUnlock()
+
+	// Stop all children first (they may have their own nested children).
+	for _, childID := range childIDs {
+		m.stopWithLock(childID)
+	}
+
 	m.mu.Lock()
 	s, ok := m.sessions[conversationID]
 	if !ok {
@@ -136,6 +163,18 @@ func (m *RunSessionManager) Stop(conversationID uuid.UUID) {
 	case <-doneCh:
 	case <-time.After(2 * time.Second):
 	}
+}
+
+// findChildrenLocked returns all session IDs that have conversationID as their parent.
+// Caller must hold at least a read lock.
+func (m *RunSessionManager) findChildrenLocked(conversationID uuid.UUID) []uuid.UUID {
+	var children []uuid.UUID
+	for id, s := range m.sessions {
+		if s.ParentID == conversationID {
+			children = append(children, id)
+		}
+	}
+	return children
 }
 
 // GetCheckpointID returns the stored checkpoint ID, if any.

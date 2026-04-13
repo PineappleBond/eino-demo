@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -11,16 +12,22 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/config"
 )
 
+// ToolBuildContext holds per-request parameters needed to build tools.
+// These values vary per agent run and must NOT be stored as struct fields.
+type ToolBuildContext struct {
+	ConversationID uuid.UUID
+	UserID         uuid.UUID
+	WorkspaceDir   string
+}
+
 // ToolRegistry holds all registered Eino tools.
 type ToolRegistry struct {
-	cfg            *config.Config
-	db             *gorm.DB
-	baseTools      []tool.BaseTool
-	conversationID uuid.UUID // Set per-run for context-aware tools
-	workspaceDir   string    // Set per-run for filesystem tool working directory
-	userID         uuid.UUID // NEW: user ID for context-aware tools
-	syncFn         SyncPushFunc
-	spawnSubAgentFn SpawnSubAgentFunc // callback to spawn sub-agents
+	cfg                *config.Config
+	db                 *gorm.DB
+	baseTools          []tool.BaseTool
+	syncFn             SyncPushFunc
+	spawnSubAgentFn    SpawnSubAgentFunc // callback to spawn sub-agents
+	registerCronTaskFn func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error
 }
 
 // NewToolRegistry creates a tool registry.
@@ -57,21 +64,6 @@ func (r *ToolRegistry) buildBaseTools() {
 	}
 }
 
-// SetConversationID sets the conversation ID for context-aware tools (todo_read, todo_write).
-func (r *ToolRegistry) SetConversationID(conversationID uuid.UUID) {
-	r.conversationID = conversationID
-}
-
-// SetWorkspaceDir sets the workspace directory for filesystem tools.
-func (r *ToolRegistry) SetWorkspaceDir(workspaceDir string) {
-	r.workspaceDir = workspaceDir
-}
-
-// SetUserID sets the user ID for context-aware tools.
-func (r *ToolRegistry) SetUserID(userID uuid.UUID) {
-	r.userID = userID
-}
-
 // SetSyncPushFn sets the sync push function for tools that need to notify the frontend.
 func (r *ToolRegistry) SetSyncPushFn(syncFn SyncPushFunc) {
 	r.syncFn = syncFn
@@ -82,28 +74,34 @@ func (r *ToolRegistry) SetSpawnSubAgentFunc(fn SpawnSubAgentFunc) {
 	r.spawnSubAgentFn = fn
 }
 
+// SetRegisterCronTaskFunc sets the callback for registering cron tasks with the scheduler.
+func (r *ToolRegistry) SetRegisterCronTaskFunc(fn func(ctx context.Context, taskID uuid.UUID, nextRun time.Time) error) {
+	r.registerCronTaskFn = fn
+}
+
 // GetBaseTools returns all tools as BaseTool instances for use in agents.
-// Includes conversation-scoped tools (todo_read, todo_write) if conversationID is set.
-func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
+// Includes conversation-scoped tools (todo_read, todo_write, cron_task, sub_agent)
+// when conversationID is set and DB is available.
+func (r *ToolRegistry) GetBaseTools(bc ToolBuildContext) []tool.BaseTool {
 	tools := make([]tool.BaseTool, len(r.baseTools))
 	copy(tools, r.baseTools)
 
-	if r.db != nil && r.conversationID != uuid.Nil {
-		todoRead, err := NewTodoReadTool(r.db, r.conversationID)
+	if r.db != nil && bc.ConversationID != uuid.Nil {
+		todoRead, err := NewTodoReadTool(r.db, bc.ConversationID)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {
 			tools = append(tools, todoRead)
 		}
 
-		todoWrite, err := NewTodoWriteTool(r.db, r.conversationID, r.userID, r.syncFn)
+		todoWrite, err := NewTodoWriteTool(r.db, bc.ConversationID, bc.UserID, r.syncFn)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {
 			tools = append(tools, todoWrite)
 		}
 
-		cronTask, err := NewCronTaskTool(r.db, r.conversationID, r.userID, r.syncFn, nil)
+		cronTask, err := NewCronTaskTool(r.db, bc.ConversationID, bc.UserID, r.syncFn, r.registerCronTaskFn)
 		if err != nil {
 			// Tool creation failure is non-fatal; skip the tool silently.
 		} else {
@@ -112,7 +110,7 @@ func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
 
 		// Sub-agent tool: spawns a sub-conversation with an async agent.
 		if r.spawnSubAgentFn != nil {
-			subAgent, err := NewSubAgentTool(r.db, r.conversationID, r.userID, r.spawnSubAgentFn)
+			subAgent, err := NewSubAgentTool(r.db, bc.ConversationID, bc.UserID, r.spawnSubAgentFn)
 			if err != nil {
 				// Tool creation failure is non-fatal; skip the tool silently.
 			} else {
@@ -130,8 +128,9 @@ func (r *ToolRegistry) GetWeatherTool() *WeatherTool {
 }
 
 // ListToolNames returns all registered tool names for agent config.
-func (r *ToolRegistry) ListToolNames() []string {
-	if r.conversationID != uuid.Nil {
+// Matches GetBaseTools: conversation-scoped tools require both a conversationID and a non-nil DB.
+func (r *ToolRegistry) ListToolNames(bc ToolBuildContext) []string {
+	if bc.ConversationID != uuid.Nil && r.db != nil {
 		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
 	}
 	return []string{"weather", "tavily_search", "ask_user_question"}
@@ -139,9 +138,9 @@ func (r *ToolRegistry) ListToolNames() []string {
 
 // GetPermissionTools returns filesystem and HTTP tools that implement NeedPermissioner.
 // These tools require permission checks before execution.
-func (r *ToolRegistry) GetPermissionTools() []tool.BaseTool {
+func (r *ToolRegistry) GetPermissionTools(workspaceDir string) []tool.BaseTool {
 	var tools []tool.BaseTool
-	tools = append(tools, NewFilesystemTools(r.workspaceDir)...)
+	tools = append(tools, NewFilesystemTools(workspaceDir)...)
 	if httpTools := NewHTTPTools(); httpTools != nil {
 		tools = append(tools, httpTools...)
 	}

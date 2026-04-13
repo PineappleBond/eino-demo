@@ -32,6 +32,7 @@ type RootRunnerHandler struct {
 	callback         RootRunnerHandlerCallback
 	tracer           trace.Tracer
 	onCompletedTimes *atomic.Int32
+	LatestOutput     *einomodel.CallbackOutput
 }
 
 func (h *RootRunnerHandler) OnStart(ctx context.Context, info *callbacks.RunInfo, input callbacks.CallbackInput) context.Context {
@@ -137,8 +138,17 @@ func (h *RootRunnerHandler) OnEndWithStreamOutput(ctx context.Context, info *cal
 					attribute.Int("Usage.PromptTokens", responseMeta.Usage.PromptTokens),
 				)
 			}
-			if h.onCompletedTimes.Add(1) == 1 {
-				h.callback.OnCompleted(ctx, role, addr, reasoningContent, content, responseMeta.Usage)
+			if responseMeta.FinishReason == "tool_calls" {
+				// TODO ??
+			} else {
+				if reasoningContent == "" && content == "" {
+					// 内容都是空的
+				} else {
+					if h.onCompletedTimes.Add(1) == 1 {
+						h.callback.OnCompleted(ctx, role, addr, reasoningContent, content, responseMeta.Usage)
+					}
+					h.LatestOutput = modelOutput
+				}
 			}
 		}
 

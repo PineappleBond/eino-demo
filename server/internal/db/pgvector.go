@@ -1,8 +1,8 @@
 package db
 
 import (
-	"gorm.io/gorm"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // setupPGVector creates the vector extension if it doesn't exist.

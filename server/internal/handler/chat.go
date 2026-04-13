@@ -135,7 +135,7 @@ func RegisterChatRoutes(
 
 		hitls, err := chatSvc.ListPendingHITL(userID, conversationID)
 		if err != nil {
-		if errors.Is(err, service.ErrConversationNotFound) {
+			if errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list pending HITL")
@@ -172,7 +172,7 @@ func RegisterChatRoutes(
 
 		perms, err := chatSvc.ListPendingPermissions(userID, conversationID, status)
 		if err != nil {
-		if errors.Is(err, service.ErrConversationNotFound) {
+			if errors.Is(err, service.ErrConversationNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list permissions")
@@ -224,7 +224,7 @@ func RegisterChatRoutes(
 				wsManager.PushToUserConnections(userID, wsUpdate)
 			},
 		); err != nil {
-		if errors.Is(err, service.ErrConversationNotFound) || errors.Is(err, service.ErrPermissionNotFound) {
+			if errors.Is(err, service.ErrConversationNotFound) || errors.Is(err, service.ErrPermissionNotFound) {
 				respondError(c, http.StatusNotFound, "NOT_FOUND", err.Error())
 			} else {
 				respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())

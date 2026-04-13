@@ -438,6 +438,11 @@ export interface paths {
                          * @enum {string}
                          */
                         mode?: "ask_before_edits" | "edit_automatically" | "bypass_permissions" | "plan_mode";
+                        /**
+                         * Format: uuid
+                         * @description Optional parent conversation ID to create a child conversation
+                         */
+                        parent_conversation_id?: string | null;
                     };
                 };
             };
@@ -464,6 +469,53 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all pending permission requests across all conversations in a project */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "pending" | "answered";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of permission requests across the project's conversations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HumanInPermission"][];
+                    };
+                };
+                /** @description Project not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -960,6 +1012,53 @@ export interface paths {
                     };
                 };
                 /** @description Conversation not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/hitls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all pending HITL requests across all conversations in a project */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "pending" | "answered";
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of HITL requests across the project's conversations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HumanInTheLoop"][];
+                    };
+                };
+                /** @description Project not found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1515,6 +1614,15 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * Format: uuid
+             * @description Parent conversation ID for hierarchical conversations
+             */
+            parent_conversation_id?: string | null;
+            /** @description Number of direct children (for badge display when children array is not fully populated) */
+            children_count?: number;
+            /** @description Nested child conversations (recursive) */
+            children?: components["schemas"]["Conversation"][];
             /**
              * @default ask_before_edits
              * @enum {string}

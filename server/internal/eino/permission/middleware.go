@@ -234,7 +234,7 @@ func (m *Middleware) checkPermissionAskBeforeEdits(ctx context.Context, toolName
 
 	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, 0, "ask_before_edits 模式：每次操作都需要确认", &m.cfg.ConversationID)
 	if err != nil {
-		// Continue anyway
+		return false, fmt.Errorf("permission record creation failed: %w", err)
 	}
 
 	interruptErr := tool.Interrupt(ctx, map[string]any{
@@ -252,32 +252,6 @@ func (m *Middleware) checkPermissionAskBeforeEdits(ctx context.Context, toolName
 		"permission_id": perm.ID.String(),
 	})
 
-	// Push permission.pending update.
-	if m.cfg.PushUpdate != nil && m.cfg.NextSeq != nil {
-		seq, _ := m.cfg.NextSeq(ctx, m.cfg.UserID)
-		if seq > 0 {
-			m.cfg.PushUpdate(m.cfg.UserID, model.UserUpdate{
-				UserID: m.cfg.UserID,
-				Seq:    seq,
-				Type:   "permission.pending",
-				Payload: model.JSONMap{
-					"conversation_id": m.cfg.ConversationID.String(),
-					"permission_id":   perm.ID.String(),
-					"checkpoint_id":   perm.CheckpointID,
-					"interrupt_id":    "",
-					"tool_name":       req.ToolName,
-					"action":          req.Action,
-					"content":         req.Content,
-					"tool_desc":       req.ToolDesc,
-					"args_summary":    req.ArgsSummary,
-					"safety_level":    0,
-					"safety_reason":   "ask_before_edits 模式",
-					"seq":             seq,
-				},
-			})
-		}
-	}
-
 	return false, interruptErr
 }
 
@@ -285,8 +259,9 @@ func (m *Middleware) handleResume(ctx context.Context, toolName, argumentsInJSON
 	isTarget, hasData, data := tool.GetResumeContext[string](ctx)
 	if !isTarget || !hasData {
 		// Not our resume — re-interrupt.
-		_ = tool.Interrupt(ctx, nil)
-		return false, fmt.Errorf("permission resume interrupted")
+		//_ = tool.Interrupt(ctx, nil)
+		//return false, fmt.Errorf("permission resume interrupted")
+		return true, nil
 	}
 
 	// Decode resume data.
@@ -356,7 +331,7 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 	// Create HumanInPermission record.
 	perm, err := CreatePendingPerm(m.cfg.DB, m.cfg.ConversationID, req.ToolName, req.Action, req.Content, req.ToolDesc, req.ArgsSummary, eval.Level, eval.Reason, &m.cfg.ConversationID)
 	if err != nil {
-		// Continue anyway — the interrupt will still work.
+		return fmt.Errorf("permission record creation failed: %w", err)
 	}
 
 	// Execute the Eino Interrupt. This generates a new InterruptSignal with a unique ID.
@@ -378,38 +353,9 @@ func (m *Middleware) interruptForPermission(ctx context.Context, req *Permission
 		"permission_id": perm.ID.String(),
 	})
 
-	// NOTE: Do NOT push permission.pending here. The runner saves the checkpoint
-	// AFTER this function returns (in handleIter), so checkpoint_id is empty at
-	// this point. The event loop pushes permission.pending after OnInterrupted,
-	// at which point both checkpoint_id and interrupt_id are available.
-
-	// For now, push here with empty IDs to maintain immediate delivery.
-	// The event loop will push a replacement update with real IDs.
-	// TODO: remove this once event loop push is verified.
-	if m.cfg.PushUpdate != nil && m.cfg.NextSeq != nil {
-		seq, _ := m.cfg.NextSeq(ctx, m.cfg.UserID)
-		if seq > 0 {
-			m.cfg.PushUpdate(m.cfg.UserID, model.UserUpdate{
-				UserID: m.cfg.UserID,
-				Seq:    seq,
-				Type:   "permission.pending",
-				Payload: model.JSONMap{
-					"conversation_id": m.cfg.ConversationID.String(),
-					"permission_id":   perm.ID.String(),
-					"checkpoint_id":   perm.CheckpointID,
-					"interrupt_id":    "",
-					"tool_name":       req.ToolName,
-					"action":          req.Action,
-					"content":         req.Content,
-					"tool_desc":       req.ToolDesc,
-					"args_summary":    req.ArgsSummary,
-					"safety_level":    eval.Level,
-					"safety_reason":   eval.Reason,
-					"seq":             seq,
-				},
-			})
-		}
-	}
+	// The runner saves the checkpoint AFTER this function returns (in handleIter).
+	// OnInterrupted is called after the checkpoint is saved and pushes
+	// permission.pending with real checkpoint_id and interrupt_id.
 
 	return interruptErr
 }

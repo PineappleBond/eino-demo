@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 
 	svcutils "github.com/PineappleBond/eino-demo-dev/server/internal/utils"
 )
@@ -58,9 +58,9 @@ type contextInjectionMiddleware struct {
 func NewContextInjectionMiddleware(queue *MessageQueue, conversationID uuid.UUID, tokenCheck *TokenCheckConfig) adk.ChatModelAgentMiddleware {
 	return &contextInjectionMiddleware{
 		BaseChatModelAgentMiddleware: &adk.BaseChatModelAgentMiddleware{},
-		queue:          queue,
-		conversationID: conversationID,
-		tokenCheck:     tokenCheck,
+		queue:                        queue,
+		conversationID:               conversationID,
+		tokenCheck:                   tokenCheck,
 	}
 }
 

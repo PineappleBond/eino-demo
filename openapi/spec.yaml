@@ -234,6 +234,11 @@ paths:
                     - bypass_permissions
                     - plan_mode
                   default: ask_before_edits
+                parent_conversation_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: "Optional parent conversation ID to create a child conversation"
       responses:
         "201":
           description: Created conversation
@@ -260,6 +265,29 @@ paths:
                   updated_at:
                     type: string
                     format: date-time
+
+  /projects/{id}/permissions:
+    get:
+      summary: List all pending permission requests across all conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ pending, answered ] }
+      responses:
+        "200":
+          description: List of permission requests across the project's conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInPermission" }
+        "404": { description: Project not found }
 
   /conversations/{id}:
     patch:
@@ -570,6 +598,29 @@ paths:
                   $ref: "#/components/schemas/HumanInTheLoop"
         "404":
           description: Conversation not found
+
+  /projects/{id}/hitls:
+    get:
+      summary: List all pending HITL requests across all conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ pending, answered ] }
+      responses:
+        "200":
+          description: List of HITL requests across the project's conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInTheLoop" }
+        "404": { description: Project not found }
 
   /conversations/{id}/permissions:
     get:
@@ -959,6 +1010,19 @@ components:
         updated_at:
           type: string
           format: date-time
+        parent_conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Parent conversation ID for hierarchical conversations"
+        children_count:
+          type: integer
+          description: "Number of direct children (for badge display when children array is not fully populated)"
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Conversation"
+          description: "Nested child conversations (recursive)"
         mode:
           type: string
           enum:

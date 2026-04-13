@@ -31,13 +31,14 @@ func TruncatedContent(s string, maxLen int) string {
 
 // RunCallbackConfig holds the dependencies needed by callback implementations.
 type RunCallbackConfig struct {
-	UserID         uuid.UUID
-	ConversationID uuid.UUID
-	DB             *gorm.DB
-	Log            *zap.Logger
-	NextSeq        func(ctx context.Context, userID uuid.UUID) (int64, error)
-	PushUpdate     func(userID uuid.UUID, update model.UserUpdate)
-	ParentCtx      context.Context // parent context (not cancelled), used for lifecycle methods
+	UserID            uuid.UUID
+	ConversationID    uuid.UUID
+	OnCompleteMessage func(ctx context.Context, userID, conversationID uuid.UUID, role schema.RoleType, addr compose.Address, reasonContent string, outputContent string, usage *schema.TokenUsage)
+	DB                *gorm.DB
+	Log               *zap.Logger
+	NextSeq           func(ctx context.Context, userID uuid.UUID) (int64, error)
+	PushUpdate        func(userID uuid.UUID, update model.UserUpdate)
+	ParentCtx         context.Context // parent context (not cancelled), used for lifecycle methods
 
 	// JSONLLogger is optional. When set, every callback also writes a JSONL entry.
 	// Used by sub-agents to produce a structured log file.
@@ -624,6 +625,11 @@ func (c *RootRunnerCallbacks) OnCompleted(ctx context.Context, role schema.RoleT
 	}
 
 	c.completeMessage(ctx, t, outputContent, reasoningContent, usage)
+
+	if c.cfg.OnCompleteMessage != nil {
+		c.cfg.OnCompleteMessage(ctx, c.cfg.UserID, c.cfg.ConversationID, role, addr, reasoningContent, outputContent, usage)
+	}
+
 }
 
 // ---- RootRunnerCallback lifecycle methods ----
@@ -792,8 +798,43 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 						Updates(map[string]interface{}{
 							"checkpoint_id":          checkpointKey,
 							"interrupt_id":           interruptID,
-							"source_conversation_id": c.cfg.ConversationID.String(),
+							"source_conversation_id": &c.cfg.ConversationID,
 						})
+
+					// Push permission.pending with real IDs (checkpoint and interrupt
+					// were just assigned by OnInterrupted, so they are now available).
+					seq, seqErr := c.cfg.NextSeq(ctx, c.cfg.UserID)
+					if seqErr != nil {
+						c.cfg.Log.Error("seq assignment failed for permission", zap.Error(seqErr))
+					} else if seq > 0 {
+						update := model.UserUpdate{
+							UserID: c.cfg.UserID,
+							Seq:    seq,
+							Type:   "permission.pending",
+							Payload: model.JSONMap{
+								"conversation_id": c.cfg.ConversationID.String(),
+								"permission_id":   m["permission_id"],
+								"checkpoint_id":   checkpointKey,
+								"interrupt_id":    interruptID,
+								"tool_name":       m["tool_name"],
+								"action":          m["action"],
+								"content":         m["content"],
+								"tool_desc":       m["tool_desc"],
+								"args_summary":    m["args_summary"],
+								"safety_level":    m["safety_level"],
+								"safety_reason":   m["safety_reason"],
+								"question":        m["question"],
+								"answer_type":     m["answer_type"],
+								"choices":         m["choices"],
+								"seq":             seq,
+							},
+						}
+						if dbErr := c.cfg.DB.WithContext(ctx).Create(&update).Error; dbErr != nil {
+							c.cfg.Log.Error("failed to persist permission.pending update", zap.Error(dbErr))
+						} else {
+							c.cfg.PushUpdate(c.cfg.UserID, update)
+						}
+					}
 					break
 				}
 			}
@@ -811,11 +852,11 @@ func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {
 			ConversationID:       c.cfg.ConversationID,
 			SourceConversationID: &c.cfg.ConversationID,
 			CheckpointID:         c.cfg.ConversationID.String(),
-			InterruptID:    interruptID,
-			Question:       hitlData.Question,
-			Choices:        model.JSONMap{"choices": choicesAny},
-			AnswerType:     hitlData.AnswerType,
-			Status:         "pending",
+			InterruptID:          interruptID,
+			Question:             hitlData.Question,
+			Choices:              model.JSONMap{"choices": choicesAny},
+			AnswerType:           hitlData.AnswerType,
+			Status:               "pending",
 		}
 		if err := c.cfg.DB.WithContext(ctx).Create(&hitl).Error; err != nil {
 			c.cfg.Log.Error("failed to persist HITL record", zap.Error(err))

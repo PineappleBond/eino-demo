@@ -626,6 +626,42 @@ func (e PostProjectsIdConversationsJSONBodyMode) Valid() bool {
 	}
 }
 
+// Defines values for GetProjectsIdHitlsParamsStatus.
+const (
+	GetProjectsIdHitlsParamsStatusAnswered GetProjectsIdHitlsParamsStatus = "answered"
+	GetProjectsIdHitlsParamsStatusPending  GetProjectsIdHitlsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetProjectsIdHitlsParamsStatus enum.
+func (e GetProjectsIdHitlsParamsStatus) Valid() bool {
+	switch e {
+	case GetProjectsIdHitlsParamsStatusAnswered:
+		return true
+	case GetProjectsIdHitlsParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetProjectsIdPermissionsParamsStatus.
+const (
+	GetProjectsIdPermissionsParamsStatusAnswered GetProjectsIdPermissionsParamsStatus = "answered"
+	GetProjectsIdPermissionsParamsStatusPending  GetProjectsIdPermissionsParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetProjectsIdPermissionsParamsStatus enum.
+func (e GetProjectsIdPermissionsParamsStatus) Valid() bool {
+	switch e {
+	case GetProjectsIdPermissionsParamsStatusAnswered:
+		return true
+	case GetProjectsIdPermissionsParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PutSettingsJSONBodyLocale.
 const (
 	En PutSettingsJSONBodyLocale = "en"
@@ -693,21 +729,29 @@ type ConnectedPayload struct {
 
 // Conversation defines model for Conversation.
 type Conversation struct {
-	CreatedAt       *time.Time         `json:"created_at,omitempty"`
-	Id              openapi_types.UUID `json:"id"`
-	LastPreview     *string            `json:"last_preview,omitempty"`
-	LatestSeq       *int               `json:"latest_seq,omitempty"`
-	MemberCount     *int               `json:"member_count,omitempty"`
-	MessageCount    *int               `json:"message_count,omitempty"`
-	Mode            *ConversationMode  `json:"mode,omitempty"`
-	ProjectId       openapi_types.UUID `json:"project_id"`
-	Status          *string            `json:"status,omitempty"`
-	Summary         *string            `json:"summary,omitempty"`
-	Title           *string            `json:"title,omitempty"`
-	TokenCompletion *int               `json:"token_completion,omitempty"`
-	TokenPrompt     *int               `json:"token_prompt,omitempty"`
-	UpdatedAt       *time.Time         `json:"updated_at,omitempty"`
-	UserId          openapi_types.UUID `json:"user_id"`
+	// Children Nested child conversations (recursive)
+	Children *[]Conversation `json:"children,omitempty"`
+
+	// ChildrenCount Number of direct children (for badge display when children array is not fully populated)
+	ChildrenCount *int               `json:"children_count,omitempty"`
+	CreatedAt     *time.Time         `json:"created_at,omitempty"`
+	Id            openapi_types.UUID `json:"id"`
+	LastPreview   *string            `json:"last_preview,omitempty"`
+	LatestSeq     *int               `json:"latest_seq,omitempty"`
+	MemberCount   *int               `json:"member_count,omitempty"`
+	MessageCount  *int               `json:"message_count,omitempty"`
+	Mode          *ConversationMode  `json:"mode,omitempty"`
+
+	// ParentConversationId Parent conversation ID for hierarchical conversations
+	ParentConversationId *openapi_types.UUID `json:"parent_conversation_id,omitempty"`
+	ProjectId            openapi_types.UUID  `json:"project_id"`
+	Status               *string             `json:"status,omitempty"`
+	Summary              *string             `json:"summary,omitempty"`
+	Title                *string             `json:"title,omitempty"`
+	TokenCompletion      *int                `json:"token_completion,omitempty"`
+	TokenPrompt          *int                `json:"token_prompt,omitempty"`
+	UpdatedAt            *time.Time          `json:"updated_at,omitempty"`
+	UserId               openapi_types.UUID  `json:"user_id"`
 }
 
 // ConversationMode defines model for Conversation.Mode.
@@ -1346,12 +1390,31 @@ type PutProjectsIdJSONBody struct {
 
 // PostProjectsIdConversationsJSONBody defines parameters for PostProjectsIdConversations.
 type PostProjectsIdConversationsJSONBody struct {
-	Mode  *PostProjectsIdConversationsJSONBodyMode `json:"mode,omitempty"`
-	Title *string                                  `json:"title,omitempty"`
+	Mode *PostProjectsIdConversationsJSONBodyMode `json:"mode,omitempty"`
+
+	// ParentConversationId Optional parent conversation ID to create a child conversation
+	ParentConversationId *openapi_types.UUID `json:"parent_conversation_id,omitempty"`
+	Title                *string             `json:"title,omitempty"`
 }
 
 // PostProjectsIdConversationsJSONBodyMode defines parameters for PostProjectsIdConversations.
 type PostProjectsIdConversationsJSONBodyMode string
+
+// GetProjectsIdHitlsParams defines parameters for GetProjectsIdHitls.
+type GetProjectsIdHitlsParams struct {
+	Status *GetProjectsIdHitlsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetProjectsIdHitlsParamsStatus defines parameters for GetProjectsIdHitls.
+type GetProjectsIdHitlsParamsStatus string
+
+// GetProjectsIdPermissionsParams defines parameters for GetProjectsIdPermissions.
+type GetProjectsIdPermissionsParams struct {
+	Status *GetProjectsIdPermissionsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// GetProjectsIdPermissionsParamsStatus defines parameters for GetProjectsIdPermissions.
+type GetProjectsIdPermissionsParamsStatus string
 
 // PutSettingsJSONBody defines parameters for PutSettings.
 type PutSettingsJSONBody struct {

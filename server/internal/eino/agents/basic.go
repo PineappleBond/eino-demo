@@ -26,13 +26,13 @@ func NewBasicAgentBuilder(cfg *config.Config, toolRegistry *tools.ToolRegistry) 
 }
 
 // Build returns the agent configuration for a given model tier.
-func (b *BasicAgentBuilder) Build(modelTier string) AgentConfig {
+func (b *BasicAgentBuilder) Build(modelTier string, bc tools.ToolBuildContext) AgentConfig {
 	mc := b.cfg.Models[modelTier]
 	return AgentConfig{
 		BaseURL:      mc.BaseURL,
 		APIKey:       mc.APIKey,
 		Model:        mc.Model,
 		SystemPrompt: "You are a helpful assistant. Use tools when appropriate to answer questions.",
-		ToolNames:    b.tools.ListToolNames(),
+		ToolNames:    b.tools.ListToolNames(bc),
 	}
 }

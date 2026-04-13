@@ -7,6 +7,7 @@ type UpdateType = Update['type'];
 
 type Subscriber = (update: Update) => void;
 type GapCallback = (localMaxSeq: number, incomingMinSeq: number) => void;
+type MissedCallback = (update: Update, topic: string) => void;
 
 class UpdateDispatcher {
   private subscribers = new Map<string, Set<Subscriber>>();
@@ -14,6 +15,15 @@ class UpdateDispatcher {
   private queue: Update[][] = [];
   private maxServerSeq: number | null = null;
   private onGapDetected: GapCallback | null = null;
+  private onMissed: MissedCallback | null = null;
+
+  /**
+   * Register a callback for updates whose topic has no active subscriber.
+   * Used to show a notification when the user is on a different conversation.
+   */
+  setMissedCallback(fn: MissedCallback): void {
+    this.onMissed = fn;
+  }
 
   /**
    * Register a callback that fires when a seq gap is detected.
@@ -110,6 +120,9 @@ class UpdateDispatcher {
       for (const fn of subs) {
         fn(update);
       }
+    } else {
+      // No subscriber for this topic — treat as missed (user is on a different page)
+      this.onMissed?.(update, topic);
     }
     // Also broadcast settings changes to system topic
     if (update.type === 'settings.changed') {

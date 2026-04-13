@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useReducer, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useCallback, useRef, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Spin, Result, App, Card, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { api, Message as MessageType } from '@/lib/api';
 import type { components } from '@/types/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const { Text } = Typography;
 
@@ -55,7 +57,6 @@ interface ChatState {
   // Sub-conversation interrupts
   subInterruptPermissions: Map<string, components['schemas']['SubInterruptPermission']>; // permId -> payload
   subInterruptHitLs: Map<string, components['schemas']['SubInterruptHitl']>; // hitlId -> payload
-  subInterruptFetching: boolean;
   activeSubHitl: components['schemas']['SubInterruptHitl'] | null;
 }
 
@@ -201,7 +202,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         subInterruptPermissions: permMap,
         subInterruptHitLs: hitlMap,
-        subInterruptFetching: false,
       };
     }
     case 'SET_SUB_HITL_MODAL':
@@ -239,7 +239,6 @@ const initialState: ChatState = {
   permissionAnswering: null,
   subInterruptPermissions: new Map(),
   subInterruptHitLs: new Map(),
-  subInterruptFetching: false,
   activeSubHitl: null,
 };
 
@@ -365,6 +364,8 @@ export default function ConvChatPage() {
         const payload = update.payload as components['schemas']['MessageErrorPayload'];
         message.error(payload.error || 'Stream error');
         dispatch({ type: 'STOP_STREAMING' });
+        // Agent was interrupted — check for new sub-conversation interrupts
+        setSubRefreshKey((k) => k + 1);
         break;
       }
       case 'conversation.compressed': {
@@ -456,6 +457,8 @@ export default function ConvChatPage() {
 
   // ─── Fetch sub-conversation interrupts ───
 
+  const [subRefreshKey, setSubRefreshKey] = useState(0);
+
   useEffect(() => {
     api.get<{ permissions: components['schemas']['SubInterruptPermission'][]; hitls: components['schemas']['SubInterruptHitl'][] }>(
       `/conversations/${convId}/sub-interrupts`
@@ -472,7 +475,7 @@ export default function ConvChatPage() {
           payload: { permissions: [], hitls: [] },
         });
       });
-  }, [convId]);
+  }, [convId, subRefreshKey]);
 
   // ─── Initial load (try IndexedDB first, fallback to HTTP) ───
 
@@ -734,12 +737,14 @@ export default function ConvChatPage() {
       });
       message.success(t('permissionAnswered') || 'Permission answered');
       dispatch({ type: 'REMOVE_SUB_PERMISSION', payload: permId });
+      // Refetch to catch any new sub-interrupts that appeared
+      setSubRefreshKey((k) => k + 1);
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to answer permission');
     } finally {
       dispatch({ type: 'SET_PERMISSION_ANSWERING', payload: null });
     }
-  }, [convId, message, state.subInterruptPermissions, t]);
+  }, [message, state.subInterruptPermissions, t]);
 
   // ─── Sub-conversation interrupt: HITL answer ───
 
@@ -755,13 +760,13 @@ export default function ConvChatPage() {
         interrupt_id,
         answer,
       });
-      message.success('Answer submitted');
+      message.success(t('answerSubmitted') || 'Answer submitted');
       dispatch({ type: 'REMOVE_SUB_HITL', payload: hitlId });
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Failed to submit answer');
       dispatch({ type: 'SET_SUB_HITL_MODAL', payload: state.activeSubHitl });
     }
-  }, [convId, message, state.activeSubHitl]);
+  }, [message, state.activeSubHitl]);
 
   const handleSubHitlCancel = useCallback(() => {
     dispatch({ type: 'SET_SUB_HITL_MODAL', payload: null });
@@ -909,39 +914,40 @@ export default function ConvChatPage() {
         />
       )}
 
-      {/* Permission Requests */}
-      {state.pendingPermissions.size > 0 && (
+      {/* Bottom interrupt panels */}
+      {(state.pendingPermissions.size > 0 || state.subInterruptPermissions.size > 0 || state.subInterruptHitLs.size > 0) && (
         <div style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
           zIndex: 20,
-          padding: '8px 16px',
-          background: 'var(--bg-primary, #fff)',
-          borderTop: '1px solid var(--border-subtle, #d9d9d9)',
-          maxHeight: 400,
+          display: 'flex',
+          flexDirection: 'column-reverse',
+          maxHeight: '60vh',
           overflowY: 'auto',
         }}>
-          {Array.from(state.pendingPermissions.values()).map((perm) => (
-            <PermissionRequestCard
-              key={perm.permission_id}
-              permission={perm}
-              onAnswer={(decision) => handlePermissionAnswer(perm.permission_id, decision)}
-              loading={state.permissionAnswering === perm.permission_id}
-            />
-          ))}
-        </div>
-      )}
+          {/* Parent Permission Requests */}
+          {state.pendingPermissions.size > 0 && (
+            <div style={{
+              padding: '8px 16px',
+              background: 'var(--bg-primary, #fff)',
+              borderTop: '1px solid var(--border-subtle, #d9d9d9)',
+            }}>
+              {Array.from(state.pendingPermissions.values()).map((perm) => (
+                <PermissionRequestCard
+                  key={perm.permission_id}
+                  permission={perm}
+                  onAnswer={(decision) => handlePermissionAnswer(perm.permission_id, decision)}
+                  loading={state.permissionAnswering === perm.permission_id}
+                />
+              ))}
+            </div>
+          )}
 
       {/* Sub-Conversation Permission Requests */}
       {state.subInterruptPermissions.size > 0 && (
         <div style={{
-          position: 'absolute',
-          bottom: state.pendingPermissions.size > 0 ? 200 : 0,
-          left: 0,
-          right: 0,
-          zIndex: 20,
           padding: '8px 16px',
           background: 'var(--bg-primary, #fff)',
           borderTop: '1px solid var(--border-subtle, #d9d9d9)',
@@ -949,7 +955,7 @@ export default function ConvChatPage() {
           overflowY: 'auto',
         }}>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-            Sub-conversation permission requests
+            {t('subPermissionRequests')}
           </Text>
           {Array.from(state.subInterruptPermissions.values()).map((perm) => (
             <PermissionRequestCard
@@ -978,11 +984,6 @@ export default function ConvChatPage() {
       {/* Sub-Conversation HITL Requests */}
       {state.subInterruptHitLs.size > 0 && (
         <div style={{
-          position: 'absolute',
-          bottom: (state.pendingPermissions.size > 0 ? 200 : 0) + (state.subInterruptPermissions.size > 0 ? 200 : 0),
-          left: 0,
-          right: 0,
-          zIndex: 20,
           padding: '8px 16px',
           background: 'var(--bg-primary, #fff)',
           borderTop: '1px solid var(--border-subtle, #d9d9d9)',
@@ -990,7 +991,7 @@ export default function ConvChatPage() {
           overflowY: 'auto',
         }}>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-            Sub-conversation questions
+            {t('subHitlQuestions')}
           </Text>
           {Array.from(state.subInterruptHitLs.values()).map((hitl) => (
             <Card
@@ -998,12 +999,14 @@ export default function ConvChatPage() {
               size="small"
               style={{ marginBottom: 8, cursor: 'pointer' }}
               onClick={() => dispatch({ type: 'SET_SUB_HITL_MODAL', payload: hitl })}
-              title={hitl.question}
+              title={<ReactMarkdown remarkPlugins={[remarkGfm]}>{hitl.question}</ReactMarkdown>}
               extra={hitl.choices && hitl.choices.length > 0 ? `${hitl.choices.length} option(s)` : 'Text answer'}
             >
-              <Text type="secondary">Click to answer</Text>
+              <Text type="secondary">{t('subHitlClickToAnswer')}</Text>
             </Card>
           ))}
+        </div>
+      )}
         </div>
       )}
 

@@ -177,7 +177,8 @@ Eino Demo 是一个**全栈 AI 应用平台**，展示了使用 [CloudWeGo Eino]
 
 - **项目模板系统** — 浏览并实例化预构建的项目蓝图；每个模板定义 Agent 配置、工具和初始提示词
 - **项目管理** — 完整的 CRUD 操作，通过 WebSocket 推送实现实时同步
-- **对话管理** — 在项目内创建、列表、删除和分支对话
+- **对话管理** — 在项目内创建、列表、删除和分支对话；支持父子对话层级树，列表接口返回带循环检测的树形结构
+- **对话层级树** — 通过 `parent_conversation_id` 建立父子关系，侧边栏以手风琴树形组件渲染，选中子对话时自动展开父节点
 - **对话模式切换** — 每个对话可在 `ask_before_edits`、`edit_automatically`、`bypass_permissions`、`plan_mode` 之间切换
 - **演示认证** — 基于 token 的无状态认证，使用 `FirstOrCreate` 解析用户
 
@@ -189,7 +190,7 @@ Eino Demo 是一个**全栈 AI 应用平台**，展示了使用 [CloudWeGo Eino]
 - **工具调用展示** — 可折叠卡片，显示工具名称、输入参数、结果、状态和耗时
 - **中断与停止** — 主动流式中断，优雅取消
 - **上下文压缩** — 当 token 数量超过阈值时，基于 LLM 的历史摘要
-- **子 Agent 生成** — 生成子对话，异步执行 Agent 并将结果回写到父对话；JSONL 结构化日志用于子 Agent 追踪
+- **子 Agent 生成** — 生成子对话，异步执行 Agent 并将结果回写到父对话；JSONL 结构化日志用于子 Agent 追踪；支持级联停止子 Agent 会话；上下文隔离防止回调事件冒泡
 
 #### 权限与安全
 
@@ -201,7 +202,8 @@ Eino Demo 是一个**全栈 AI 应用平台**，展示了使用 [CloudWeGo Eino]
 
 #### 交互式工具
 
-- **HITL (人机协同)** — `ask_user_question` 工具支持单选、多选和自由文本答案类型；模态 UI 支持子对话中断冒泡
+- **HITL (人机协同)** — `ask_user_question` 工具支持单选、多选和自由文本答案类型；模态 UI 支持子对话中断冒泡；项目级 HITL 同步用于非当前对话的更新通知
+- **错过更新通知** — 当 WebSocket 推送非当前对话的事件时，前端展示 `MissedUpdateNotification` 组件提示用户
 - **Todo 管理** — 通过工具调用创建、更新和删除对话范围的 Todo；实时面板同步
 - **Cron 调度** — 使用 cron 表达式或 `once:N` 持续时间调度任务；执行跟踪和结果记录
 - **天气工具** — 模拟天气 API，用于工具演示
@@ -217,6 +219,7 @@ Eino Demo 是一个**全栈 AI 应用平台**，展示了使用 [CloudWeGo Eino]
 - **HITL 模态框** — 交互式问题提示，支持多种选择类型 (单选/多选/文本)
 - **权限请求卡片** — 工具调用决策的可视化审批 UI
 - **子对话中断聚合** — 将子 Agent 的中断冒泡到父对话 UI
+- **错过更新通知** — 非当前对话事件的横幅提示，支持快速导航
 - **IndexedDB 持久化** — 离线消息缓存和恢复
 - **主题支持** — 通过 Ant Design `ConfigProvider` 实现亮/暗模式，localStorage 持久化
 - **设置页面** — 模型档位、语言、主题配置
@@ -227,6 +230,7 @@ Eino Demo 是一个**全栈 AI 应用平台**，展示了使用 [CloudWeGo Eino]
 - **InferTool 自动 schema** — 类型化 Go 结构体自动生成 JSON schema 供 LLM 工具选择
 - **Service-first 架构** — 一个实现，两个消费者 (HTTP + Eino Tool)
 - **结构化日志** — JSONL 日志用于子 Agent 追踪和调试
+- **工具注册表重构** — 用每请求 `ToolBuildContext` 替代 `SetXXX` 模式，实现更好的请求隔离
 - **技能系统** — 基于文件系统的 `SKILL.md` 加载，扩展 Agent 能力
 
 ### 开发中
@@ -450,6 +454,7 @@ flowchart TD
 | `project.created` | `> 0` | 从模板创建项目 | WS + HTTP 响应 |
 | `project.deleted` | `> 0` | 项目删除 | WS |
 | `settings.changed` | `> 0` | 设置更新 | WS |
+| `missed.update` | `> 0` | 非当前对话事件通知 | WS |
 | `empty` | `> 0` | Seq 间隙填充 (INCR 不回滚) | WS + HTTP 响应 |
 | `connected` | -- | WS 连接建立 | 仅 WS |
 

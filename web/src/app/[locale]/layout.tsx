@@ -8,6 +8,7 @@ import { AuthProvider } from '@/providers/AuthProvider';
 import { WSProvider } from '@/providers/WSProvider';
 import { UpdateProvider } from '@/providers/UpdateProvider';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { MissedUpdateNotification } from '@/components/notification/MissedUpdateNotification';
 import '@/app/globals.css';
 
 export default async function RootLayout({
@@ -30,6 +31,7 @@ export default async function RootLayout({
                 <WSProvider>
                   <UpdateProvider>
                     <AuthGuard>{children}</AuthGuard>
+                    <MissedUpdateNotification />
                   </UpdateProvider>
                 </WSProvider>
               </AuthProvider>

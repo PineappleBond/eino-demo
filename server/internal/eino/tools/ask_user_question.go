@@ -23,9 +23,9 @@ type HitlChoice struct {
 
 // AskUserQuestionInput is the input schema for the ask_user_question tool.
 type AskUserQuestionInput struct {
-	Question   string      `json:"question" jsonschema_description:"The question to ask the user"`
+	Question   string       `json:"question" jsonschema_description:"The question to ask the user"`
 	Choices    []HitlChoice `json:"choices,omitempty" jsonschema_description:"Optional predefined choices. If empty, the user can type free text"`
-	AnswerType string      `json:"answer_type,omitempty" jsonschema_description:"How the user should answer: 'single' (radio), 'multi' (checkbox), or 'text' (free input). Defaults to 'text'"`
+	AnswerType string       `json:"answer_type,omitempty" jsonschema_description:"How the user should answer: 'single' (radio), 'multi' (checkbox), or 'text' (free input). Defaults to 'text'"`
 }
 
 // AskUserQuestionOutput is the output schema for the ask_user_question tool.

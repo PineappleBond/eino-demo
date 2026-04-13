@@ -34,29 +34,6 @@ func TestNewToolRegistry_WithTavilyKey(t *testing.T) {
 	}
 }
 
-// ── SetConversationID / SetWorkspaceDir ──
-
-func TestToolRegistry_SetConversationID(t *testing.T) {
-	cfg := &config.Config{}
-	registry := NewToolRegistry(cfg, nil)
-	convID := uuid.New()
-	registry.SetConversationID(convID)
-
-	if registry.conversationID != convID {
-		t.Errorf("conversationID = %v, want %v", registry.conversationID, convID)
-	}
-}
-
-func TestToolRegistry_SetWorkspaceDir(t *testing.T) {
-	cfg := &config.Config{}
-	registry := NewToolRegistry(cfg, nil)
-	registry.SetWorkspaceDir("/workspace")
-
-	if registry.workspaceDir != "/workspace" {
-		t.Errorf("workspaceDir = %q, want %q", registry.workspaceDir, "/workspace")
-	}
-}
-
 // ── ListToolNames ──
 
 func TestToolRegistry_ListToolNames_WithoutConversation(t *testing.T) {
@@ -65,7 +42,7 @@ func TestToolRegistry_ListToolNames_WithoutConversation(t *testing.T) {
 	}
 	registry := NewToolRegistry(cfg, nil)
 
-	names := registry.ListToolNames()
+	names := registry.ListToolNames(ToolBuildContext{})
 	expected := []string{"weather", "tavily_search", "ask_user_question"}
 
 	if len(names) != len(expected) {
@@ -83,10 +60,10 @@ func TestToolRegistry_ListToolNames_WithConversation(t *testing.T) {
 		TavilyAPIKey: "key",
 	}
 	registry := NewToolRegistry(cfg, nil)
-	registry.SetConversationID(uuid.New())
 
-	names := registry.ListToolNames()
-	expected := []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
+	// With nil DB, conversation-scoped tools are NOT advertised (matches GetBaseTools behavior).
+	names := registry.ListToolNames(ToolBuildContext{ConversationID: uuid.New()})
+	expected := []string{"weather", "tavily_search", "ask_user_question"}
 
 	if len(names) != len(expected) {
 		t.Fatalf("ListToolNames() = %v, want %v", names, expected)
@@ -106,7 +83,7 @@ func TestToolRegistry_GetBaseTools_WithoutConversation(t *testing.T) {
 	}
 	registry := NewToolRegistry(cfg, nil)
 
-	tools := registry.GetBaseTools()
+	tools := registry.GetBaseTools(ToolBuildContext{})
 	// Should have weather + tavily_search + ask_user_question = 3
 	if len(tools) < 2 {
 		t.Errorf("GetBaseTools() returned %d tools, expected at least 2", len(tools))
@@ -118,13 +95,12 @@ func TestToolRegistry_GetBaseTools_WithConversation_NilDB(t *testing.T) {
 		TavilyAPIKey: "key",
 	}
 	registry := NewToolRegistry(cfg, nil)
-	registry.SetConversationID(uuid.New())
 
 	// With nil DB, conversation-scoped tools (todo_read, todo_write, cron_task)
 	// should NOT be added (r.db is nil check)
-	tools := registry.GetBaseTools()
+	tools := registry.GetBaseTools(ToolBuildContext{ConversationID: uuid.New()})
 	// Should have weather + tavily + ask_user_question = 3
-	// No todo/cron tools since DB is nil
+	// No todo/cron/tools since DB is nil
 	if len(tools) < 2 {
 		t.Errorf("GetBaseTools() returned %d tools, expected at least 2 (base tools only)", len(tools))
 	}
@@ -147,9 +123,8 @@ func TestToolRegistry_GetWeatherTool(t *testing.T) {
 func TestToolRegistry_GetPermissionTools(t *testing.T) {
 	cfg := &config.Config{}
 	registry := NewToolRegistry(cfg, nil)
-	registry.SetWorkspaceDir("/workspace")
 
-	tools := registry.GetPermissionTools()
+	tools := registry.GetPermissionTools("/workspace")
 	if len(tools) == 0 {
 		t.Error("GetPermissionTools() returned no tools")
 	}
@@ -159,7 +134,7 @@ func TestToolRegistry_GetPermissionTools_WithHTTP(t *testing.T) {
 	cfg := &config.Config{}
 	registry := NewToolRegistry(cfg, nil)
 
-	tools := registry.GetPermissionTools()
+	tools := registry.GetPermissionTools("")
 	// HTTP tools may or may not be available depending on httprequest.NewToolKit
 	// At minimum, filesystem tools should be present
 	if len(tools) < 6 {

@@ -32,9 +32,9 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
 			return
 		}
-		conversations, err := svc.ListConversations(userID, projectID)
+		conversations, err := svc.ListConversationsTree(userID, projectID)
 		if err != nil {
-			log.Error("list conversations failed",
+			log.Error("list conversations tree failed",
 				zap.String("user_id", userID.String()),
 				zap.String("project_id", projectID.String()),
 				zap.Error(err),
@@ -42,11 +42,7 @@ func RegisterConversationRoutes(
 			respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list conversations")
 			return
 		}
-		result := make([]types.Conversation, len(conversations))
-		for i, conv := range conversations {
-			result[i] = convert.ToConversation(conv)
-		}
-		respondJSON(c, http.StatusOK, result)
+		respondJSON(c, http.StatusOK, conversations)
 	})
 
 	api.POST("/projects/:id/conversations", func(c *gin.Context) {
@@ -72,8 +68,9 @@ func RegisterConversationRoutes(
 			}
 		}
 		svcReq := service.CreateConversationRequest{
-			Title: valueOrZero(req.Title),
-			Mode:  string(valueOrZero(req.Mode)),
+			Title:                valueOrZero(req.Title),
+			Mode:                 string(valueOrZero(req.Mode)),
+			ParentConversationID: req.ParentConversationId,
 		}
 		conv, err := svc.CompleteCreateConversation(
 			c.Request.Context(),
@@ -495,6 +492,94 @@ func RegisterConversationRoutes(
 			"permissions": perms,
 			"hitls":       hitls,
 		})
+	})
+
+	// List pending permissions across all conversations in a project.
+	api.GET("/projects/:id/permissions", func(c *gin.Context) {
+		userID := getUserID(c)
+		projectID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("list project permissions: invalid project ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
+			return
+		}
+
+		var params types.GetConversationsIdPermissionsParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid query params")
+			return
+		}
+
+		status := ""
+		if params.Status != nil {
+			status = string(*params.Status)
+		}
+
+		perms, err := chatSvc.ListProjectPermissions(userID, projectID, status)
+		if err != nil {
+			if errors.Is(err, service.ErrProjectNotFound) {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
+			} else {
+				log.Error("list project permissions failed",
+					zap.String("user_id", userID.String()),
+					zap.String("project_id", projectID.String()),
+					zap.Error(err),
+				)
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list project permissions")
+			}
+			return
+		}
+
+		result := make([]types.HumanInPermission, len(perms))
+		for i, p := range perms {
+			result[i] = convert.ToHumanInPermission(p)
+		}
+
+		respondJSON(c, http.StatusOK, result)
+	})
+
+	// List pending HITLs across all conversations in a project.
+	api.GET("/projects/:id/hitls", func(c *gin.Context) {
+		userID := getUserID(c)
+		projectID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("list project HITLs: invalid project ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid project ID")
+			return
+		}
+
+		var params types.GetProjectsIdHitlsParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid query params")
+			return
+		}
+
+		status := ""
+		if params.Status != nil {
+			status = string(*params.Status)
+		}
+
+		hitls, err := chatSvc.ListProjectHITLs(userID, projectID, status)
+		if err != nil {
+			if errors.Is(err, service.ErrProjectNotFound) {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "project not found")
+			} else {
+				log.Error("list project HITLs failed",
+					zap.String("user_id", userID.String()),
+					zap.String("project_id", projectID.String()),
+					zap.Error(err),
+				)
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list project HITLs")
+			}
+			return
+		}
+
+		result := make([]types.HumanInTheLoop, len(hitls))
+		for i, h := range hitls {
+			result[i] = convert.ToHumanInTheLoop(h)
+		}
+
+		respondJSON(c, http.StatusOK, result)
 	})
 }
 

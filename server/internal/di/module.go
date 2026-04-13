@@ -175,11 +175,13 @@ func RegisterRoutes(
 				wsManager.PushToUserConnections(userID, convert.ToUpdate(update))
 			}
 
-			toolRegistry.SetUserID(uuid.Nil)
 			toolRegistry.SetSyncPushFn(syncFn)
+			toolRegistry.SetRegisterCronTaskFunc(cronSvc.RegisterTask)
 
 			// Wire sub-agent spawn function for the sub_agent tool.
-			toolRegistry.SetSpawnSubAgentFunc(chatSvc.RunSubAgent)
+			toolRegistry.SetSpawnSubAgentFunc(func(ctx context.Context, newConv *model.Conversation, prompt, logPath string) {
+				chatSvc.RunSubAgent(ctx, *newConv.ParentConversationID, newConv.ID, prompt, logPath)
+			})
 
 			// Wire the push callback so the cron service can push cron_task.sync
 			// when a task fires, so the frontend panel refreshes.

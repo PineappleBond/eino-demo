@@ -9,7 +9,9 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/PineappleBond/eino-demo-dev/server/internal/convert"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 )
 
 // ConversationService handles conversation CRUD logic.
@@ -38,10 +40,21 @@ func (s *ConversationService) ListConversations(userID, projectID uuid.UUID) ([]
 	return conversations, nil
 }
 
+// ListConversationsTree returns conversations organized as a tree structure
+// based on ParentConversationID. Roots are returned, with children recursively attached.
+func (s *ConversationService) ListConversationsTree(userID, projectID uuid.UUID) ([]types.Conversation, error) {
+	conversations, err := s.ListConversations(userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return convert.BuildConversationTree(conversations), nil
+}
+
 // CreateConversationRequest holds the fields for creating a conversation.
 type CreateConversationRequest struct {
-	Title string `json:"title"`
-	Mode  string `json:"mode"`
+	Title                string
+	Mode                 string
+	ParentConversationID *uuid.UUID
 }
 
 // CompleteCreateConversation handles conversation creation with seq assignment, user_update, and WS push.
@@ -74,11 +87,12 @@ func (s *ConversationService) CompleteCreateConversation(
 		}
 
 		conversation := model.Conversation{
-			ProjectID: projectID,
-			UserID:    userID,
-			Title:     req.Title,
-			Status:    "active",
-			Mode:      req.Mode,
+			ProjectID:            projectID,
+			UserID:               userID,
+			Title:                req.Title,
+			Status:               "active",
+			Mode:                 req.Mode,
+			ParentConversationID: req.ParentConversationID,
 		}
 		if conversation.Title == "" {
 			conversation.Title = "New Conversation"
@@ -661,21 +675,21 @@ func (s *ConversationService) BranchConversation(
 		// Copy messages with reassigned seq
 		for i, msg := range messages {
 			newMsg := model.Message{
-				ConversationID:  newConv.ID,
-				Seq:             int64(i + 1),
-				SenderRole:      msg.SenderRole,
-				SenderID:        msg.SenderID,
-				Content:         msg.Content,
-				ReasonContent:   msg.ReasonContent,
-				ReplyToSeq:      msg.ReplyToSeq,
+				ConversationID:   newConv.ID,
+				Seq:              int64(i + 1),
+				SenderRole:       msg.SenderRole,
+				SenderID:         msg.SenderID,
+				Content:          msg.Content,
+				ReasonContent:    msg.ReasonContent,
+				ReplyToSeq:       msg.ReplyToSeq,
 				MentionedMembers: msg.MentionedMembers,
-				Metadata:        msg.Metadata,
-				FinishReason:    msg.FinishReason,
-				ErrorMessage:    msg.ErrorMessage,
-				DurationMs:      msg.DurationMs,
-				TokenPrompt:     msg.TokenPrompt,
-				TokenCompletion: msg.TokenCompletion,
-				ToolCalling:     msg.ToolCalling,
+				Metadata:         msg.Metadata,
+				FinishReason:     msg.FinishReason,
+				ErrorMessage:     msg.ErrorMessage,
+				DurationMs:       msg.DurationMs,
+				TokenPrompt:      msg.TokenPrompt,
+				TokenCompletion:  msg.TokenCompletion,
+				ToolCalling:      msg.ToolCalling,
 			}
 			if err := tx.Create(&newMsg).Error; err != nil {
 				return err
@@ -863,7 +877,7 @@ func (s *ConversationService) GetSubInterrupts(
 
 	// 4. Query pending permissions from sub-conversations
 	if err := s.db.WithContext(ctx).
-		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Where("source_conversation_id IN ? AND status = 'pending'", subConvIDs).
 		Order("created_at DESC").
 		Find(&result.Permissions).Error; err != nil {
 		return nil, fmt.Errorf("failed to query sub permissions: %w", err)
@@ -871,7 +885,7 @@ func (s *ConversationService) GetSubInterrupts(
 
 	// 5. Query pending HITLs from sub-conversations
 	if err := s.db.WithContext(ctx).
-		Where("conversation_id IN ? AND status = 'pending'", subConvIDs).
+		Where("source_conversation_id IN ? AND status = 'pending'", subConvIDs).
 		Order("created_at DESC").
 		Find(&result.HITLs).Error; err != nil {
 		return nil, fmt.Errorf("failed to query sub hitls: %w", err)
