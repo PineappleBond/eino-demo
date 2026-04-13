@@ -38,6 +38,14 @@ type RunCallbackConfig struct {
 	NextSeq        func(ctx context.Context, userID uuid.UUID) (int64, error)
 	PushUpdate     func(userID uuid.UUID, update model.UserUpdate)
 	ParentCtx      context.Context // parent context (not cancelled), used for lifecycle methods
+
+	// JSONLLogger is optional. When set, every callback also writes a JSONL entry.
+	// Used by sub-agents to produce a structured log file.
+	JSONLLogger *JSONLLogger
+
+	// OnComplete is optional. Called from OnEnd (success=true) and OnError (success=false).
+	// Used by sub-agents to write a summary back to the parent conversation.
+	OnComplete func(success bool, summary string)
 }
 
 // msgTracker tracks a single message being streamed or written.
@@ -347,6 +355,20 @@ func (c *RootRunnerCallbacks) OnInputToolCalling(ctx context.Context, info *call
 		zap.String("addr", addrStr),
 	)
 
+	// JSONL logging for sub-agents
+	if c.cfg.JSONLLogger != nil {
+		toolInput := tool.ConvCallbackInput(input)
+		inputStr := ""
+		if toolInput != nil {
+			inputStr = toolInput.ArgumentsInJSON
+		}
+		_ = c.cfg.JSONLLogger.Log(JSONLLogEntry{
+			Type:      "message.tool_call",
+			Tool:      info.Name,
+			ToolInput: inputStr,
+		})
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -382,6 +404,24 @@ func (c *RootRunnerCallbacks) OnInputToolCalling(ctx context.Context, info *call
 
 func (c *RootRunnerCallbacks) OnOutputToolCalling(ctx context.Context, info *callbacks.RunInfo, addr compose.Address, output callbacks.CallbackOutput) {
 	addrStr := AddrString(addr)
+
+	// JSONL logging for sub-agents
+	if c.cfg.JSONLLogger != nil {
+		var resultStr string
+		if output != nil {
+			toolOutput := tool.ConvCallbackOutput(output)
+			if toolOutput != nil {
+				resultStr = toolOutput.Response
+			}
+		}
+		_ = c.cfg.JSONLLogger.Log(JSONLLogEntry{
+			Type:       "message.tool_call",
+			Tool:       info.Name,
+			ToolOutput: TruncatedContent(resultStr, 500),
+			Status:     "completed",
+		})
+	}
+
 	c.mu.Lock()
 	defer func() {
 		c.deleteTracker(addrStr, "tool")
@@ -554,6 +594,23 @@ func (c *RootRunnerCallbacks) OnCompleted(ctx context.Context, role schema.RoleT
 		zap.Int("content_len", len(outputContent)),
 	)
 
+	// JSONL logging for sub-agents
+	if c.cfg.JSONLLogger != nil {
+		tokenPrompt := int64(0)
+		tokenCompletion := int64(0)
+		if usage != nil {
+			tokenPrompt = int64(usage.PromptTokens)
+			tokenCompletion = int64(usage.CompletionTokens)
+		}
+		_ = c.cfg.JSONLLogger.Log(JSONLLogEntry{
+			Type:            "message.done",
+			Role:            "assistant",
+			Content:         TruncatedContent(outputContent, 500),
+			TokenPrompt:     tokenPrompt,
+			TokenCompletion: tokenCompletion,
+		})
+	}
+
 	c.mu.Lock()
 
 	defer func() {
@@ -575,6 +632,14 @@ func (c *RootRunnerCallbacks) OnError(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// JSONL logging for sub-agents
+	if c.cfg.JSONLLogger != nil {
+		_ = c.cfg.JSONLLogger.Log(JSONLLogEntry{
+			Type:  "error",
+			Error: err.Error(),
+		})
+	}
+
 	if c.cfg.ParentCtx == nil {
 		c.cfg.ParentCtx = context.Background()
 	}
@@ -582,6 +647,10 @@ func (c *RootRunnerCallbacks) OnError(err error) {
 	seq, seqErr := c.cfg.NextSeq(c.cfg.ParentCtx, c.cfg.UserID)
 	if seqErr != nil {
 		c.cfg.Log.Error("seq assignment failed", zap.Error(seqErr))
+		// Still trigger OnComplete for sub-agents even if seq failed
+		if c.cfg.OnComplete != nil {
+			c.cfg.OnComplete(false, "agent error: "+err.Error())
+		}
 		return
 	}
 
@@ -605,9 +674,14 @@ func (c *RootRunnerCallbacks) OnError(err error) {
 	}
 	if dbErr := c.cfg.DB.WithContext(c.cfg.ParentCtx).Create(&update).Error; dbErr != nil {
 		c.cfg.Log.Error("failed to persist error update", zap.Error(dbErr))
-		return
+	} else {
+		c.cfg.PushUpdate(c.cfg.UserID, update)
 	}
-	c.cfg.PushUpdate(c.cfg.UserID, update)
+
+	// Notify sub-agent completion callback
+	if c.cfg.OnComplete != nil {
+		c.cfg.OnComplete(false, "agent error: "+err.Error())
+	}
 }
 
 func (c *RootRunnerCallbacks) OnEnd() {
@@ -627,6 +701,16 @@ func (c *RootRunnerCallbacks) OnEnd() {
 		zap.Int("completed_messages", completed),
 	)
 
+	// JSONL logging for sub-agents
+	if c.cfg.JSONLLogger != nil {
+		_ = c.cfg.JSONLLogger.Log(JSONLLogEntry{
+			Type:   "message.done",
+			Status: "completed",
+			Content: fmt.Sprintf("agent run ended: %d/%d messages completed",
+				completed, len(c.trackers)),
+		})
+	}
+
 	// Bump conversation's updated_at
 	if c.cfg.ParentCtx == nil {
 		c.cfg.ParentCtx = context.Background()
@@ -638,6 +722,12 @@ func (c *RootRunnerCallbacks) OnEnd() {
 			"token_prompt":     c.totalPromptTokens,
 			"token_completion": c.totalCompletionTokens,
 		})
+
+	// Notify sub-agent completion callback
+	if c.cfg.OnComplete != nil {
+		summary := fmt.Sprintf("子对话已完成，共 %d 条消息", completed)
+		c.cfg.OnComplete(true, summary)
+	}
 }
 
 func (c *RootRunnerCallbacks) OnInterrupted(info *adk.InterruptInfo) {

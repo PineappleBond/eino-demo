@@ -20,6 +20,7 @@ type ToolRegistry struct {
 	workspaceDir   string    // Set per-run for filesystem tool working directory
 	userID         uuid.UUID // NEW: user ID for context-aware tools
 	syncFn         SyncPushFunc
+	spawnSubAgentFn SpawnSubAgentFunc // callback to spawn sub-agents
 }
 
 // NewToolRegistry creates a tool registry.
@@ -76,6 +77,11 @@ func (r *ToolRegistry) SetSyncPushFn(syncFn SyncPushFunc) {
 	r.syncFn = syncFn
 }
 
+// SetSpawnSubAgentFunc sets the callback for spawning sub-agents.
+func (r *ToolRegistry) SetSpawnSubAgentFunc(fn SpawnSubAgentFunc) {
+	r.spawnSubAgentFn = fn
+}
+
 // GetBaseTools returns all tools as BaseTool instances for use in agents.
 // Includes conversation-scoped tools (todo_read, todo_write) if conversationID is set.
 func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
@@ -103,6 +109,16 @@ func (r *ToolRegistry) GetBaseTools() []tool.BaseTool {
 		} else {
 			tools = append(tools, cronTask)
 		}
+
+		// Sub-agent tool: spawns a sub-conversation with an async agent.
+		if r.spawnSubAgentFn != nil {
+			subAgent, err := NewSubAgentTool(r.db, r.conversationID, r.userID, r.spawnSubAgentFn)
+			if err != nil {
+				// Tool creation failure is non-fatal; skip the tool silently.
+			} else {
+				tools = append(tools, subAgent)
+			}
+		}
 	}
 
 	return tools
@@ -116,7 +132,7 @@ func (r *ToolRegistry) GetWeatherTool() *WeatherTool {
 // ListToolNames returns all registered tool names for agent config.
 func (r *ToolRegistry) ListToolNames() []string {
 	if r.conversationID != uuid.Nil {
-		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task"}
+		return []string{"weather", "tavily_search", "ask_user_question", "todo_read", "todo_write", "cron_task", "sub_agent"}
 	}
 	return []string{"weather", "tavily_search", "ask_user_question"}
 }

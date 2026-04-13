@@ -43,7 +43,7 @@ var Module = fx.Options(
 		service.NewTemplateService,
 		service.NewProjectService,
 		service.NewConversationService,
-		service.NewChatService,
+		ProvideChatService,
 		service.NewTodoService,
 		service.NewCronService,
 	),
@@ -51,7 +51,24 @@ var Module = fx.Options(
 	fx.Invoke(RegisterRoutes),
 )
 
-// ProvideRedis creates a Redis client.
+// ProvideChatService creates ChatService with ws manager and convert fn.
+func ProvideChatService(
+	db *gorm.DB,
+	log *zap.Logger,
+	modelProvider *eino.ModelProvider,
+	toolRegistry *tools.ToolRegistry,
+	runSessionMgr *runner.RunSessionManager,
+	messageQueue *runner.MessageQueue,
+	compressionSvc *service.CompressionService,
+	wsManager *ws.Manager,
+) *service.ChatService {
+	return service.NewChatService(
+		db, log, modelProvider, toolRegistry,
+		runSessionMgr, messageQueue, compressionSvc,
+		wsManager,
+		convert.ToUpdate,
+	)
+}
 func ProvideRedis(cfg *config.Config) *redis.Client {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr,
@@ -160,6 +177,9 @@ func RegisterRoutes(
 
 			toolRegistry.SetUserID(uuid.Nil)
 			toolRegistry.SetSyncPushFn(syncFn)
+
+			// Wire sub-agent spawn function for the sub_agent tool.
+			toolRegistry.SetSpawnSubAgentFunc(chatSvc.RunSubAgent)
 
 			// Wire the push callback so the cron service can push cron_task.sync
 			// when a task fires, so the frontend panel refreshes.

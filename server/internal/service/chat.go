@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/runner/skill"
@@ -27,6 +28,7 @@ import (
 	"github.com/PineappleBond/eino-demo-dev/server/internal/eino/tools"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/model"
 	"github.com/PineappleBond/eino-demo-dev/server/internal/templates"
+	"github.com/PineappleBond/eino-demo-dev/server/internal/types"
 	svcutils "github.com/PineappleBond/eino-demo-dev/server/internal/utils"
 )
 
@@ -44,6 +46,19 @@ type ChatService struct {
 	compressionSvc *CompressionService
 	// evalModelConfig holds haiku model config for the permission evaluator.
 	evalModelConfig *openai.ChatModelConfig
+
+	// wsManager is used by sub-agents to push completion updates to parent conversations.
+	wsManager interface {
+		NextSeq(ctx context.Context, userID uuid.UUID) (int64, error)
+		PushToUserConnections(userID uuid.UUID, update types.Update)
+	}
+	// convertFn converts model.UserUpdate to types.Update format.
+	convertFn func(update model.UserUpdate) types.Update
+
+	// mu guards runCompleteCallbacks
+	mu sync.Mutex
+	// runCompleteCallbacks maps conversationID → completion callback for sub-agent writeback.
+	runCompleteCallbacks map[uuid.UUID]func(success bool, summary string)
 }
 
 // NewChatService creates a ChatService.
@@ -55,6 +70,11 @@ func NewChatService(
 	runSessionMgr *runner.RunSessionManager,
 	messageQueue *runner.MessageQueue,
 	compressionSvc *CompressionService,
+	wsManager interface {
+		NextSeq(ctx context.Context, userID uuid.UUID) (int64, error)
+		PushToUserConnections(userID uuid.UUID, update types.Update)
+	},
+	convertFn func(update model.UserUpdate) types.Update,
 ) *ChatService {
 	// Create haiku model config for permission evaluator (safety assessment)
 	mc := modelProvider.GetModel("haiku")
@@ -65,14 +85,17 @@ func NewChatService(
 	}
 
 	return &ChatService{
-		db:              db,
-		log:             log,
-		modelProvider:   modelProvider,
-		toolRegistry:    toolRegistry,
-		runSessionMgr:   runSessionMgr,
-		messageQueue:    messageQueue,
-		compressionSvc:  compressionSvc,
-		evalModelConfig: evalCfg,
+		db:                   db,
+		log:                  log,
+		modelProvider:        modelProvider,
+		toolRegistry:         toolRegistry,
+		runSessionMgr:        runSessionMgr,
+		messageQueue:         messageQueue,
+		compressionSvc:       compressionSvc,
+		evalModelConfig:      evalCfg,
+		wsManager:            wsManager,
+		convertFn:            convertFn,
+		runCompleteCallbacks: make(map[uuid.UUID]func(bool, string)),
 	}
 }
 
@@ -319,6 +342,15 @@ func (s *ChatService) runAgent(
 		NextSeq:        nextSeq,
 		PushUpdate:     pushUpdate,
 		ParentCtx:      ctx, // parent context, not cancelled — used for lifecycle methods
+		OnComplete: func(success bool, summary string) {
+			s.mu.Lock()
+			cb, ok := s.runCompleteCallbacks[conversationID]
+			delete(s.runCompleteCallbacks, conversationID)
+			s.mu.Unlock()
+			if ok && cb != nil {
+				cb(success, summary)
+			}
+		},
 	}
 	callbacks := runner.NewRootRunnerCallbacks(callbackCfg)
 
@@ -1340,4 +1372,144 @@ func getInt(m map[string]any, key string) int {
 		return int(v)
 	}
 	return 0
+}
+
+// RunSubAgent spawns a sub-agent for a sub-conversation.
+// This is the SpawnSubAgentFunc callback wired by the DI module.
+func (s *ChatService) RunSubAgent(
+	parentCtx context.Context,
+	parentConvID, childConvID uuid.UUID,
+	prompt, logPath string,
+) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("RunSubAgent panic recovered", zap.Any("recover", r))
+		}
+	}()
+
+	// 1. Get child conversation
+	var childConv model.Conversation
+	if err := s.db.WithContext(parentCtx).Where("id = ?", childConvID).First(&childConv).Error; err != nil {
+		s.log.Error("RunSubAgent: sub-conversation not found", zap.Error(err))
+		s.writeSubAgentResultToParent(parentCtx, parentConvID, childConvID, false, "子对话不存在", nil)
+		return
+	}
+
+	userID := childConv.UserID
+
+	// 2. Create JSONL logger
+	logger, err := runner.NewJSONLLogger(logPath)
+	if err != nil {
+		s.log.Error("RunSubAgent: failed to create JSONL logger", zap.Error(err))
+		s.writeSubAgentResultToParent(parentCtx, parentConvID, childConvID, false, "failed to create log file", nil)
+		return
+	}
+
+	// Log initial user message
+	_ = logger.Log(runner.JSONLLogEntry{
+		Type:    "message.new",
+		Role:    "user",
+		Content: prompt,
+	})
+
+	// 3. Register a completion callback that writes results to the parent conversation
+	s.mu.Lock()
+	s.runCompleteCallbacks[childConvID] = func(success bool, summary string) {
+		s.writeSubAgentResultToParent(parentCtx, parentConvID, childConvID, success, summary, logger)
+	}
+	s.mu.Unlock()
+
+	// 4. Reuse runAgent with the child conversation ID.
+	// The runAgent handles: template resolution, model setup, callbacks, message persistence.
+	// Our OnComplete callback (registered above) will trigger the writeback.
+	s.runAgent(parentCtx, userID, childConvID, prompt, s.wsManager.NextSeq, func(userID uuid.UUID, update model.UserUpdate) {
+		// For sub-agent runs, we push updates via wsManager directly.
+		// The wsManager expects the converted update format.
+		wsUpdate := s.convertFn(update)
+		s.wsManager.PushToUserConnections(userID, wsUpdate)
+	})
+}
+
+// writeSubAgentResultToParent writes a system message to the parent conversation
+// notifying about sub-agent completion or failure.
+func (s *ChatService) writeSubAgentResultToParent(
+	ctx context.Context,
+	parentConvID, childConvID uuid.UUID,
+	success bool,
+	summary string,
+	logger *runner.JSONLLogger,
+) {
+	// Close logger if provided
+	if logger != nil {
+		_ = logger.Log(runner.JSONLLogEntry{
+			Type:    "message.done",
+			Role:    "assistant",
+			Content: summary,
+			Status:  map[bool]string{true: "completed", false: "failed"}[success],
+		})
+		_ = logger.Close()
+	}
+
+	// Get parent conversation to find user_id
+	var parentConv model.Conversation
+	if err := s.db.WithContext(ctx).Where("id = ?", parentConvID).First(&parentConv).Error; err != nil {
+		s.log.Error("writeSubAgentResultToParent: parent conversation not found", zap.Error(err))
+		return
+	}
+
+	// 1. Create system message in parent conversation
+	statusText := map[bool]string{true: "已完成", false: "已失败"}[success]
+	content := fmt.Sprintf("子对话 %s %s。摘要：%s", childConvID.String()[:8], statusText, summary)
+
+	msg := model.Message{
+		ConversationID: parentConvID,
+		SenderRole:     "system",
+		SenderID:       "sub-agent",
+		Content:        content,
+		Metadata: model.JSONMap{
+			"child_conversation_id": childConvID.String(),
+			"success":               success,
+		},
+	}
+	if err := s.db.WithContext(ctx).Create(&msg).Error; err != nil {
+		s.log.Error("writeSubAgentResultToParent: failed to create message", zap.Error(err))
+		return
+	}
+
+	// 2. Push update to parent conversation via WS
+	seq, err := s.wsManager.NextSeq(ctx, parentConv.UserID)
+	if err != nil {
+		s.log.Error("writeSubAgentResultToParent: seq assignment failed", zap.Error(err))
+		return
+	}
+
+	payload := model.JSONMap{
+		"conversation_id": parentConvID.String(),
+		"message_id":      msg.ID.String(),
+		"seq":             seq,
+		"role":            "system",
+		"sender_id":       "sub-agent",
+		"content":         content,
+		"child_conversation_id": childConvID.String(),
+		"success": success,
+	}
+	update := model.UserUpdate{
+		UserID:  parentConv.UserID,
+		Seq:     seq,
+		Type:    "sub_agent.completed",
+		Payload: payload,
+	}
+	if err := s.db.WithContext(ctx).Create(&update).Error; err != nil {
+		s.log.Error("writeSubAgentResultToParent: failed to create update", zap.Error(err))
+		return
+	}
+
+	wsUpdate := s.convertFn(update)
+	s.wsManager.PushToUserConnections(parentConv.UserID, wsUpdate)
+
+	s.log.Info("writeSubAgentResultToParent: posted to parent",
+		zap.String("parent_conv", parentConvID.String()),
+		zap.String("child_conv", childConvID.String()),
+		zap.Bool("success", success),
+	)
 }
