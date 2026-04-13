@@ -1,0 +1,12 @@
+.idea/
+downloads/
+.claude
+.env
+.superpowers
+.worktrees
+node_modules
+.next
+package-lock.json
+dist
+tsconfig.tsbuildinfo
+*.out

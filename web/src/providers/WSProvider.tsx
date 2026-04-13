@@ -1,0 +1,244 @@
+'use client';
+
+import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
+import { dispatcher, type Update } from '@/lib/updateDispatcher';
+import { getLatestSeq, setLatestSeq } from '@/store/indexedDB';
+import { useAuth } from './AuthProvider';
+import { useTranslations } from 'next-intl';
+
+interface WSContextValue {
+  connected: boolean;
+  reconnecting: boolean;
+  reconnect: () => void;
+}
+
+const WSContext = createContext<WSContextValue>({ connected: false, reconnecting: false, reconnect: () => {} });
+
+export function useWS() {
+  return useContext(WSContext);
+}
+
+const WS_BASE = process.env.NEXT_PUBLIC_WS_BASE || 'ws://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+
+export function WSProvider({ children }: { children: ReactNode }) {
+  const { token } = useAuth();
+  const t = useTranslations('ws');
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectDelayRef = useRef(1000);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollBackoffRef = useRef(1000);
+  const isPullingRef = useRef(false);
+
+  // HTTP pull for gap recovery — fetches all updates since localMaxSeq
+  const pullMissingUpdates = useCallback(async (localMaxSeq: number) => {
+    if (isPullingRef.current) return;
+    isPullingRef.current = true;
+    const currentToken = tokenRef.current;
+    if (!currentToken) { isPullingRef.current = false; return; }
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/v1/users/me/updates?last_seq=${localMaxSeq}`,
+        { headers: { Authorization: `Bearer ${currentToken}` } }
+      );
+      if (res.ok) {
+        const data = await res.json() as { updates: Update[]; max_seq?: number };
+        // Apply updates FIRST — setLatestSeq happens inside applyUpdates on success
+        if (data.updates?.length > 0) {
+          dispatcher.applyUpdates(data.updates);
+        }
+        // Always advance cursor to server's max_seq on success, even when
+        // there are no updates to apply (e.g. server is idle, all streaming
+        // updates are seq=0 and ephemeral). Without this, the cursor stays
+        // at its previous value and every reconnect/poll re-requests from
+        // the same stale last_seq.
+        if (data.max_seq !== undefined && data.max_seq > localMaxSeq) {
+          await setLatestSeq(data.max_seq);
+        }
+      }
+    } catch (err) {
+      console.error('[WSProvider] gap recovery pull failed', err);
+    } finally {
+      isPullingRef.current = false;
+    }
+  }, []);
+
+  // Register gap detection callback on mount
+  useEffect(() => {
+    dispatcher.setGapCallback((localMaxSeq) => pullMissingUpdates(localMaxSeq));
+  }, [pullMissingUpdates]);
+
+  const clearHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  }, []);
+
+  const clearPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollBackoffRef.current = 5000;
+  }, []);
+
+  const startPolling = useCallback(() => {
+    clearPolling();
+    const poll = async () => {
+      const currentToken = tokenRef.current;
+      if (!currentToken) return;
+      try {
+        const lastSeq = await getLatestSeq();
+        const res = await fetch(
+          `${API_BASE}/api/v1/users/me/updates?last_seq=${lastSeq}`,
+          { headers: { Authorization: `Bearer ${currentToken}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.updates?.length > 0) {
+            dispatcher.applyUpdates(data.updates);
+          }
+          // Always advance cursor to server's max_seq on success
+          if (data.max_seq !== undefined && data.max_seq > (await getLatestSeq())) {
+            await setLatestSeq(data.max_seq);
+          }
+          pollBackoffRef.current = 5000;
+        } else {
+          pollBackoffRef.current = Math.min(pollBackoffRef.current * 2, 30_000);
+        }
+      } catch {
+        pollBackoffRef.current = Math.min(pollBackoffRef.current * 2, 30_000);
+      }
+      // Schedule next poll with current backoff value (recursive setTimeout)
+      pollTimerRef.current = setTimeout(poll, pollBackoffRef.current);
+    };
+    pollTimerRef.current = setTimeout(poll, pollBackoffRef.current);
+  }, [clearPolling]);
+
+  const startHeartbeat = useCallback((ws: WebSocket) => {
+    clearHeartbeat();
+    heartbeatRef.current = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping', payload: {} }));
+      } else {
+        clearHeartbeat();
+      }
+    }, 30_000);
+  }, [clearHeartbeat]);
+
+  const connect = useCallback(async (authToken: string) => {
+    if (!authToken) return;
+
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+    clearHeartbeat();
+
+    const lastSeq = await getLatestSeq();
+    const url = `${WS_BASE}/ws?token=${encodeURIComponent(authToken)}&last_seq=${lastSeq}`;
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+      setReconnecting(false);
+      reconnectDelayRef.current = 1000;
+      startHeartbeat(ws);
+      clearPolling(); // Stop HTTP polling when WS is connected
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(event.data);
+        if (frame.type === 'updates') {
+          dispatcher.applyUpdates(frame.payload);
+        } else if (frame.type === 'connected') {
+          // Parse max_seq for gap detection
+          const maxSeq = frame.payload?.max_seq as number | undefined;
+          if (maxSeq !== undefined) {
+            dispatcher.setMaxServerSeq(maxSeq);
+            // If local seq is behind server, trigger gap recovery
+            getLatestSeq().then((localSeq) => {
+              if (maxSeq > localSeq) {
+                pullMissingUpdates(localSeq);
+              }
+            });
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      setReconnecting(true);
+      clearHeartbeat();
+      startPolling(); // Start HTTP polling as fallback
+
+      // Exponential backoff
+      const delay = reconnectDelayRef.current;
+      const currentToken = tokenRef.current;
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectDelayRef.current = Math.min(delay * 2, 30_000);
+        connect(currentToken || '');
+      }, delay);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, [startHeartbeat, clearHeartbeat, clearPolling, startPolling]);
+
+  const reconnect = useCallback(() => {
+    reconnectDelayRef.current = 1000;
+    connect(token || '');
+  }, [connect, token]);
+
+  // Connect when token changes
+  useEffect(() => {
+    if (token) {
+      reconnectDelayRef.current = 1000;
+      connect(token);
+    }
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      clearHeartbeat();
+      clearPolling();
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
+    };
+  }, [token, clearHeartbeat, clearPolling, connect]);
+
+  return (
+    <WSContext.Provider value={{ connected, reconnecting, reconnect }}>
+      {reconnecting && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          background: '#fff3e0', color: '#e65100', textAlign: 'center',
+          padding: '8px 16px', fontSize: 14, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', gap: 12,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <span>{t('reconnecting')}</span>
+          <button onClick={reconnect} style={{
+            background: '#e65100', color: '#fff', border: 'none',
+            borderRadius: 4, padding: '4px 12px', cursor: 'pointer', fontSize: 13,
+          }}>{t('retryNow')}</button>
+        </div>
+      )}
+      {children}
+    </WSContext.Provider>
+  );
+}

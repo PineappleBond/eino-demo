@@ -1,0 +1,152 @@
+{
+  "app": {
+    "title": "Eino Demo",
+    "home": "Home",
+    "chat": "Chat",
+    "settings": "Settings"
+  },
+  "home": {
+    "title": "Template Gallery",
+    "subtitle": "Choose a template to start learning Eino",
+    "myProjects": "My Projects",
+    "start": "Start Project",
+    "difficulty": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced"
+    }
+  },
+  "chat": {
+    "title": "Conversations",
+    "new": "New Conversation",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "stop": "Stop",
+    "noMessages": "No messages yet. Start a conversation!",
+    "noConversations": "No conversations. Create one to start.",
+    "archived": "Archived",
+    "compacting": "Compacting...",
+    "search": "Search...",
+    "untitled": "Untitled",
+    "enterToSend": "Enter to send",
+    "rename": "Rename",
+    "archive": "Archive",
+    "compactContext": "Compact Context",
+    "deleteConfirm": "Delete this conversation?",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "failedArchive": "Failed to archive",
+    "failedDelete": "Failed to delete",
+    "failedCreate": "Failed to create conversation",
+    "renameEmpty": "Title cannot be empty",
+    "save": "Save",
+    "copy": "Copy",
+    "reply": "Reply",
+    "createBranch": "Create Branch Conversation",
+    "you": "You",
+    "assistant": "Assistant",
+    "expandAll": "Expand all",
+    "collapse": "Collapse",
+    "backToMessage": "Back to message",
+    "thinking": "Thinking",
+    "hitlQuestion": "Question",
+    "typeAnswer": "Type your answer...",
+    "submit": "Submit",
+    "addTodo": "Add a todo...",
+    "noTodos": "No todos yet",
+    "addCronTask": "Message content to send when the task fires...",
+    "noCronTasks": "No scheduled tasks yet",
+    "cronTasks": "Scheduled Tasks",
+    "schedulePlaceholder": "e.g. 0 9 * * * or once:5m",
+    "senderRole": "Sender role",
+    "nextRun": "Next run",
+    "cancelTask": "Cancel"
+  },
+  "settings": {
+    "title": "Settings",
+    "model": "Model",
+    "model_desc": {
+      "haiku": "Haiku — Lightweight, fast responses",
+      "sonnet": "Sonnet — Balanced quality and speed",
+      "opus": "Opus — Best for complex reasoning"
+    },
+    "language": "Language",
+    "theme": "Theme",
+    "saved": "Save Settings",
+    "english": "English",
+    "chinese": "Chinese",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "project": {
+    "info": "Project Info",
+    "save": "Save",
+    "template": "Template",
+    "created": "Created",
+    "updated": "Updated",
+    "name": "Name",
+    "workspaceDir": "Workspace",
+    "updateSuccess": "Project updated",
+    "updateFailed": "Failed to update"
+  },
+  "conv": {
+    "title": "Conversation Info",
+    "statistics": "Statistics",
+    "messages": "Messages",
+    "tokensPrompt": "Tokens (input)",
+    "tokensCompletion": "Tokens (output)",
+    "toolCalls": "Tool calls",
+    "model": "Model",
+    "activeModel": "Active model",
+    "template": "Template",
+    "members": "Members",
+    "mode": "Permission Mode",
+    "modeOptions": {
+      "ask_before_edits": "Ask before edits",
+      "edit_automatically": "Edit automatically",
+      "bypass_permissions": "Bypass permissions",
+      "plan_mode": "Plan mode (coming soon)"
+    },
+    "modeUpdated": "Mode updated"
+  },
+  "tools": {
+    "input": "Input",
+    "output": "Output",
+    "running": "Running",
+    "done": "Done",
+    "error": "Error"
+  },
+  "auth": {
+    "tokenLabel": "Auth Token",
+    "tokenPlaceholder": "Enter any token for demo mode",
+    "connect": "Connect",
+    "title": "Authentication"
+  },
+  "permission": {
+    "title": "Permission Request",
+    "pending": "Pending",
+    "decided": "Decided",
+    "risk": "Risk Level",
+    "approve": "Approve",
+    "approveAndRemember": "Approve & Remember (Exact)",
+    "approveAndWildcard": "Approve & Remember (Wildcard)",
+    "deny": "Deny",
+    "permissionAnswered": "Permission answered"
+  },
+  "notFound": {
+    "title": "404",
+    "message": "Sorry, page not found.",
+    "backHome": "Back to Home"
+  },
+  "hitl": {
+    "orCustomAnswer": "or enter custom answer",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "critical": "Critical"
+  },
+  "ws": {
+    "reconnecting": "Connection lost, reconnecting...",
+    "retryNow": "Retry Now"
+  }
+}

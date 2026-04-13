@@ -1,0 +1,61 @@
+# Skills System
+
+**How to Use Skills (Progressive Disclosure):**
+
+Skills follow a **progressive disclosure** pattern - you see their name and description above, but only read full instructions when needed:
+
+1. **Recognize when a skill applies**: Check if the user's task matches a skill's description
+2. **Read the skill's full instructions**: Use the '{{.ToolName}}' tool to load skill
+3. **Follow the skill's instructions**: tool result contains step-by-step workflows, best practices, and examples
+4. **Access supporting files**: Skills may include helper scripts, configs, or reference docs - use absolute paths
+
+**When to Use Skills:**
+- User's request matches a skill's domain (e.g., "research X" -> web-research skill)
+- You need specialized knowledge or structured workflows
+- A skill provides proven patterns for complex tasks
+
+**Executing Skill Scripts:**
+Skills may contain Python scripts or other executable files. Always use absolute paths.
+
+**Example Workflow:**
+
+User: "Can you research the latest developments in quantum computing?"
+
+1. Check available skills -> See "web-research" skill
+2. Call '{{.ToolName}}' tool to read the full skill instructions
+3. Follow the skill's research workflow (search -> organize -> synthesize)
+4. Use any helper scripts with absolute paths
+
+Remember: Skills make you more capable and consistent. When in doubt, check if a skill exists for the task!
+
+---
+
+# Skill 系统
+
+**如何使用 Skill（渐进式展示）：**
+
+Skill 遵循**渐进式展示**模式 - 你可以在上方看到 Skill 的名称和描述，但只在需要时才阅读完整说明：
+
+1. **识别 Skill 适用场景**：检查用户的任务是否匹配某个 Skill 的描述
+2. **阅读 Skill 的完整说明**：使用 '{{.ToolName}}' 工具加载 Skill
+3. **遵循 Skill 说明操作**：工具结果包含逐步工作流程、最佳实践和示例
+4. **访问支持文件**：Skill 可能包含辅助脚本、配置或参考文档 - 使用绝对路径访问
+
+**何时使用 Skill：**
+- 用户请求匹配某个 Skill 的领域（例如"研究 X" -> web-research Skill）
+- 你需要专业知识或结构化工作流程
+- 某个 Skill 为复杂任务提供了经过验证的模式
+
+**执行 Skill 脚本：**
+Skill 可能包含 Python 脚本或其他可执行文件。始终使用绝对路径。
+
+**示例工作流程：**
+
+用户："你能研究一下量子计算的最新发展吗？"
+
+1. 检查可用 Skill -> 发现 "web-research" Skill
+2. 调用 '{{.ToolName}}' 工具读取完整的 Skill 说明
+3. 遵循 Skill 的研究工作流程（搜索 -> 整理 -> 综合）
+4. 使用绝对路径运行任何辅助脚本
+
+记住：Skill 让你更加强大和稳定。如有疑问，请检查是否存在适用于该任务的 Skill！

@@ -1,0 +1,1790 @@
+openapi: "3.0.3"
+info:
+  title: Eino Demo API
+  version: "1.0.0"
+  description: Shared API types for Go and TypeScript code generation.
+    This spec defines both HTTP endpoint types and WebSocket envelope types.
+
+paths:
+  # ── Health ──
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Users ──
+  /users/me:
+    get:
+      summary: Get current user (with embedded settings)
+      responses:
+        "200":
+          description: Current user with settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+
+  /users/me/updates:
+    get:
+      summary: Poll for user updates (HTTP fallback)
+      parameters:
+        - name: last_seq
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Updates wrapper with pagination cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ updates, max_seq, has_more ]
+                properties:
+                  updates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Update"
+                  max_seq:
+                    type: integer
+                    format: int64
+                  has_more:
+                    type: boolean
+
+  # ── Templates ──
+  /templates:
+    get:
+      summary: List available templates
+      responses:
+        "200":
+          description: Array of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+
+  /templates/{id}:
+    get:
+      summary: Get template by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Template detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          description: Template not found
+
+  /templates/{id}/projects:
+    post:
+      summary: Create a project from a template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  # ── Projects ──
+  /projects:
+    get:
+      summary: List current user's projects
+      responses:
+        "200":
+          description: Array of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      summary: Get project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+    delete:
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted
+        "404":
+          description: Project not found
+    put:
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                config:
+                  type: object
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Project not found
+
+  # ── Conversations ──
+  /projects/{id}/conversations:
+    get:
+      summary: List conversations in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      summary: Create a conversation in a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                mode:
+                  type: string
+                  enum:
+                    - ask_before_edits
+                    - edit_automatically
+                    - bypass_permissions
+                    - plan_mode
+                  default: ask_before_edits
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  project_id:
+                    type: string
+                  user_id:
+                    type: string
+                  title:
+                    type: string
+                  mode:
+                    type: string
+                  status:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+
+  /conversations/{id}:
+    patch:
+      summary: Update a conversation (title only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: New conversation title
+                mode:
+                  type: string
+                  enum:
+                    - ask_before_edits
+                    - edit_automatically
+                    - bypass_permissions
+                    - plan_mode
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          description: Invalid request
+        "404":
+          description: Conversation not found
+    delete:
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Conversation deleted
+        "404":
+          description: Conversation not found
+    put:
+      summary: Update conversation status (archive, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ status ]
+              properties:
+                status:
+                  type: string
+                  description: New conversation status (e.g., "archived")
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "404":
+          description: Conversation not found
+
+  /conversations/{id}/members:
+    get:
+      summary: List conversation members
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+
+  /conversations/{id}/compact:
+    post:
+      summary: Compact a conversation (summarize and create new conversation)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Compaction started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ conversation_id, status ]
+                properties:
+                  conversation_id:
+                    type: string
+                  status:
+                    type: string
+
+  # ── Branch ──
+  /conversations/{id}/branch:
+    post:
+      summary: Create a branched conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ input_seq ]
+              properties:
+                input_seq:
+                  type: integer
+                  minimum: 0
+                  description: Branch from this message sequence number
+      responses:
+        "200":
+          description: Branched conversation created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ id, title, mode ]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  mode:
+                    type: string
+
+  # ── Sub-Interrupts ──
+  /conversations/{id}/sub-interrupts:
+    get:
+      summary: List pending interrupts from sub-conversations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of pending sub-conversation interrupts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ permissions, hitls ]
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubInterruptPermission'
+                  hitls:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubInterruptHitl'
+
+  # ── Messages ──
+  /conversations/{id}/messages:
+    get:
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      summary: Send a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ content ]
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: Message created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id:
+                    type: string
+                  message_id:
+                    type: string
+                  seq:
+                    type: integer
+
+  # ── Chat Control ──
+  /conversations/{id}/stop:
+    post:
+      summary: Stop active streaming in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Streaming stopped
+
+  /conversations/{id}/answer:
+    post:
+      summary: Answer an interrupted human-in-the-loop question
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ checkpoint_id, interrupt_id, answer ]
+              properties:
+                checkpoint_id:
+                  type: string
+                  description: Eino checkpoint ID for resuming the agent run
+                interrupt_id:
+                  type: string
+                  description: Eino interrupt signal ID for targeted resume
+                answer:
+                  type: string
+                  description: User's answer text
+      responses:
+        "200":
+          description: Agent resumed with user's answer
+        "404":
+          description: Conversation or HITL request not found
+        "400":
+          description: Invalid request or HITL already answered
+
+  /conversations/{id}/hitl:
+    get:
+      summary: List pending human-in-the-loop requests for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of pending HITL requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HumanInTheLoop"
+        "404":
+          description: Conversation not found
+
+  /conversations/{id}/permissions:
+    get:
+      summary: List permission requests for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [ pending, answered ] }
+      responses:
+        "200":
+          description: List of permission requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HumanInPermission" }
+        "404": { description: Conversation not found }
+
+  /conversations/{id}/permissions/{permId}/answer:
+    post:
+      summary: Answer a permission request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: permId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ checkpoint_id, interrupt_id, decision ]
+              properties:
+                checkpoint_id: { type: string }
+                interrupt_id: { type: string }
+                decision: { type: string, enum: [ approved, approved_exact, approved_wildcard, denied ] }
+      responses:
+        "200": { description: Permission answered, agent resumed }
+        "404": { description: Permission request not found }
+        "400": { description: Already answered or invalid request }
+
+  /conversations/{id}/todos:
+    get:
+      summary: List todos for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of todos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Todo"
+    post:
+      summary: Create a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ content ]
+              properties:
+                content:
+                  type: string
+      responses:
+        "201":
+          description: Created todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+
+  /todos/{id}:
+    patch:
+      summary: Update a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                completed:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated todo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Todo"
+        "404":
+          description: Todo not found
+    delete:
+      summary: Delete a todo item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Todo deleted
+        "404":
+          description: Todo not found
+
+  # ── Cron Tasks ──
+  /conversations/{id}/cron-tasks:
+    get:
+      summary: List cron tasks for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ "active", "pending", "completed", "cancelled" ]
+          description: Filter tasks by status. Defaults to 'active' if omitted.
+      responses:
+        "200":
+          description: Array of cron tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CronTask"
+    post:
+      summary: Create a cron task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ content, schedule ]
+              properties:
+                content:
+                  type: string
+                schedule:
+                  type: string
+                sender_role:
+                  type: string
+                  enum: [ "assistant", "user", "system", "tool" ]
+                  default: "user"
+      responses:
+        "201":
+          description: Created cron task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CronTask"
+
+  /conversations/{id}/cron-tasks/{taskId}/cancel:
+    post:
+      summary: Cancel a cron task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Task cancelled
+        "404":
+          description: Task not found
+
+  # ── Settings ──
+  /settings:
+    get:
+      summary: Get current user's settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    put:
+      summary: Update settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model_tier:
+                  type: string
+                  enum: [ haiku, sonnet, opus ]
+                locale:
+                  type: string
+                  enum: [ en, zh ]
+                theme:
+                  type: string
+                  enum: [ light, dark ]
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  # ── Models ──
+  /models:
+    get:
+      summary: List available AI models
+      responses:
+        "200":
+          description: Array of model info
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ models ]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      required: [ name, base_url, model ]
+                      properties:
+                        name:
+                          type: string
+                        base_url:
+                          type: string
+                        model:
+                          type: string
+
+components:
+  schemas:
+    # ── HTTP Entity Types ──
+
+    User:
+      type: object
+      required: [ id ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    MeResponse:
+      type: object
+      required: [ id, settings ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        settings:
+          $ref: "#/components/schemas/Settings"
+
+    Template:
+      type: object
+      required: [ id, name, description ]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        difficulty:
+          type: string
+          enum: [ beginner, intermediate, advanced ]
+
+    Project:
+      type: object
+      required: [ id, user_id, template_id, name ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+        name:
+          type: string
+        config:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      required: [ id, project_id, user_id ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+        last_preview:
+          type: string
+        message_count:
+          type: integer
+        latest_seq:
+          type: integer
+        member_count:
+          type: integer
+        token_prompt:
+          type: integer
+        token_completion:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        mode:
+          type: string
+          enum:
+            - ask_before_edits
+            - edit_automatically
+            - bypass_permissions
+            - plan_mode
+          default: ask_before_edits
+
+    Message:
+      type: object
+      required: [ id, conversation_id, seq, sender_role, content ]
+      properties:
+        id:
+          type: string
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+        sender_role:
+          type: string
+          enum: [ user, assistant, system, tool ]
+        sender_id:
+          type: string
+        content:
+          type: string
+        reason_content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        finish_reason:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        token_prompt:
+          type: integer
+        token_completion:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        reply_to_seq:
+          type: integer
+        mentioned_members:
+          type: array
+          items:
+            type: string
+        tool_calling:
+          type: object
+          nullable: true
+          properties:
+            input:
+              type: object
+              additionalProperties: true
+              description: Tool call input arguments
+            output:
+              type: string
+              description: Tool call output result
+        updated_at:
+          type: string
+          format: date-time
+
+    Settings:
+      type: object
+      properties:
+        model_tier:
+          type: string
+          enum: [ haiku, sonnet, opus ]
+        locale:
+          type: string
+          enum: [ en, zh ]
+        theme:
+          type: string
+          enum: [ light, dark ]
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [ error ]
+      properties:
+        error:
+          type: object
+          required: [ code, message ]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    # ── WebSocket Envelope ──
+    # All WS frames share { "type": string, "payload": object }
+
+    WSClientFrame:
+      type: object
+      required: [ type, payload ]
+      properties:
+        type:
+          type: string
+          enum: [ ping ]
+          description: Client→Server frames. Only heartbeat.
+        payload:
+          $ref: "#/components/schemas/PingPayload"
+
+    WSServerFrame:
+      type: object
+      required: [ type, payload ]
+      properties:
+        type:
+          type: string
+          enum: [ updates, connected ]
+          description: Server→Client frame types.
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/ConnectedPayload"
+            - type: array
+              items:
+                $ref: "#/components/schemas/Update"
+
+    # ── Heartbeat ──
+
+    PingPayload:
+      type: object
+      description: Client heartbeat. Sent every 30 seconds.
+      properties: { }
+
+    # ── Connection ──
+
+    ConnectedPayload:
+      type: object
+      required: [ user_id, server_time, max_seq ]
+      properties:
+        user_id:
+          type: string
+        server_time:
+          type: string
+          format: date-time
+        max_seq:
+          type: integer
+          description: Server's current highest seq for this user.
+
+    # ── Update Payload Types ──
+    # Each Update type has a concrete payload schema.
+    # Backend constructs these as typed maps; frontend reads them via discriminated union.
+
+    EmptyPayload:
+      type: object
+      description: Seq gap filler. No data.
+      properties: { }
+
+    MessageNewPayload:
+      type: object
+      required: [ conversation_id, message_id, seq, role, sender_id, addr ]
+      properties:
+        conversation_id:
+          type: string
+          description: UUID of the conversation.
+        message_id:
+          type: string
+          description: UUID of the message.
+        seq:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum: [ user, assistant, system, tool ]
+        sender_id:
+          type: string
+        addr:
+          type: string
+          description: Eino callback address string.
+        tool_name:
+          type: string
+          description: Only present when role is "tool".
+        content:
+          type: string
+          description: Message content. Present for user messages.
+
+    MessageDeltaPayload:
+      type: object
+      required: [ conversation_id, message_id, delta, addr ]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        delta:
+          type: string
+          description: Streaming text chunk.
+        addr:
+          type: string
+
+    MessageDonePayload:
+      type: object
+      required: [ conversation_id, message_id, role, sender_id, content, reasoning_content, addr, seq ]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        role:
+          type: string
+        sender_id:
+          type: string
+        content:
+          type: string
+          description: Full final content.
+        reasoning_content:
+          type: string
+          description: Full reasoning content.
+        addr:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    MessageToolCallPayload:
+      type: object
+      required: [ conversation_id, message_id, tool_name, content, seq, addr ]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        tool_name:
+          type: string
+        content:
+          type: string
+          description: Truncated result (max 200 chars).
+        seq:
+          type: integer
+          format: int64
+        addr:
+          type: string
+
+    MessageThinkingPayload:
+      type: object
+      required: [ conversation_id, message_id, delta, addr ]
+      properties:
+        conversation_id:
+          type: string
+        message_id:
+          type: string
+        delta:
+          type: string
+          description: Streaming reasoning chunk.
+        addr:
+          type: string
+
+    MessageErrorPayload:
+      type: object
+      required: [ conversation_id, error, seq ]
+      properties:
+        conversation_id:
+          type: string
+        error:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        message_id:
+          type: string
+          description: UUID of the interrupted message (optional).
+        checkpoint_id:
+          type: string
+          description: Checkpoint ID for interrupt/resume (optional).
+
+    MessageStopPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        message_id:
+          type: string
+          description: UUID of the stopped message (optional).
+
+    ConversationUpdatedPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        title:
+          type: string
+        title_generated:
+          type: boolean
+          description: True if the title was auto-generated by the title agent.
+        token_prompt:
+          type: integer
+          format: int64
+          description: Estimated prompt token count for the conversation.
+        token_completion:
+          type: integer
+          format: int64
+          description: Estimated completion token count for the conversation.
+        mode:
+          type: string
+          description: Conversation permission mode.
+
+    ConversationCreatedPayload:
+      type: object
+      required: [ id, project_id, seq ]
+      properties:
+        id:
+          type: string
+          description: UUID of the conversation.
+        project_id:
+          type: string
+          description: UUID of the project.
+        title:
+          type: string
+        status:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationDeletedPayload:
+      type: object
+      required: [ id, project_id, seq ]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ConversationCompactingPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+          description: "Conversation being compacted"
+        seq:
+          type: integer
+          format: int64
+
+    ConversationCompactedPayload:
+      type: object
+      required: [ old_conv_id, new_conv_id, project_id, seq ]
+      properties:
+        old_conv_id:
+          type: string
+          description: "Original conversation ID"
+        new_conv_id:
+          type: string
+          description: "New conversation ID after compaction"
+        project_id:
+          type: string
+          description: "Parent project ID"
+        seq:
+          type: integer
+          format: int64
+
+    ConversationCompressedPayload:
+      type: object
+      required: [ conversation_id, min_seq, seq ]
+      properties:
+        conversation_id:
+          type: string
+          description: "Conversation that was compressed"
+        min_seq:
+          type: integer
+          format: int64
+          description: "New compression cursor. Messages below this seq have been compressed."
+        summary:
+          type: string
+          description: "LLM-generated summary of compressed messages"
+        message_id:
+          type: string
+          description: "ID of the inserted summary message (optional)"
+        seq:
+          type: integer
+          format: int64
+
+    ConversationArchivedPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ProjectCreatedPayload:
+      type: object
+      required: [ id, template_id, name, seq ]
+      properties:
+        id:
+          type: string
+          description: UUID of the project.
+        template_id:
+          type: string
+        name:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    ProjectDeletedPayload:
+      type: object
+      required: [ id, seq ]
+      properties:
+        id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    SettingsChangedPayload:
+      type: object
+      required: [ seq, model_tier, locale, theme, changed ]
+      properties:
+        seq:
+          type: integer
+          format: int64
+        model_tier:
+          type: string
+          enum: [ haiku, sonnet, opus ]
+        locale:
+          type: string
+          enum: [ en, zh ]
+        theme:
+          type: string
+          enum: [ light, dark ]
+        changed:
+          type: array
+          items:
+            type: string
+          description: Fields that were changed.
+
+    HumanInTheLoop:
+      type: object
+      required: [ id, conversation_id, question, answer_type, status, created_at ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [ title ]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+          enum: [ single, multi, text ]
+        answer:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ pending, answered, expired ]
+        created_at:
+          type: string
+          format: date-time
+
+    Todo:
+      type: object
+      required: [ id, conversation_id, content, completed, created_at, updated_at ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        completed:
+          type: boolean
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CronTask:
+      type: object
+      required: [ id, conversation_id,sender_role, content, schedule, next_run_at, status, created_at ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        sender_role:
+          type: string
+          enum: [ "assistant", "user", "system", "tool" ]
+        content:
+          type: string
+        schedule:
+          type: string
+        next_run_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    HumanInPermission:
+      type: object
+      required: [ id, conversation_id, tool_name, action, content, safety_level, status, created_at ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+        tool_name:
+          type: string
+        action:
+          type: string
+        content:
+          type: string
+        tool_desc:
+          type: string
+        args_summary:
+          type: string
+        safety_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        safety_reason:
+          type: string
+        decision:
+          type: string
+          nullable: true
+          enum: [ approved, approved_exact, approved_wildcard, denied ]
+        status:
+          type: string
+          enum: [ pending, answered ]
+        created_at:
+          type: string
+          format: date-time
+
+    SubInterruptPermission:
+      type: object
+      required: [ id, conversation_id, tool_name, action, content, safety_level ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+          description: The sub-conversation that triggered this interrupt
+        tool_name:
+          type: string
+        action:
+          type: string
+        content:
+          type: string
+        tool_desc:
+          type: string
+        args_summary:
+          type: string
+        safety_level:
+          type: integer
+        safety_reason:
+          type: string
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+
+    SubInterruptHitl:
+      type: object
+      required: [ id, conversation_id, question, choices, answer_type ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+          description: The sub-conversation that triggered this interrupt
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [ title ]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+          enum: [ single, multi, text ]
+        checkpoint_id:
+          type: string
+        interrupt_id:
+          type: string
+
+    HumanInTheLoopCreatedPayload:
+      type: object
+      required: [ conversation_id, id, question, choices, answer_type, seq ]
+      properties:
+        conversation_id:
+          type: string
+        id:
+          type: string
+          description: HITL request ID
+        checkpoint_id:
+          type: string
+          description: Checkpoint ID for resume
+        interrupt_id:
+          type: string
+          description: Interrupt ID for targeted resume
+        question:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            required: [ title ]
+            properties:
+              title:
+                type: string
+              desc:
+                type: string
+        answer_type:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    HumanInTheLoopAnsweredPayload:
+      type: object
+      required: [ conversation_id, id, answer, seq ]
+      properties:
+        conversation_id:
+          type: string
+        id:
+          type: string
+        answer:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    PermissionPendingPayload:
+      type: object
+      required: [ conversation_id, permission_id, tool_name, action, content, safety_level, safety_reason, seq ]
+      properties:
+        conversation_id: { type: string }
+        permission_id: { type: string }
+        tool_name: { type: string }
+        action: { type: string }
+        content: { type: string }
+        tool_desc: { type: string }
+        args_summary: { type: string }
+        safety_level: { type: integer }
+        safety_reason: { type: string }
+        checkpoint_id: { type: string }
+        interrupt_id: { type: string }
+        seq: { type: integer, format: int64 }
+
+    PermissionDecidedPayload:
+      type: object
+      required: [ conversation_id, permission_id, decision, seq ]
+      properties:
+        conversation_id: { type: string }
+        permission_id: { type: string }
+        decision: { type: string, enum: [ approved, approved_exact, approved_wildcard, denied ] }
+        seq: { type: integer, format: int64 }
+
+    TodoSyncPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    CronTaskSyncPayload:
+      type: object
+      required: [ conversation_id, seq ]
+      properties:
+        conversation_id:
+          type: string
+        seq:
+          type: integer
+          format: int64
+
+    Member:
+      type: object
+      required: [ id, conversation_id, member_type, member_id ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        member_type:
+          type: string
+        member_id:
+          type: string
+        member_name:
+          type: string
+        is_owner:
+          type: boolean
+
+    # ── Update (unified event type) ──
+    # payload is a oneOf of all concrete payload types.
+    # Frontend uses discriminated union: switch on Update.type to narrow payload type.
+    # Backend constructs payloads as map[string]interface{} (JSONMap) — generated types
+    # serve as documentation and frontend type safety.
+
+    Update:
+      type: object
+      required: [ seq, type, payload ]
+      properties:
+        seq:
+          type: integer
+          format: int64
+          description: "> 0 = persisted and replayable. 0 = ephemeral (streaming)."
+        type:
+          type: string
+          enum:
+            # Message-level events
+            - message.new
+            - message.delta
+            - message.done
+            - message.tool_call
+            - message.thinking
+            - message.error
+            - message.stop
+            # Human-in-the-loop events
+            - human_in_the_loop.created
+            - human_in_the_loop.answered
+            # Todo event (single type — frontend refetches all todos on change)
+            - todo.sync
+            # Conversation-level events
+            - conversation.created
+            - conversation.updated
+            - conversation.deleted
+            - conversation.compressed
+            - conversation.compacting
+            - conversation.compacted
+            - conversation.archived
+            # Project-level events
+            - project.created
+            - project.deleted
+            # Settings-level events
+            - settings.changed
+            # Technical events
+            - empty
+            # Permission events
+            - permission.pending
+            - permission.decided
+            # Cron task events
+            - cron_task.sync
+        payload:
+          oneOf:
+            - $ref: "#/components/schemas/MessageNewPayload"
+            - $ref: "#/components/schemas/MessageDeltaPayload"
+            - $ref: "#/components/schemas/MessageDonePayload"
+            - $ref: "#/components/schemas/MessageToolCallPayload"
+            - $ref: "#/components/schemas/MessageThinkingPayload"
+            - $ref: "#/components/schemas/MessageErrorPayload"
+            - $ref: "#/components/schemas/MessageStopPayload"
+            - $ref: "#/components/schemas/HumanInTheLoopCreatedPayload"
+            - $ref: "#/components/schemas/HumanInTheLoopAnsweredPayload"
+            - $ref: "#/components/schemas/TodoSyncPayload"
+            - $ref: "#/components/schemas/ConversationCreatedPayload"
+            - $ref: "#/components/schemas/ConversationUpdatedPayload"
+            - $ref: "#/components/schemas/ConversationDeletedPayload"
+            - $ref: "#/components/schemas/ConversationCompressedPayload"
+            - $ref: "#/components/schemas/ConversationCompactingPayload"
+            - $ref: "#/components/schemas/ConversationCompactedPayload"
+            - $ref: "#/components/schemas/ConversationArchivedPayload"
+            - $ref: "#/components/schemas/ProjectCreatedPayload"
+            - $ref: "#/components/schemas/ProjectDeletedPayload"
+            - $ref: "#/components/schemas/SettingsChangedPayload"
+            - $ref: "#/components/schemas/EmptyPayload"
+            - $ref: "#/components/schemas/PermissionPendingPayload"
+            - $ref: "#/components/schemas/PermissionDecidedPayload"
+            - $ref: "#/components/schemas/CronTaskSyncPayload"
+          description: "Type-specific entity. Discriminated by Update.type. Frontend extracts conversation_id from payload to derive topic."

@@ -1,0 +1,152 @@
+{
+  "app": {
+    "title": "Eino 演示",
+    "home": "首页",
+    "chat": "对话",
+    "settings": "设置"
+  },
+  "home": {
+    "title": "模板库",
+    "subtitle": "选择一个模板开始学习 Eino",
+    "myProjects": "我的项目",
+    "start": "创建项目",
+    "difficulty": {
+      "beginner": "入门",
+      "intermediate": "中级",
+      "advanced": "高级"
+    }
+  },
+  "chat": {
+    "title": "对话",
+    "new": "新建对话",
+    "placeholder": "输入消息...",
+    "send": "发送",
+    "stop": "停止",
+    "noMessages": "暂无消息，开始对话吧！",
+    "noConversations": "暂无对话，创建一个开始吧。",
+    "archived": "已归档",
+    "compacting": "压缩中...",
+    "search": "搜索...",
+    "untitled": "无标题",
+    "enterToSend": "Enter 发送",
+    "rename": "重命名",
+    "archive": "归档",
+    "compactContext": "压缩上下文",
+    "deleteConfirm": "确定删除此对话？",
+    "delete": "删除",
+    "cancel": "取消",
+    "failedArchive": "归档失败",
+    "failedDelete": "删除失败",
+    "failedCreate": "创建对话失败",
+    "renameEmpty": "标题不能为空",
+    "save": "保存",
+    "copy": "复制",
+    "reply": "回复",
+    "createBranch": "创建分支对话",
+    "you": "你",
+    "assistant": "助手",
+    "expandAll": "展开全部",
+    "collapse": "折叠",
+    "backToMessage": "查看原消息",
+    "thinking": "思考过程",
+    "hitlQuestion": "问题",
+    "typeAnswer": "输入你的回答...",
+    "submit": "提交",
+    "addTodo": "添加待办...",
+    "noTodos": "暂无待办",
+    "addCronTask": "定时任务触发时发送的消息内容...",
+    "noCronTasks": "暂无定时任务",
+    "cronTasks": "定时任务",
+    "schedulePlaceholder": "例如：0 9 * * * 或 once:5m",
+    "senderRole": "发送角色",
+    "nextRun": "下次执行",
+    "cancelTask": "取消"
+  },
+  "settings": {
+    "title": "设置",
+    "model": "模型",
+    "model_desc": {
+      "haiku": "Haiku — 轻量快速",
+      "sonnet": "Sonnet — 平衡质量与速度",
+      "opus": "Opus — 最适合复杂推理"
+    },
+    "language": "语言",
+    "theme": "主题",
+    "saved": "设置已保存",
+    "english": "English",
+    "chinese": "中文",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "project": {
+    "info": "项目信息",
+    "save": "保存",
+    "template": "模板",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "name": "名称",
+    "workspaceDir": "工作目录",
+    "updateSuccess": "项目已更新",
+    "updateFailed": "更新失败"
+  },
+  "conv": {
+    "title": "对话信息",
+    "statistics": "统计",
+    "messages": "消息数",
+    "tokensPrompt": "Tokens (输入)",
+    "tokensCompletion": "Tokens (输出)",
+    "toolCalls": "工具调用",
+    "model": "模型",
+    "activeModel": "当前模型",
+    "template": "模板",
+    "members": "成员",
+    "mode": "权限模式",
+    "modeOptions": {
+      "ask_before_edits": "编辑前询问",
+      "edit_automatically": "自动编辑",
+      "bypass_permissions": "跳过权限检查",
+      "plan_mode": "计划模式（开发中）"
+    },
+    "modeUpdated": "模式已更新"
+  },
+  "tools": {
+    "input": "输入",
+    "output": "输出",
+    "running": "运行中",
+    "done": "完成",
+    "error": "错误"
+  },
+  "auth": {
+    "tokenLabel": "认证令牌",
+    "tokenPlaceholder": "输入任意令牌（演示模式）",
+    "connect": "连接",
+    "title": "认证"
+  },
+  "permission": {
+    "title": "权限请求",
+    "pending": "等待审批",
+    "decided": "已审批",
+    "risk": "风险等级",
+    "approve": "同意",
+    "approveAndRemember": "同意并记住（精确匹配）",
+    "approveAndWildcard": "同意并通配记住（同类操作）",
+    "deny": "拒绝",
+    "permissionAnswered": "权限已处理"
+  },
+  "notFound": {
+    "title": "404",
+    "message": "抱歉，页面不存在。",
+    "backHome": "返回首页"
+  },
+  "hitl": {
+    "orCustomAnswer": "或输入自定义回答",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "critical": "严重"
+  },
+  "ws": {
+    "reconnecting": "连接已断开，正在重连...",
+    "retryNow": "立即重试"
+  }
+}
