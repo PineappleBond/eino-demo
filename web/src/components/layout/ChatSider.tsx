@@ -6,7 +6,6 @@ import { Button, Input, App, Empty, Divider, Dropdown, Popconfirm, Modal } from 
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
-  InboxOutlined,
   SearchOutlined,
   SettingOutlined,
   FileOutlined,
@@ -21,6 +20,11 @@ import { useTranslations } from 'next-intl';
 import { useSubscribe } from '@/providers/UpdateProvider';
 import type { Update } from '@/lib/updateDispatcher';
 
+// Tree node extends Conversation with recursive children from the API
+interface ConversationNode extends Conversation {
+  children?: ConversationNode[];
+}
+
 interface ChatSiderProps {
   selectedKey: string;
 }
@@ -33,7 +37,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   const t = useTranslations('chat');
   const tApp = useTranslations('app');
   const { message } = App.useApp();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenuConv, setContextMenuConv] = useState<Conversation | null>(null);
@@ -41,8 +45,11 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
 
+  // Accordion: only one parent expanded at a time
+  const [expandedConvId, setExpandedConvId] = useState<string | null>(null);
+
   useEffect(() => {
-    api.get<Conversation[]>(`/projects/${projectId}/conversations`)
+    api.get<ConversationNode[]>(`/projects/${projectId}/conversations`)
       .then(setConversations)
       .catch((err) => message.error(err.message))
       .finally(() => setLoading(false));
@@ -51,10 +58,36 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
   // ─── Subscribe to conversation lifecycle events ───
 
   const fetchRef = useRef(() => {
-    api.get<Conversation[]>(`/projects/${projectId}/conversations`)
+    api.get<ConversationNode[]>(`/projects/${projectId}/conversations`)
       .then(setConversations)
       .catch((err) => message.error(err.message));
   });
+
+  // Accordion: only one parent expanded at a time
+  const toggleExpand = useCallback((convId: string) => {
+    setExpandedConvId((prev) => (prev === convId ? null : convId));
+  }, []);
+
+  // Auto-expand the parent of the currently selected conversation
+  useEffect(() => {
+    if (!selectedKey) return;
+    const findParentOf = (nodes: ConversationNode[], target: string): string | null => {
+      for (const node of nodes) {
+        if (node.children) {
+          for (const child of node.children) {
+            if (child.id === target) return node.id;
+            const deeper = findParentOf([child] as ConversationNode[], target);
+            if (deeper) return node.id;
+          }
+        }
+      }
+      return null;
+    };
+    const parentId = findParentOf(conversations, selectedKey);
+    if (parentId) {
+      setExpandedConvId(parentId);
+    }
+  }, [selectedKey, conversations]);
 
   useSubscribe(`project:${projectId}`, (update: Update) => {
     switch (update.type) {
@@ -138,6 +171,114 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
 
   const closeContextMenu = useCallback(() => setContextMenuConv(null), []);
 
+  // ─── Recursive tree rendering ───
+
+  const renderConversationNode = (node: ConversationNode, depth: number): React.ReactNode => {
+    const isActive = node.id === selectedKey;
+    const hasChildren = (node.children_count || 0) > 0;
+    const isExpanded = expandedConvId === node.id;
+    const indent = depth * 16;
+    const paddingR = Math.max(10 - Math.min(indent, 8), 4);
+    const paddingL = 10 + indent;
+    const fontSize = Math.max(13 - depth, 11);
+
+    const linkContent = (
+      <div
+        className={`sider-item ${isActive ? 'active' : ''}`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: `8px ${paddingR}px 8px ${paddingL}px`,
+          borderRadius: 'var(--radius-sm)',
+          textDecoration: 'none',
+          fontSize,
+          background: isActive ? 'var(--accent-soft)' : 'transparent',
+          transition: 'all 0.12s ease',
+          cursor: 'pointer',
+        }}
+      >
+        {/* Expand/collapse arrow */}
+        {hasChildren && (
+          <span
+            style={{
+              fontSize: 9,
+              color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+              width: 12,
+              flexShrink: 0,
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleExpand(node.id);
+            }}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </span>
+        )}
+        {!hasChildren && <span style={{ width: 12, flexShrink: 0 }} />}
+
+        {/* Title */}
+        <span
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: isActive ? 'var(--accent)' : depth > 0 ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+            fontWeight: isActive ? 600 : 400,
+          }}
+        >
+          {node.title || t('untitled')}
+        </span>
+
+        {/* Children count badge (when collapsed, root level only) */}
+        {hasChildren && !isExpanded && depth === 0 && (
+          <span
+            style={{
+              fontSize: 9,
+              padding: '1px 5px',
+              borderRadius: 8,
+              background: 'var(--bg-hover)',
+              color: 'var(--text-tertiary)',
+              flexShrink: 0,
+            }}
+          >
+            {node.children_count}
+          </span>
+        )}
+      </div>
+    );
+
+    const link = (
+      <Link href={`/${locale}/project/${projectId}/chat/${node.id}`}>
+        {linkContent}
+      </Link>
+    );
+
+    // Add context menu for root-level conversations only
+    const withMenu = depth === 0 ? (
+      <Dropdown
+        menu={{ items: contextMenuConv?.id === node.id ? getContextMenuItems() : [] }}
+        trigger={['contextMenu']}
+        onOpenChange={(open) => { if (!open) closeContextMenu(); }}
+      >
+        {link}
+      </Dropdown>
+    ) : link;
+
+    return (
+      <div key={node.id} style={{ marginBottom: depth === 0 ? 2 : 1 }}>
+        {withMenu}
+        {/* Render expanded children */}
+        {isExpanded && node.children?.map((child) =>
+          renderConversationNode(child as ConversationNode, depth + 1)
+        )}
+      </div>
+    );
+  };
+
   const getContextMenuItems = useCallback((): MenuProps['items'] => {
     if (!contextMenuConv) return [];
     return [
@@ -190,13 +331,12 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
     ];
   }, [contextMenuConv, closeContextMenu]);
 
-  const filtered = conversations.filter((c) => {
-    const title = c.title ?? t('untitled');
-    return title.toLowerCase().includes(searchQuery.toLowerCase());
-  });
-
-  const activeConvs = filtered.filter((c) => c.status !== 'archived');
-  const archivedConvs = filtered.filter((c) => c.status === 'archived');
+  const activeRoots = conversations.filter(
+    (c) => c.status !== 'archived' && (c.title ?? t('untitled')).toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const archivedRoots = conversations.filter(
+    (c) => c.status === 'archived' && (c.title ?? t('untitled')).toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -256,60 +396,13 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
               <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
             </div>
           </div>
-        ) : activeConvs.length === 0 ? (
+        ) : activeRoots.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '24px 0' }} />
         ) : (
-          activeConvs.map((conv) => (
-            <div key={conv.id} style={{ marginBottom: 2 }}>
-              <Dropdown
-                menu={{ items: contextMenuConv?.id === conv.id ? getContextMenuItems() : [] }}
-                trigger={['contextMenu']}
-                onOpenChange={(open) => { if (!open) closeContextMenu(); }}
-              >
-                <Link
-                  href={`/${locale}/project/${projectId}/chat/${conv.id}`}
-                  className={`sider-item ${conv.id === selectedKey ? 'active' : ''}`}
-                  onContextMenu={(e) => handleContextMenu(e, conv)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    textDecoration: 'none',
-                    fontSize: 13,
-                    background: conv.id === selectedKey ? 'var(--accent-soft)' : 'transparent',
-                    transition: 'all 0.12s ease',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (conv.id !== selectedKey) {
-                      (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (conv.id !== selectedKey) {
-                      (e.currentTarget as HTMLElement).style.background = 'transparent';
-                    }
-                  }}
-                >
-                  <span style={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    color: conv.id === selectedKey ? 'var(--accent)' : 'var(--text-secondary)',
-                    fontWeight: conv.id === selectedKey ? 600 : 400,
-                  }}>
-                    {conv.title || t('untitled')}
-                  </span>
-                </Link>
-              </Dropdown>
-            </div>
-          ))
+          activeRoots.map((node) => renderConversationNode(node, 0))
         )}
 
-        {archivedConvs.length > 0 && (
+        {archivedRoots.length > 0 && (
           <>
             <Divider style={{ margin: '8px 0', borderColor: 'var(--border-subtle)' }} />
             <div style={{
@@ -323,36 +416,7 @@ export function ChatSider({ selectedKey }: ChatSiderProps) {
             }}>
               {t('archived')}
             </div>
-            {archivedConvs.map((conv) => (
-              <Link
-                key={conv.id}
-                href={`/${locale}/project/${projectId}/chat/${conv.id}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  textDecoration: 'none',
-                  fontSize: 13,
-                  color: 'var(--text-tertiary)',
-                  opacity: 0.5,
-                  transition: 'all 0.12s ease',
-                  marginBottom: 2,
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = 'transparent';
-                }}
-              >
-                <InboxOutlined style={{ fontSize: 12 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {conv.title || t('untitled')}
-                </span>
-              </Link>
-            ))}
+            {archivedRoots.map((node) => renderConversationNode(node, 0))}
           </>
         )}
       </div>
