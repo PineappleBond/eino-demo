@@ -411,6 +411,91 @@ func RegisterConversationRoutes(
 			"mode":  newConv.Mode,
 		})
 	})
+
+	// List pending interrupts from sub-conversations
+	api.GET("/conversations/:id/sub-interrupts", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("list sub-interrupts: invalid conversation ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+
+		result, err := svc.GetSubInterrupts(c.Request.Context(), userID, conversationID)
+		if err != nil {
+			if errors.Is(err, service.ErrConversationNotFound) {
+				respondError(c, http.StatusNotFound, "NOT_FOUND", "conversation not found")
+			} else {
+				log.Error("list sub-interrupts failed",
+					zap.String("user_id", userID.String()),
+					zap.String("conv_id", conversationID.String()),
+					zap.Error(err),
+				)
+				respondError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list sub-interrupts")
+			}
+			return
+		}
+
+		type subPermResponse struct {
+			ID             string `json:"id"`
+			ConversationID string `json:"conversation_id"`
+			ToolName       string `json:"tool_name"`
+			Action         string `json:"action"`
+			Content        string `json:"content"`
+			ToolDesc       string `json:"tool_desc,omitempty"`
+			ArgsSummary    string `json:"args_summary,omitempty"`
+			SafetyLevel    int    `json:"safety_level"`
+			SafetyReason   string `json:"safety_reason"`
+			CheckpointID   string `json:"checkpoint_id,omitempty"`
+			InterruptID    string `json:"interrupt_id,omitempty"`
+		}
+
+		type subHitlResponse struct {
+			ID             string `json:"id"`
+			ConversationID string `json:"conversation_id"`
+			Question       string `json:"question"`
+			Choices        any    `json:"choices"`
+			AnswerType     string `json:"answer_type"`
+			CheckpointID   string `json:"checkpoint_id,omitempty"`
+			InterruptID    string `json:"interrupt_id,omitempty"`
+		}
+
+		perms := make([]subPermResponse, len(result.Permissions))
+		for i, p := range result.Permissions {
+			perms[i] = subPermResponse{
+				ID:             p.ID.String(),
+				ConversationID: p.ConversationID.String(),
+				ToolName:       p.ToolName,
+				Action:         p.Action,
+				Content:        p.Content,
+				ToolDesc:       p.ToolDesc,
+				ArgsSummary:    p.ArgsSummary,
+				SafetyLevel:    p.SafetyLevel,
+				SafetyReason:   p.SafetyReason,
+				CheckpointID:   p.CheckpointID,
+				InterruptID:    p.InterruptID,
+			}
+		}
+
+		hitls := make([]subHitlResponse, len(result.HITLs))
+		for i, h := range result.HITLs {
+			hitls[i] = subHitlResponse{
+				ID:             h.ID.String(),
+				ConversationID: h.ConversationID.String(),
+				Question:       h.Question,
+				Choices:        h.Choices,
+				AnswerType:     h.AnswerType,
+				CheckpointID:   h.CheckpointID,
+				InterruptID:    h.InterruptID,
+			}
+		}
+
+		respondJSON(c, http.StatusOK, gin.H{
+			"permissions": perms,
+			"hitls":       hitls,
+		})
+	})
 }
 
 func valueOrZero[T any](v *T) T {
