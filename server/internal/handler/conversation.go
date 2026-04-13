@@ -358,6 +358,59 @@ func RegisterConversationRoutes(
 			"status":          "compacting",
 		})
 	})
+
+	// Branch conversation — create a new conversation from messages up to input_seq
+	api.POST("/conversations/:id/branch", func(c *gin.Context) {
+		userID := getUserID(c)
+		conversationID, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			log.Warn("branch conversation: invalid conversation ID", zap.String("id", c.Param("id")))
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid conversation ID")
+			return
+		}
+		var req types.PostConversationsIdBranchJSONBody
+		if err := c.ShouldBindJSON(&req); err != nil {
+			log.Warn("branch conversation: invalid request body",
+				zap.String("user_id", userID.String()),
+				zap.Error(err),
+			)
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body: "+err.Error())
+			return
+		}
+		svcReq := service.BranchConversationRequest{
+			InputSeq: int64(req.InputSeq),
+		}
+		newConv, err := svc.BranchConversation(
+			c.Request.Context(),
+			userID,
+			conversationID,
+			svcReq,
+			wsManager.NextSeq,
+			func(userID uuid.UUID, update model.UserUpdate) {
+				wsUpdate := convert.ToUpdate(update)
+				wsManager.PushToUserConnections(userID, wsUpdate)
+			},
+		)
+		if err != nil {
+			log.Error("branch conversation failed",
+				zap.String("user_id", userID.String()),
+				zap.String("conv_id", conversationID.String()),
+				zap.Error(err),
+			)
+			respondError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			return
+		}
+		log.Info("conversation branched",
+			zap.String("user_id", userID.String()),
+			zap.String("conv_id", conversationID.String()),
+			zap.String("new_conv_id", newConv.ID.String()),
+		)
+		respondJSON(c, http.StatusOK, gin.H{
+			"id":    newConv.ID.String(),
+			"title": newConv.Title,
+			"mode":  newConv.Mode,
+		})
+	})
 }
 
 func valueOrZero[T any](v *T) T {

@@ -381,6 +381,46 @@ paths:
                   status:
                     type: string
 
+  # ── Branch ──
+  /conversations/{id}/branch:
+    post:
+      summary: Create a branched conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ input_seq ]
+              properties:
+                input_seq:
+                  type: integer
+                  minimum: 0
+                  description: Branch from this message sequence number
+      responses:
+        "200":
+          description: Branched conversation created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ id, title, mode ]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  mode:
+                    type: string
+
   # ── Messages ──
   /conversations/{id}/messages:
     get:

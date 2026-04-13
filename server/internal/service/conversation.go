@@ -587,6 +587,157 @@ func (s *ConversationService) UpdateStatus(
 	return &conv, nil
 }
 
+// BranchConversationRequest holds the fields for branching a conversation.
+type BranchConversationRequest struct {
+	InputSeq int64 `json:"input_seq"`
+}
+
+// BranchConversation creates a new conversation by copying messages up to input_seq
+// from the source conversation. The new conversation inherits the Mode but is
+// independent (no parent link).
+func (s *ConversationService) BranchConversation(
+	ctx context.Context,
+	userID, conversationID uuid.UUID,
+	req BranchConversationRequest,
+	nextSeq NextSeqFunc,
+	pushUpdate PushUpdateFunc,
+) (*model.Conversation, error) {
+	// 1. Verify ownership
+	var conv model.Conversation
+	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conv).Error; err != nil {
+		return nil, fmt.Errorf("get conversation: %w", ErrConversationNotFound)
+	}
+
+	// 2. Validate input_seq
+	if req.InputSeq > conv.LatestMessageSeq {
+		return nil, fmt.Errorf("input_seq %d exceeds latest message seq %d", req.InputSeq, conv.LatestMessageSeq)
+	}
+
+	// 3. Fetch messages up to input_seq
+	var messages []model.Message
+	if err := s.db.Where("conversation_id = ? AND seq <= ?", conversationID, req.InputSeq).
+		Order("seq ASC").Find(&messages).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch messages: %w", err)
+	}
+
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("no messages found up to seq %d", req.InputSeq)
+	}
+
+	// 4. Allocate seq for conversation.created event
+	seq, err := nextSeq(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("seq assignment failed: %w", err)
+	}
+
+	var newConv *model.Conversation
+
+	// 5. Create new conversation + copy messages + user_update in a single transaction
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Create the branched conversation
+		newConv = &model.Conversation{
+			ProjectID: conv.ProjectID,
+			UserID:    userID,
+			Title:     "Branch of: " + conv.Title,
+			Status:    "active",
+			Mode:      conv.Mode, // Inherit mode
+		}
+		if err := tx.Create(newConv).Error; err != nil {
+			return err
+		}
+
+		// Add user as member
+		member := model.ConversationMember{
+			ConversationID: newConv.ID,
+			MemberType:     "user",
+			MemberID:       userID.String(),
+			MemberName:     "User",
+			IsOwner:        true,
+		}
+		if err := tx.Create(&member).Error; err != nil {
+			return err
+		}
+
+		// Copy messages with reassigned seq
+		for i, msg := range messages {
+			newMsg := model.Message{
+				ConversationID:  newConv.ID,
+				Seq:             int64(i + 1),
+				SenderRole:      msg.SenderRole,
+				SenderID:        msg.SenderID,
+				Content:         msg.Content,
+				ReasonContent:   msg.ReasonContent,
+				ReplyToSeq:      msg.ReplyToSeq,
+				MentionedMembers: msg.MentionedMembers,
+				Metadata:        msg.Metadata,
+				FinishReason:    msg.FinishReason,
+				ErrorMessage:    msg.ErrorMessage,
+				DurationMs:      msg.DurationMs,
+				TokenPrompt:     msg.TokenPrompt,
+				TokenCompletion: msg.TokenCompletion,
+				ToolCalling:     msg.ToolCalling,
+			}
+			if err := tx.Create(&newMsg).Error; err != nil {
+				return err
+			}
+		}
+
+		// Update new conversation's message count and latest seq
+		if err := tx.Model(newConv).Updates(map[string]interface{}{
+			"message_count":      len(messages),
+			"latest_message_seq": len(messages),
+		}).Error; err != nil {
+			return err
+		}
+
+		// Create user_update
+		update := model.UserUpdate{
+			UserID: userID,
+			Seq:    seq,
+			Type:   "conversation.created",
+			Payload: model.JSONMap{
+				"id":         newConv.ID.String(),
+				"project_id": newConv.ProjectID.String(),
+				"title":      newConv.Title,
+				"status":     newConv.Status,
+				"seq":        seq,
+			},
+		}
+		if err := tx.Create(&update).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 6. Push the update so frontend sees the new conversation
+	pushUpdate(userID, model.UserUpdate{
+		UserID: userID,
+		Seq:    seq,
+		Type:   "conversation.created",
+		Payload: model.JSONMap{
+			"id":         newConv.ID.String(),
+			"project_id": newConv.ProjectID.String(),
+			"title":      newConv.Title,
+			"status":     newConv.Status,
+			"seq":        seq,
+		},
+	})
+
+	s.log.Info("conversation branched",
+		zap.String("user_id", userID.String()),
+		zap.String("source_conv_id", conversationID.String()),
+		zap.String("new_conv_id", newConv.ID.String()),
+		zap.Int64("input_seq", req.InputSeq),
+		zap.Int("messages_copied", len(messages)),
+	)
+
+	return newConv, nil
+}
+
 func (s *ConversationService) DeleteConversation(userID, conversationID uuid.UUID) error {
 	result := s.db.Where("id = ? AND user_id = ?", conversationID, userID).Delete(&model.Conversation{})
 	if result.Error != nil {
