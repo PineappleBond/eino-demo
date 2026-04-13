@@ -234,6 +234,11 @@ paths:
                     - bypass_permissions
                     - plan_mode
                   default: ask_before_edits
+                parent_conversation_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: "Optional parent conversation ID to create a child conversation"
       responses:
         "201":
           description: Created conversation
@@ -1005,6 +1010,19 @@ components:
         updated_at:
           type: string
           format: date-time
+        parent_conversation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Parent conversation ID for hierarchical conversations"
+        children_count:
+          type: integer
+          description: "Number of direct children (for badge display when children array is not fully populated)"
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/Conversation"
+          description: "Nested child conversations (recursive)"
         mode:
           type: string
           enum:

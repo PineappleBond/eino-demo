@@ -438,6 +438,11 @@ export interface paths {
                          * @enum {string}
                          */
                         mode?: "ask_before_edits" | "edit_automatically" | "bypass_permissions" | "plan_mode";
+                        /**
+                         * Format: uuid
+                         * @description Optional parent conversation ID to create a child conversation
+                         */
+                        parent_conversation_id?: string | null;
                     };
                 };
             };
@@ -1609,6 +1614,15 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * Format: uuid
+             * @description Parent conversation ID for hierarchical conversations
+             */
+            parent_conversation_id?: string | null;
+            /** @description Number of direct children (for badge display when children array is not fully populated) */
+            children_count?: number;
+            /** @description Nested child conversations (recursive) */
+            children?: components["schemas"]["Conversation"][];
             /**
              * @default ask_before_edits
              * @enum {string}
